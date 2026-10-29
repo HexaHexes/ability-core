@@ -1,0 +1,79 @@
+name: CodeQL
+
+# Free static analysis via CodeQL *advanced setup* - a committed workflow file,
+# deliberately not GitHub's paid "Code Quality" product: that one meters AI
+# credits for every finding's autofix (the in-PR AI cannot be switched off -
+# disabling the product entirely is the only stop), while this runs only the
+# deterministic CodeQL engine. On a public repository that is $0: no per-user
+# license, no AI credits, Actions minutes free.
+#
+# Job name `analyze`: after this proves green, the protect-main ruleset
+# requires it beside junit/gametest/version-bump (tracked in issue #29).
+# Findings themselves live in the Security tab and as PR annotations - they
+# inform, the check gates.
+#
+# build-mode is manual on purpose: moddev's autobuild detection is unreliable
+# on NeoForge projects, so the build is spelled out. `assemble` compiles the
+# shipped sources (the test run belongs to the junit job). The step carries
+# PACKAGE_READ_TOKEN so a derived repo that resolves cross-repo packages still
+# builds on a cold cache - same step-scoped pattern as release.yml.
+
+on:
+  pull_request:
+  push:
+    branches: [ main, master ]
+  schedule:
+    - cron: '27 4 * * 1'   # weekly; off-the-hour minute avoids the cron rush
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write   # upload SARIF results; explicit blocks zero the rest
+
+concurrency:
+  # PRs cancel superseded runs of their own number; pushes cancel older runs of
+  # the same ref - ci.yml's keying extended to push events.
+  group: codeql-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: analyze
+    runs-on: ubuntu-latest
+    timeout-minutes: 30   # fail fast like every other job: a wedge costs minutes, not 6 hours
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: java
+          build-mode: manual
+          # security + maintainability/reliability queries: the deterministic
+          # half of what the Code Quality product used to sell.
+          queries: security-and-quality
+
+      - name: Build for extraction
+        env:
+          # Both names because org repos span two credential-chain generations:
+          # modern build.gradle reads PACKAGE_READ_TOKEN first, older ones read
+          # GITHUB_TOKEN only; Actions never auto-exports GITHUB_TOKEN. The
+          # || github.token fallback keeps the default-token path working for
+          # repos where the PAT is not granted (pseudocore-curios junit model).
+          PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN || github.token }}
+        # clean + --no-build-cache force javac to actually run: Gradle's build
+        # cache is restored by setup-java (org.gradle.caching=true), so a
+        # FROM-CACHE compileJava runs no compiler and CodeQL fails with
+        # "no source code seen during build". The dependency cache still applies.
+        run: ./gradlew clean assemble --no-build-cache --no-daemon --stacktrace
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4
