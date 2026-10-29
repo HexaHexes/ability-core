@@ -5,6 +5,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import org.bitwisemadness.tensuraabilitycore.activation.ActivationHandlerRegistry;
 import org.bitwisemadness.tensuraabilitycore.activation.ActivationPipeline;
+import org.bitwisemadness.tensuraabilitycore.activation.ExternalCooldownStep;
 import org.bitwisemadness.tensuraabilitycore.activation.ResourceChargeStep;
 import org.bitwisemadness.tensuraabilitycore.registry.AbilityRegistries;
 import org.slf4j.Logger;
@@ -39,6 +40,9 @@ public final class TensuraAbilityCore {
         modBus.addListener(AbilityRegistries::onNewRegistry);
         // REQ-CORE-04: affordability pre-check runs for every pipeline execution
         PIPELINE.registerStep(ActivationPipeline.PipelinePhase.RESOURCE, ResourceChargeStep.INSTANCE);
+        // REQ-CORE-05: EXTERNAL-cooldown gate runs after charge pre-validation,
+        // before activation; EXTERNAL starts happen post-activation (built-in)
+        PIPELINE.registerStep(ActivationPipeline.PipelinePhase.COOLDOWN, ExternalCooldownStep.INSTANCE);
         LOGGER.info("Tensura Ability Core initialized");
     }
 }
