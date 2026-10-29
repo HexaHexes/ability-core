@@ -6,6 +6,8 @@ and pulled in verbatim - **never hand-edit it.** Everything in this file is this
 repo's own and is edited freely; keep it aligned with the org rules rather than
 restating them.
 
+Architecture decision records: `docs/adr/` (index in `docs/adr/README.md`; new decisions get an ADR in the same PR that records them).
+
 **Repo:** `HexaHexes/tensura-ability-core` - **Mod ID:** `tensura_ability_core` - **Branch:** `main`
 **Platform:** Minecraft 1.21.1 / NeoForge 21.1.259 / JDK 21 - **Jar:** `build/libs/tensura_ability_core-<version>.jar`
 
