@@ -52,7 +52,7 @@ written into the implementation issues; this table records that they exist.
 | REQ-ISS-07 | Reuse native Tensura magic icons in compatible UI | F | P2 | designed | SPIKE-iss-2 (closed) -> iss#18 | Phase 3 |
 | REQ-ISS-08 | Configurable casting policies `allow` / `disabled` / `capacity_limited` with global defaults, per-category and per-magic overrides where feasible | F | P1 | designed | SPIKE-iss-1+cfg-1 (closed) -> iss#10; targets await SPIKE-iss-4 | Phase 3 |
 | REQ-ISS-09 | Casting-power cap from maximum magicule capacity, validated after all modifiers so equipment cannot bypass it | F | P1 | designed | SPIKE-iss-1 (closed) -> iss#11 (damage-only scope recorded) | Phase 3 |
-| REQ-ISS-10 | Additional resource cost for capacity-limited casting | F | P2 | awaiting-spike | REQ-ISS-08, REQ-CORE-04 | Phase 3 |
+| REQ-ISS-10 | Additional resource cost for capacity-limited casting | F | P2 | designed | -> iss#23 (distinct-resource surcharge, single-charge-safe) | Phase 3 |
 | REQ-ISS-11 | Independent configurable disable of native Tensura skill equipping | F | P2 | awaiting-design | SPIKE-iss-2 (closed) -> iss#14 (origin semantics open) | Phase 3 |
 | REQ-ISS-12 | Independent configurable disable of Tensura RPG System skill equipping | F | P2 | awaiting-design | SPIKE-iss-2 (closed) -> iss#15 (origin detection open) | Phase 3 |
 | REQ-ISS-13 | Alternate adapters must not bypass those restrictions (enforcement, not advisory) | F | P1 | awaiting-design | iss#16 (bypass audit + guard decision) | Phase 3 |
@@ -64,18 +64,18 @@ written into the implementation issues; this table records that they exist.
 
 | ID | Requirement | Type | Pri | Status | Depends | Milestone |
 |---|---|---|---|---|---|---|
-| REQ-HOT-01 | Default nine-slot ability bar | F | P0 | designed | core#12/#14 contracts exist; implementation issue to be cut at Phase 2 readiness | Phase 3 |
-| REQ-HOT-02 | Vanilla hotbar textures plus compatible dynamic ability icons | F | P1 | awaiting-spike | REQ-HOT-01 | Phase 3 |
+| REQ-HOT-01 | Default nine-slot ability bar | F | P0 | designed | core#12/#14 -> hotbar#26 (bar rendering issue) | Phase 3 |
+| REQ-HOT-02 | Vanilla hotbar textures plus compatible dynamic ability icons | F | P1 | designed | folded into hotbar#26 | Phase 3 |
 | REQ-HOT-03 | ISS spell support in the bar | F | P1 | designed | SPIKE-hot-1 (closed) -> hotbar#18 | Phase 3 |
 | REQ-HOT-04 | Tensura skill and magic support in the bar | F | P1 | awaiting-design | SPIKE-hot-2 (closed) -> hotbar#16 (dependency model open) | Phase 3 |
 | REQ-HOT-05 | Battlewill support in the bar | F | P1 | awaiting-spike | REQ-BW-07 | Phase 3 |
 | REQ-HOT-06 | Optional provider extension points for future ability systems | F | P2 | awaiting-design | REQ-CORE-09 | Phase 3 |
-| REQ-HOT-07 | Configurable layout: horizontal/vertical, position, scale, opacity, icon rendering | F | P1 | awaiting-spike | SPIKE-cfg-1 | Phase 3 |
+| REQ-HOT-07 | Configurable layout: horizontal/vertical, position, scale, opacity, icon rendering | F | P1 | designed | SPIKE-cfg-1 (closed); folded into hotbar#26 (CLIENT config per core#9) | Phase 3 |
 | REQ-HOT-08 | Cooldown and resource-cost overlays where the API exposes them | F | P2 | designed | SPIKE-hot-1 (closed) -> hotbar#19 (contract core#16) | Phase 3 |
 | REQ-HOT-09 | Slot selection independent of activation | F | P1 | awaiting-design | REQ-HOT-01 | Phase 3 |
 | REQ-HOT-10 | Direct-slot activation keybind | F | P1 | designed | SPIKE-hot-3 (closed) -> hotbar#20 | Phase 3 |
 | REQ-HOT-11 | Selected-slot activation keybind | F | P1 | designed | SPIKE-hot-3 (closed) -> hotbar#20 | Phase 3 |
-| REQ-HOT-12 | Ability management menu: search, category filters, assign/replace/remove, metadata previews | F | P2 | awaiting-design | REQ-HOT-01 | Phase 5 |
+| REQ-HOT-12 | Ability management menu: search, category filters, assign/replace/remove, metadata previews | F | P2 | designed | -> hotbar#27 | Phase 5 |
 | REQ-HOT-13 | Client/server synchronisation of bar contents | F | P0 | designed | SPIKE-cfg-2 (closed) -> core#19 + hotbar#24 | Phase 3 |
 | REQ-HOT-14 | Per-player assignment persistence | F | P1 | designed | SPIKE-hot-4 (closed) -> hotbar#24 | Phase 3 |
 | REQ-HOT-15 | Diagnostics for invalid or missing abilities in a slot | F | P2 | designed | SPIKE-hot-4 (closed) -> hotbar#25 (data side) + rendering issues (display side) | Phase 3 |
@@ -85,8 +85,8 @@ written into the implementation issues; this table records that they exist.
 | REQ-HOT-19 | Empty/restricted/unaffordable/cooldown/invalid abilities fail safely with no resource consumption | F | P0 | awaiting-design | REQ-CORE-07 | Phase 3 |
 | REQ-HOT-20 | Selected slot remains selected after activation unless explicitly changed | F | P2 | awaiting-design | REQ-HOT-09 | Phase 3 |
 | REQ-HOT-21 | Assignments never silently replaced when a provider disappears or ability becomes unavailable | F | P0 | designed | core#14 (absence semantics) + hotbar#24 (raw-id preservation) | Phase 3 |
-| REQ-HOT-22 | Stretch: additional cyclable hotbars - 3 by default, 9 slots each, configurable max (provisionally 10), next/previous controls, per-player persistence, independent assignments, only active bar shown, optional name notification | F | P3 | awaiting-design | REQ-HOT-01..21 stable | Phase 5 |
-| REQ-HOT-23 | Stretch: optional loadout presets and per-hotbar mode compatibility; switching bars never casts, resets mode or bypasses restrictions | F | P3 | awaiting-design | REQ-HOT-22 | Phase 5 |
+| REQ-HOT-22 | Stretch: additional cyclable hotbars - 3 by default, 9 slots each, configurable max (provisionally 10), next/previous controls, per-player persistence, independent assignments, only active bar shown, optional name notification | F | P3 | designed | -> hotbar#28 (sequenced after single bar stable) | Phase 5 |
+| REQ-HOT-23 | Stretch: optional loadout presets and per-hotbar mode compatibility; switching bars never casts, resets mode or bypasses restrictions | F | P3 | designed | -> hotbar#29 (after hotbar#28) | Phase 5 |
 
 ## D. Equipped spellbook hotbar - `tensura-ability-hotbar` (ISS adapter)
 
@@ -128,11 +128,11 @@ Tracked independently of REQ-HOT-22 (different problem, different issues).
 |---|---|---|---|---|---|---|
 | REQ-BW-01 | Weapon-style definitions covering sword, spear/polearm, axe/heavy, ranged, shield/defensive, and unarmed as its own style | F | P1 | designed | SPIKE-bw-1 (closed, integrate-native-first) -> bw#10 | Phase 3 |
 | REQ-BW-02 | Active battlewill abilities | F | P1 | awaiting-spike | SPIKE-bw-1 | Phase 3 |
-| REQ-BW-03 | Weapon enhancements | F | P2 | awaiting-spike | SPIKE-bw-1 | Phase 3 |
-| REQ-BW-04 | Passive effects | F | P2 | awaiting-spike | SPIKE-bw-1 | Phase 3 |
+| REQ-BW-03 | Weapon enhancements | F | P2 | designed | SPIKE-bw-1 (closed) -> bw#16 (design note then exemplar) | Phase 3 |
+| REQ-BW-04 | Passive effects | F | P2 | awaiting-design | SPIKE-bw-1 (closed) -> bw#17 (design reading first; passive marker requirement) | Phase 3 |
 | REQ-BW-05 | Resource conversion and costs | F | P1 | designed | SPIKE-bw-2 (closed, discharged in bw#3 findings - aura currency) -> bw#12 | Phase 3 |
 | REQ-BW-02 (first content) | Unarmed technique set - first additive arts via DEC-06 (a) | F | P1 | designed | DEC-06 resolved -> bw#14; attribution bw#13 | Phase 3 |
-| REQ-BW-06 | Ability progression and restrictions | F | P2 | awaiting-spike | SPIKE-bw-1 | Phase 3 |
+| REQ-BW-06 | Ability progression and restrictions | F | P2 | designed | SPIKE-bw-1 (closed) -> bw#18 (read-only projections) | Phase 3 |
 | REQ-BW-07 | Datapack-driven definitions for metadata, costs, restrictions and mappings; code adapters only for execution behaviour | F | P1 | designed | SPIKE-bw-1 (closed) -> bw#11; DEC-06 resolved (option a, see bw#11 ruling) | Phase 3 |
 | REQ-BW-08 | Native ability activation path | F | P1 | awaiting-design | REQ-CORE-02 | Phase 3 |
 | REQ-BW-09 | Hotbar integration through compatible contracts | F | P1 | awaiting-design | REQ-HOT-05 | Phase 3 |
@@ -145,12 +145,12 @@ Tracked independently of REQ-HOT-22 (different problem, different issues).
 |---|---|---|---|---|---|---|
 | REQ-XREF-01 | One repository per independently distributable mod, all based on the canonical template | D | P0 | implemented | - | Phase 0 |
 | REQ-XREF-02 | Dependency graph documented: shared contracts / providers / consumers / upstream adapters / client presentation / server rules | D | P0 | designed | SPIKE-core-1 (closed, topology in core#2 findings 7; docs/ transcription pending) | Phase 1 |
-| REQ-XREF-03 | No circular dependencies; optional dependency loading; conditional mixins; dedicated-server safety; client-only class isolation; registry discovery; network sync | F | P0 | awaiting-spike | SPIKE-core-1 | Phase 1 |
-| REQ-XREF-04 | A missing optional integration disables only its dependent features | F | P0 | awaiting-design | REQ-XREF-03 | Phase 3 |
+| REQ-XREF-03 | No circular dependencies; optional dependency loading; conditional mixins; dedicated-server safety; client-only class isolation; registry discovery; network sync | F | P0 | designed | SPIKE-core-1+cfg-2 (closed); gates encoded in core#12/#18/#19/#20 + combination proof core#27 | Phase 1 |
+| REQ-XREF-04 | A missing optional integration disables only its dependent features | F | P0 | designed | -> core#27 (combination matrix evidence) | Phase 3 |
 | REQ-XREF-05 | Cross-repo consumption via published GitHub Packages artifacts with versioned API dependencies (PACKAGE_READ_TOKEN, step-scoped) | D | P0 | implemented | - | Phase 0 |
 | REQ-XREF-06 | Requirement-to-issue traceability report kept reconciled with actual issue state | D | P1 | implemented | - | ongoing |
 | REQ-XREF-07 | Repo-F decision: dedicated `tensura-battlewills-better-combat` adapter only if investigation shows a cleaner boundary than the shared bridge | I | P2 | implemented | SPIKE-bw-3 (closed): DEC-03 = do NOT create; style reads in battlewills, combo in bridge | Phase 1 |
-| REQ-XREF-08 | Cross-repository artefacts: ADR log, compatibility matrix, risk register, release plan (the roadmap itself is tracked as phase milestones, see REQ-DOC-01) | D | P1 | awaiting-design | REQ-XREF-06 | Phase 1 |
+| REQ-XREF-08 | Cross-repository artefacts: ADR log, compatibility matrix, risk register, release plan (the roadmap itself is tracked as phase milestones, see REQ-DOC-01) | D | P1 | designed | -> core#28 (ADR), core#29 (matrix+risk), core#30 (release plan) | Phase 1 |
 
 ## H. Configuration and data-driven design
 
@@ -166,21 +166,21 @@ Tracked independently of REQ-HOT-22 (different problem, different issues).
 | ID | Requirement | Type | Pri | Status | Depends | Milestone |
 |---|---|---|---|---|---|---|
 | REQ-TEST-01 | Unit tests, GameTests (expectedTests in sync), integration tests per repo; build and artifact validation | D | P0 | implemented (harness) | - | Phase 6 |
-| REQ-TEST-02 | Dedicated-server startup tests and multiplayer checks | D | P1 | awaiting-design | REQ-XREF-03 | Phase 6 |
-| REQ-TEST-03 | Compatibility tests with optional dependencies present and absent | D | P1 | awaiting-design | REQ-XREF-04 | Phase 6 |
-| REQ-TEST-04 | Failure-scenario coverage: missing provider; registered ability with unavailable adapter; ability removed by update; unaffordable cost; combo miss condition; native+bridge simultaneous charge; client bypass attempt; saved assignment to missing ability; obsolete config value; client-only class on dedicated server; two integrations claiming the same feature | D | P0 | awaiting-design | SPIKE-core-1 | Phase 6 |
-| REQ-TEST-05 | Persistence and migration tests (hotbar assignments, config values) | D | P1 | awaiting-design | REQ-HOT-14, REQ-CFG-03 | Phase 6 |
+| REQ-TEST-02 | Dedicated-server startup tests and multiplayer checks | D | P1 | designed | -> core#27 (matrix, incl. dedicated-server boot per combination) | Phase 6 |
+| REQ-TEST-03 | Compatibility tests with optional dependencies present and absent | D | P1 | designed | -> core#27 | Phase 6 |
+| REQ-TEST-04 | Failure-scenario coverage: missing provider; registered ability with unavailable adapter; ability removed by update; unaffordable cost; combo miss condition; native+bridge simultaneous charge; client bypass attempt; saved assignment to missing ability; obsolete config value; client-only class on dedicated server; two integrations claiming the same feature | D | P0 | designed | -> core#26 (scenario-to-fixture completeness gate) | Phase 6 |
+| REQ-TEST-05 | Persistence and migration tests (hotbar assignments, config values) | D | P1 | designed | fixtures specified inside hotbar#24/#25, core#10, hotbar#28 (no separate issue needed) | Phase 6 |
 | REQ-TEST-06 | Regression tests for every fixed bug (bug issues carry their own) | D | P1 | implemented (workflow) | - | ongoing |
-| REQ-TEST-07 | Reproducible manual validation instructions for non-automatable checks (HUD, input, in-game casting) | D | P1 | awaiting-design | - | Phase 6 |
+| REQ-TEST-07 | Reproducible manual validation instructions for non-automatable checks (HUD, input, in-game casting) | D | P1 | designed | mandated per-issue (manual checklists) + matrix rows in core#27 | Phase 6 |
 
 ## J. Documentation and process
 
 | ID | Requirement | Type | Pri | Status | Depends | Milestone |
 |---|---|---|---|---|---|---|
 | REQ-DOC-01 | Repository roadmap tracked as GitHub phase milestones (progress computed from assigned issues, completion criteria in each milestone description) | D | P1 | implemented | - | ongoing |
-| REQ-DOC-02 | Architecture decision log (ADR per repo, decision records in issues) | D | P1 | awaiting-design | SPIKE-core-1 | Phase 1 |
-| REQ-DOC-03 | Compatibility matrix and risk register | D | P1 | awaiting-spike | SPIKE-iss-1..4, SPIKE-br-1 | Phase 1 |
-| REQ-DOC-04 | Release plan per repo (alpha/beta/stable per org CI model) | D | P2 | awaiting-design | - | Phase 6 |
+| REQ-DOC-02 | Architecture decision log (ADR per repo, decision records in issues) | D | P1 | designed | -> core#28 (initial ten ADRs) | Phase 1 |
+| REQ-DOC-03 | Compatibility matrix and risk register | D | P1 | designed | all input spikes closed -> core#29 (seeded from evidence) | Phase 6 |
+| REQ-DOC-04 | Release plan per repo (alpha/beta/stable per org CI model) | D | P2 | designed | -> core#30 | Phase 6 |
 | REQ-DOC-05 | Player-facing READMEs with canonical AI disclosure; NOTICE attribution mandatory | D | P1 | implemented | - | ongoing |
 
 ## Spike register (investigation issues)
@@ -291,4 +291,22 @@ Tracked independently of REQ-HOT-22 (different problem, different issues).
 | REQ-XREF-07 | resolved in bw#4 (no issue needed) |
 | REQ-DOC-01 | milestones (implemented) |
 
-Requirements without an index row await Phase 2 implementation readiness (their contracts now exist) or are Phase 3+ content work to be cut as issues when their contract issues land (e.g. REQ-HOT-01, REQ-HOT-12, REQ-BW-02/03/04 content, REQ-ISS-10 pending REQ-CORE-04).
+| REQ-HOT-01/02/07 | hotbar#26 |
+| REQ-HOT-12 | hotbar#27 |
+| REQ-HOT-22 | hotbar#28 |
+| REQ-HOT-23 | hotbar#29 |
+| REQ-ISS-10 | iss-integration#23 |
+| REQ-BW-02 (unarmed set) | battlewills#14 |
+| REQ-BW-03 | battlewills#16 |
+| REQ-BW-04 | battlewills#17 |
+| REQ-BW-06 | battlewills#18 |
+| REQ-XREF-03/04, REQ-TEST-02/03 | core#27 |
+| REQ-TEST-04 | core#26 |
+| REQ-DOC-02 | core#28 |
+| REQ-DOC-03, REQ-XREF-08 | core#29 |
+| REQ-DOC-04 | core#30 |
+| REQ-BW-05 (attribution obligation) | battlewills#13 |
+
+**Covered by existing issues (no separate issue - recorded so nothing looks orphaned):** REQ-HOT-05 (battlewill bar support) = hotbar#16 provider + bw#10 style tags; REQ-HOT-06 (provider extension points) = core#14 synthetic-provider test + core#20; REQ-HOT-09/20 (selection semantics) = hotbar#20; REQ-HOT-19 (fail-safe display/activation) = core#13 + hotbar#20 + hotbar#25; REQ-BW-08 (native activation) = core#13 pipeline + native `startHoldSkill` (bw#14); REQ-BW-09 (hotbar integration) = hotbar#16 + bw#10; REQ-BW-10 (combo integration) = bridge#7/#8; REQ-BW-11 (no hard deps) = standing AC/gotcha in every battlewills issue; REQ-TEST-06 (bug regression tests) = issue workflow itself; REQ-DOC-05 (README/AI disclosure/NOTICE) = done at bootstrap, maintained per PR; REQ-XREF-06 (traceability reconciliation) = delivered via the three reconciliation PRs (#11, #23, #24 + this one).
+
+Requirements without an index row are now only those whose implementation is embedded in a milestone's own work plan; every trackable requirement from the brief has either an issue, an explicit coverage link, or an implemented status.
