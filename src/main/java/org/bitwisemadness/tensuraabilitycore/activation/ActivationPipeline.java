@@ -103,8 +103,8 @@ public final class ActivationPipeline {
         // fixtures may pass null (steps under test do not dereference it).
 
         // RESOLVE - built-in
-        if (AbilityRegistries.ABILITY_REGISTRY == null
-                || !AbilityRegistries.ABILITY_REGISTRY.containsKey(request.abilityId())) {
+        var definitions = AbilityRegistries.registry();
+        if (definitions == null || !definitions.containsKey(request.abilityId())) {
             return ActivationResult.refused(ActivationOutcome.REFUSED_UNAVAILABLE);
         }
         // ADAPTER - built-in

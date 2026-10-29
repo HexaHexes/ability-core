@@ -7,6 +7,8 @@ import net.neoforged.neoforge.registries.NewRegistryEvent;
 import net.neoforged.neoforge.registries.RegistryBuilder;
 import org.bitwisemadness.tensuraabilitycore.TensuraAbilityCore;
 import org.bitwisemadness.tensuraabilitycore.api.AbilityDefinition;
+import org.jetbrains.annotations.ApiStatus;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * The core-owned ability registry (REQ-CORE-01, ADR-001).
@@ -27,6 +29,10 @@ import org.bitwisemadness.tensuraabilitycore.api.AbilityDefinition;
  * {@code RegistrySnapshot} (id-to-key maps only - entry <em>content</em> is
  * never sent by the platform). Client-known definition content therefore rides
  * explicit payloads (REQ-CORE-08 catalog payload; recorded on core#19).</p>
+ *
+ * <p>The live registry is exposed through {@link #registry()} rather than a
+ * public field: null-until-loaded semantics stay identical, and the field is
+ * not externally mutable (keeps the SpotBugs baseline at zero findings).</p>
  */
 public final class AbilityRegistries {
 
@@ -35,20 +41,40 @@ public final class AbilityRegistries {
             ResourceKey.createRegistryKey(
                     ResourceLocation.fromNamespaceAndPath(TensuraAbilityCore.MOD_ID, "abilities"));
 
-    /**
-     * The live registry. Null until mod loading constructs it; never null once
-     * the game reaches any gameplay state (GameTest-asserted).
-     */
-    public static Registry<AbilityDefinition> ABILITY_REGISTRY;
+    private static Registry<AbilityDefinition> registry;
 
     private AbilityRegistries() {
     }
 
+    /**
+     * The live registry, or null until mod loading constructs it (never null
+     * once the game reaches gameplay state - GameTest-asserted).
+     */
+    @Nullable
+    public static Registry<AbilityDefinition> registry() {
+        return registry;
+    }
+
+    /** False until {@link #onNewRegistry} ran (login-window placeholder rule). */
+    public static boolean isReady() {
+        return registry != null;
+    }
+
     /** Mod-bus listener: creates and registers the registry (both sides). */
     public static void onNewRegistry(NewRegistryEvent event) {
-        ABILITY_REGISTRY = event.create(new RegistryBuilder<>(ABILITY_REGISTRY_KEY)
+        registry = event.create(new RegistryBuilder<>(ABILITY_REGISTRY_KEY)
                 .sync(true)
                 .onAdd(AbilityRegistries::validateEntry));
+    }
+
+    /**
+     * Test-support: installs an isolated fixture registry (unit tests cannot
+     * boot FML). Production code must never call this - use the real registry
+     * from {@link #registry()}.
+     */
+    @ApiStatus.Internal
+    public static void installRegistryForTests(@Nullable Registry<AbilityDefinition> fixture) {
+        registry = fixture;
     }
 
     private static void validateEntry(Registry<AbilityDefinition> registry, int id,

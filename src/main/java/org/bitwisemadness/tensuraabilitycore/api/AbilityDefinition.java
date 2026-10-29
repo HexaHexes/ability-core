@@ -2,9 +2,11 @@ package org.bitwisemadness.tensuraabilitycore.api;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
@@ -37,6 +39,10 @@ import org.jetbrains.annotations.Nullable;
  *                       is permitted in data and refused at activation (fail-closed)
  * @param cost           declared resource-cost metadata, or null when the
  *                       provider owns costs without declaring them yet
+ * @param tags           open flat tag vocabulary for filtering (e.g.
+ *                       {@code "unarmed"}, {@code "passive"}, {@code "melee"});
+ *                       delivered with issue #14's enumeration API as the
+ *                       first-class replacement for the interim data-slot idea
  * @param data           open string key/value slots for provider- or
  *                       datapack-supplied metadata (feeds the data-map overlay,
  *                       see ADR-001)
@@ -47,7 +53,12 @@ public record AbilityDefinition(
         ResourceLocation category,
         ActivationType activationType,
         @Nullable ResourceCost cost,
+        Set<String> tags,
         Map<String, String> data) {
+
+    /** Set codec for the open tag vocabulary (this DFU build has no Codec.unboundedSet). */
+    private static final Codec<Set<String>> TAG_SET_CODEC =
+            Codec.list(Codec.STRING).xmap(Set::copyOf, List::copyOf);
 
     public static final Codec<AbilityDefinition> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Codec.STRING.fieldOf("display_name").forGetter(AbilityDefinition::displayNameKey),
@@ -57,6 +68,8 @@ public record AbilityDefinition(
             ActivationType.CODEC.fieldOf("activation_type").forGetter(AbilityDefinition::activationType),
             ResourceCost.CODEC.optionalFieldOf("cost")
                     .forGetter(d -> Optional.ofNullable(d.cost())),
+            TAG_SET_CODEC.optionalFieldOf("tags", Set.of())
+                    .forGetter(AbilityDefinition::tags),
             Codec.unboundedMap(Codec.STRING, Codec.STRING).optionalFieldOf("data", Map.of())
                     .forGetter(AbilityDefinition::data)
     ).apply(instance, AbilityDefinition::create));
@@ -68,19 +81,26 @@ public record AbilityDefinition(
             ResourceLocation category,
             ActivationType activationType,
             Optional<ResourceCost> cost,
+            Set<String> tags,
             Map<String, String> data) {
         return new AbilityDefinition(
-                displayNameKey, iconId.orElse(null), category, activationType, cost.orElse(null), data);
+                displayNameKey, iconId.orElse(null), category, activationType, cost.orElse(null), tags, data);
     }
 
     public AbilityDefinition {
         Objects.requireNonNull(displayNameKey, "displayNameKey");
         Objects.requireNonNull(category, "category");
         Objects.requireNonNull(activationType, "activationType");
-        // defensive copy: definitions are immutable value objects shared across threads
+        // defensive copies: definitions are immutable value objects shared across threads
+        tags = Set.copyOf(Objects.requireNonNull(tags, "tags"));
         data = Map.copyOf(Objects.requireNonNull(data, "data"));
         if (displayNameKey.isBlank()) {
             throw new IllegalArgumentException("display name key must not be blank");
+        }
+        for (String tag : tags) {
+            if (tag == null || tag.isBlank()) {
+                throw new IllegalArgumentException("definition tags must not be blank");
+            }
         }
         data.forEach((k, v) -> {
             if (k == null || k.isBlank()) {
@@ -110,6 +130,11 @@ public record AbilityDefinition(
         if (cost != null) {
             if (cost.resourceId().isBlank() || cost.amount() < 0 || !Double.isFinite(cost.amount())) {
                 throw new IllegalStateException("Invalid ability definition " + id + ": malformed cost " + cost);
+            }
+        }
+        for (String tag : tags) {
+            if (tag == null || tag.isBlank()) {
+                throw new IllegalStateException("Invalid ability definition " + id + ": blank tag");
             }
         }
     }

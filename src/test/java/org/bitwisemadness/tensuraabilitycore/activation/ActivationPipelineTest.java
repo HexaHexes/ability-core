@@ -46,20 +46,20 @@ class ActivationPipelineTest {
         handlers = new ActivationHandlerRegistry();
         pipeline = new ActivationPipeline(handlers);
         // fixture registry: an isolated MappedRegistry holding one definition
-        previousRegistry = AbilityRegistries.ABILITY_REGISTRY;
+        previousRegistry = AbilityRegistries.registry();
         var fixture = new MappedRegistry<AbilityDefinition>(
                 AbilityRegistries.ABILITY_REGISTRY_KEY, Lifecycle.stable(), false);
         Registry.register(fixture, KNOWN, new AbilityDefinition(
                 "tensura.skill.known", null,
                 ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
                 org.bitwisemadness.tensuraabilitycore.api.ActivationType.INSTANT,
-                null, Map.of()));
-        AbilityRegistries.ABILITY_REGISTRY = fixture;
+                null, java.util.Set.of(), Map.of()));
+        AbilityRegistries.installRegistryForTests(fixture);
     }
 
     @AfterEach
     void tearDown() {
-        AbilityRegistries.ABILITY_REGISTRY = previousRegistry;
+        AbilityRegistries.installRegistryForTests(previousRegistry);
     }
 
     private ActivationRequest request(ResourceLocation id) {
