@@ -231,6 +231,7 @@ jobs:
       - name: SpotBugs
         env:
           PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN || github.token }}
         run: ./gradlew spotbugsMain --no-daemon --stacktrace
 
       # Report-only during the grace period: violations print in the log
@@ -239,6 +240,7 @@ jobs:
       - name: Spotless check
         env:
           PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN || github.token }}
         run: ./gradlew spotlessCheck --no-daemon --stacktrace
         continue-on-error: true
 

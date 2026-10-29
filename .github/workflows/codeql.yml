@@ -62,7 +62,13 @@ jobs:
 
       - name: Build for extraction
         env:
+          # Both names because org repos span two credential-chain generations:
+          # modern build.gradle reads PACKAGE_READ_TOKEN first, older ones read
+          # GITHUB_TOKEN only; Actions never auto-exports GITHUB_TOKEN. The
+          # || github.token fallback keeps the default-token path working for
+          # repos where the PAT is not granted (pseudocore-curios junit model).
           PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN || github.token }}
         # clean + --no-build-cache force javac to actually run: Gradle's build
         # cache is restored by setup-java (org.gradle.caching=true), so a
         # FROM-CACHE compileJava runs no compiler and CodeQL fails with
