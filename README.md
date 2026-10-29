@@ -23,9 +23,6 @@ full plan, research tables and open design decisions.)*
 |---|---|---|
 | Required | Minecraft / NeoForge | 1.21.1 / 21.1.259 |
 
-When the first alpha ships, drop the jar in `mods/` alongside its required
-dependencies.
-
 Tensura Ability Core is a library. The pack's ability mods (the hotbar, the
 integrations, the battlewills) depend on it, not the other way round.
 
