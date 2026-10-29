@@ -2,6 +2,8 @@ plugins {
     id 'java-library'
     id 'maven-publish'
     id 'net.neoforged.moddev' version '2.0.148'
+    id 'com.github.spotbugs' version '6.5.12'
+    id 'com.diffplug.spotless' version '8.10.3'
 }
 
 version = mod_version
@@ -174,5 +176,41 @@ publishing {
                 password = System.getenv('GITHUB_TOKEN') ?: project.findProperty('gpr.key')
             }
         }
+    }
+}
+
+// --- Static analysis (report-only grace period) ----------------------------
+// Both tools run as the `static` CI job. During the grace period neither can
+// block a build: SpotBugs findings are recorded but never fail the task, and
+// Spotless is detached from `check` (enforceCheck false) so the junit job's
+// `./gradlew build` stays style-agnostic. Gating flips on in a follow-up once
+// the finding volume is known; that follow-up also runs one spotlessApply per
+// repo to clear the baseline.
+spotbugs {
+    ignoreFailures = true
+    effort = com.github.spotbugs.snom.Effort.MAX
+}
+
+spotbugsTest {
+    enabled = false
+}
+
+spotbugsMain {
+    // HTML report into build/reports/spotbugs for the CI artifact upload.
+    reports {
+        html.required = true
+        xml.required = false
+    }
+}
+
+spotless {
+    enforceCheck false
+    java {
+        // Minimal profile only: no formatter, so no repo-wide rewrites.
+        // Trailing whitespace, final newline, deterministic import order.
+        target 'src/*/java/**/*.java'
+        trimTrailingWhitespace()
+        endWithNewline()
+        importOrder()
     }
 }

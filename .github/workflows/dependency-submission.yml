@@ -1,0 +1,42 @@
+name: Dependency submission
+
+# Feeds GitHub's dependency graph for this Gradle build - the data source
+# dependency-review.yml diffs. Gradle cannot be statically parsed from
+# build.gradle and these repos ship no lockfiles, so without this workflow
+# dependency review would silently pass having compared nothing. Push keeps
+# the default branch's graph fresh; pull_request supplies the PR head's
+# snapshot, which is the one the review waits for (see issue #30).
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+permissions:
+  # The snapshot POST to the Dependency Submission API requires write; the
+  # gradle/actions docs specify contents: write (read gets HttpError on POST).
+  contents: write
+
+concurrency:
+  group: dep-submission-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-submission:
+    name: dependency-submission
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      # Generates the dependency graph snapshot and submits it via the
+      # Dependency Submission API. Needs no write scopes on public repos.
+      - name: Generate and submit the dependency graph
+        uses: gradle/actions/dependency-submission@v6

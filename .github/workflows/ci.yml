@@ -212,6 +212,44 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  static:
+    name: static
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      # ignoreFailures in build.gradle: SpotBugs findings never fail this
+      # step during the grace period - the job exists to surface volume.
+      - name: SpotBugs
+        env:
+          PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
+        run: ./gradlew spotbugsMain --no-daemon --stacktrace
+
+      # Report-only during the grace period: violations print in the log
+      # and the step annotates, but the job - and thus the check - stays
+      # green. Remove continue-on-error to gate.
+      - name: Spotless check
+        env:
+          PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
+        run: ./gradlew spotlessCheck --no-daemon --stacktrace
+        continue-on-error: true
+
+      - name: Upload the SpotBugs report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: spotbugs-report
+          path: build/reports/spotbugs/
+          if-no-files-found: ignore
+
   version-bump:
     name: version-bump
     runs-on: ubuntu-latest
