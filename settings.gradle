@@ -5,4 +5,4 @@ pluginManagement {
 }
 
 // Keep in sync with mod_id in gradle.properties and archivesName in build.gradle.
-rootProject.name = 'examplemod'
+rootProject.name = 'tensura_ability_core'
