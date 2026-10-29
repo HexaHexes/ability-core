@@ -1,0 +1,12 @@
+# EditorConfig pins encoding so files stay UTF-8 (no BOM) no matter which editor
+# opens them. This org is developed on Windows, where a UTF-8-with-BOM write breaks
+# Gradle's build-script parser (Unexpected character) and can confuse tooling that
+# reads the raw bytes. Pinning utf-8 keeps saves consistent and BOM-free.
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+
+# Line endings are decided in .gitattributes, not here - pinning end_of_line would
+# reformat files across editors and fight the git-side normalization.

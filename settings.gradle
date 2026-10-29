@@ -1,0 +1,8 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+    }
+}
+
+// Keep in sync with mod_id in gradle.properties and archivesName in build.gradle.
+rootProject.name = 'examplemod'

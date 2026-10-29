@@ -1,0 +1,49 @@
+name: Publish
+
+# Publishes this repo's artifact to the org's GitHub Packages Maven registry, so
+# consumers resolve it from Maven and never from a local jar.
+#
+# Runs for every release - alpha, beta and stable alike. Pre-releases are gated
+# upstream: release.yml only creates an -alpha/-beta release when the repository
+# variable ALPHA_RELEASES is true, so anything that reaches "release published"
+# here is meant to be consumable.
+#
+# workflow_dispatch exists so a maintainer can republish a version after a
+# packaging fix without cutting a new release.
+#
+# Reads on GitHub Packages always require authentication. Consumers in this org
+# therefore need a read token: the workflow token can publish here, but it cannot
+# read a package owned by a different repository.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Publish to GitHub Packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: ./gradlew publish --no-daemon --stacktrace

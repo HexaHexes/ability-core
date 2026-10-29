@@ -1,0 +1,197 @@
+name: Publish to Modrinth
+
+# Deliberately separate from release.yml. A Modrinth outage fails only this
+# workflow and never the GitHub release.
+#
+# Mirrors the CurseForge flow (the reference implementation is
+# tiered-echoes/.github/workflows/curseforge.yml), with one documented
+# difference: a repo that has configured NEITHER secret is treated as not
+# listed on Modrinth yet and skips with a notice, while a repo that has
+# configured only ONE of the two fails loudly - a half-configured repo is a
+# mistake, an unconfigured repo is a deliberate deferral.
+#
+# The release: published trigger is NOT sufficient on its own. GitHub refuses
+# to cascade workflow runs started by the default GITHUB_TOKEN, and release.yml
+# is the only thing that creates releases - so a release published by that
+# token would never start this workflow. workflow_dispatch is explicitly exempt
+# from that rule, so release.yml can dispatch this directly after tagging when
+# that wiring lands. The release trigger is kept for releases created by hand.
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: modrinth-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish
+    runs-on: ubuntu-latest
+
+    # Edit these two lines when promoting this file into a repo. Loader names
+    # are Modrinth's lowercase names ("neoforge", "forge").
+    env:
+      MINECRAFT_VERSION: '1.21.1'
+      MOD_LOADERS: '["neoforge"]'
+      GH_TOKEN: ${{ github.token }}
+      # Either the release event or the dispatch input, never both.
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+    steps:
+      - name: Resolve channel from the tag
+        id: channel
+        run: |
+          set -euo pipefail
+
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "::error::No release tag supplied. Expected one from the release event or the dispatch input."
+            exit 1
+          fi
+          echo "tag: $RELEASE_TAG"
+
+          # Alphas are GitHub-only by decision, mirroring the CurseForge flow:
+          # they are rolling builds of main, and publishing them would bury the
+          # channel users actually browse. Both the +g rolling-build tags and
+          # the -alpha.N train tags are alphas; a -beta.N suffix publishes as a
+          # beta; no pre-release suffix at all means a clean bump, stable.
+          case "$RELEASE_TAG" in
+            *+g*|*-alpha*)
+              echo "channel=alpha"
+              echo "publish=false"
+              echo "reason=alphas are published to GitHub only, not Modrinth"
+              ;;
+            *-*)
+              echo "channel=beta"
+              echo "publish=true"
+              echo "reason=tag carries a pre-release suffix"
+              ;;
+            *)
+              echo "channel=stable"
+              echo "publish=true"
+              echo "reason=clean version tag"
+              ;;
+          esac
+
+      - name: Skip alphas
+        if: steps.channel.outputs.publish != 'true'
+        run: |
+          echo "Skipping Modrinth upload for $RELEASE_TAG."
+          echo "${{ steps.channel.outputs.reason }}."
+
+      - name: Check Modrinth configuration
+        id: config
+        if: steps.channel.outputs.publish == 'true'
+        env:
+          MODRINTH_PROJECT_ID: ${{ secrets.MODRINTH_PROJECT_ID }}
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$MODRINTH_PROJECT_ID" ] && [ -z "$MODRINTH_TOKEN" ]; then
+            echo "::notice::This repo has no Modrinth configuration - skipping the upload."
+            echo "::notice::Add MODRINTH_PROJECT_ID and MODRINTH_TOKEN under Settings > Secrets and variables > Actions when the project is listed."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          MISSING=""
+          [ -z "$MODRINTH_PROJECT_ID" ] && MISSING="$MISSING MODRINTH_PROJECT_ID"
+          [ -z "$MODRINTH_TOKEN" ] && MISSING="$MISSING MODRINTH_TOKEN"
+
+          if [ -n "$MISSING" ]; then
+            echo "::error::Cannot publish a ${{ steps.channel.outputs.channel }} release to Modrinth."
+            echo "::error::Missing required secret(s):$MISSING"
+            echo "::error::Add them under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+          echo "Secrets present."
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      # Both the asset and the notes are read back from the published release
+      # rather than taken from the event payload, so this works identically
+      # whether it was triggered by the release event or by a dispatch. The jar
+      # pattern is deliberately generic - releases attach one jar - but can be
+      # tightened per repo if a release ever attaches more than the mod jar.
+      - name: Download release asset and notes
+        if: steps.channel.outputs.publish == 'true' && steps.config.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p staged
+          gh release download "$RELEASE_TAG" \
+            --pattern '*.jar' \
+            --dir staged
+          ls -la staged
+          echo "ASSET=$(ls staged/*.jar | head -1)" >> "$GITHUB_ENV"
+
+          gh release view "$RELEASE_TAG" --json body --jq '.body' > notes.md
+          echo "Release notes ($(wc -c < notes.md) bytes):"
+          cat notes.md
+
+      - name: Upload to Modrinth
+        if: steps.channel.outputs.publish == 'true' && steps.config.outputs.configured == 'true'
+        env:
+          MODRINTH_PROJECT_ID: ${{ secrets.MODRINTH_PROJECT_ID }}
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          CHANNEL: ${{ steps.channel.outputs.channel }}
+        run: |
+          set -euo pipefail
+
+          # Modrinth's three-valued version type: release, beta, alpha.
+          case "$CHANNEL" in
+            stable) VERSION_TYPE=release ;;
+            beta)   VERSION_TYPE=beta ;;
+            *)      VERSION_TYPE=alpha ;;
+          esac
+
+          # game_versions carries the Minecraft version; loaders are Modrinth's
+          # own lowercase names. A version or loader the project is not listed
+          # for is rejected outright, not silently accepted, so the declared
+          # values must match the project's listing.
+          METADATA=$(jq -n \
+            --rawfile changelog notes.md \
+            --arg projectId "$MODRINTH_PROJECT_ID" \
+            --arg versionNumber "$RELEASE_TAG" \
+            --arg gameVersion "$MINECRAFT_VERSION" \
+            --argjson loaders "$MOD_LOADERS" \
+            --arg versionType "$VERSION_TYPE" \
+            '{
+              project_id: $projectId,
+              version_number: $versionNumber,
+              changelog: $changelog,
+              game_versions: [$gameVersion],
+              loaders: $loaders,
+              version_type: $versionType
+            }')
+
+          echo "Uploading with metadata:"
+          echo "$METADATA" | jq .
+
+          RESPONSE=$(curl --silent --show-error --fail-with-body \
+            --request POST \
+            --header "Authorization: $MODRINTH_TOKEN" \
+            --form "data=$METADATA" \
+            --form "file=@$ASSET;type=application/java-archive" \
+            "https://api.modrinth.com/v2/version")
+
+          echo "Upload response:"
+          echo "$RESPONSE" | jq .
+
+          VERSION_ID=$(echo "$RESPONSE" | jq -r '.id // empty')
+          if [ -z "$VERSION_ID" ]; then
+            echo "::error::Modrinth accepted the request but returned no version id."
+            exit 1
+          fi
+
+          echo "Published Modrinth version $VERSION_ID as a $CHANNEL release."

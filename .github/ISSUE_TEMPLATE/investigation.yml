@@ -1,0 +1,66 @@
+name: Investigation
+description: Resolve an unknown before designing or implementing. Produces findings, not code.
+title: "[Investigation] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Open a spike when a feature depends on unknown APIs, undocumented upstream
+        behaviour, unresolved architecture or uncertain feasibility.
+
+        An investigation issue closes with concrete results: verified findings, a
+        recommended design, alternatives considered, limitations, and the follow-up
+        implementation issues it unblocks - created before this issue is closed.
+        It must not sit indefinitely in an ambiguous state.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question to resolve
+      description: The specific unknown, stated so the answer is checkable.
+    validations:
+      required: true
+  - type: textarea
+    id: blocked-work
+    attributes:
+      label: Blocked work
+      description: Issues, features or repositories waiting on this answer.
+    validations:
+      required: true
+  - type: textarea
+    id: sources
+    attributes:
+      label: Sources checked or to check
+      description: Repository URLs with exact versions, documentation, jars, changelogs, existing compatibility mods.
+    validations:
+      required: true
+  - type: textarea
+    id: findings
+    attributes:
+      label: Verified findings
+      description: |
+        For each finding: source reference, version, class/method/event/config format,
+        what it establishes, what stays unverified, and the implementation consequence.
+        Required before closing.
+    validations:
+      required: true
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommended design and alternatives considered
+      description: The chosen direction, the options rejected, and why. Required before closing.
+    validations:
+      required: true
+  - type: textarea
+    id: followups
+    attributes:
+      label: Follow-up implementation issues
+      description: Links to the implementation issues created from these findings. Required before closing; create them in this work unit.
+    validations:
+      required: true
+  - type: checkboxes
+    id: close-condition
+    attributes:
+      label: Close conditions
+      options:
+        - label: This issue will not be closed until verified findings are recorded and every follow-up implementation issue exists and is linked above.
+          required: true

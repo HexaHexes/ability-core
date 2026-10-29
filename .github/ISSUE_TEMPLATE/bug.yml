@@ -1,0 +1,77 @@
+name: Bug
+description: Something does not behave as it should. Bugs stay separate from feature work.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One bug per issue. Fill in exact versions - "latest" is not a version.
+        Suspected causes are clearly marked as suspicions until confirmed against source
+        or reproduction evidence.
+  - type: input
+    id: environment
+    attributes:
+      label: Environment and exact mod versions
+      description: Minecraft, NeoForge, this mod, and every related mod with exact versions.
+      placeholder: "Minecraft 1.21.1 / NeoForge 21.1.259 / this mod 1.0.0 / <upmod> <version>"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Numbered steps that reproduce the problem from a clean state.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: input
+    id: actual
+    attributes:
+      label: Actual behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, stack traces and other evidence
+      description: Relevant log excerpts, crash reports, screenshots, or "none available" and why.
+  - type: textarea
+    id: suspected-cause
+    attributes:
+      label: Suspected cause (suspected, not confirmed)
+      description: Clearly separate suspicion from confirmed findings. Confirmed causes get moved here with the confirming evidence.
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Impact and severity
+      options:
+        - Critical (crash, data loss, progression break, server down)
+        - High (core feature unusable, no workaround)
+        - Medium (feature impaired, workaround exists)
+        - Low (cosmetic or minor inconvenience)
+    validations:
+      required: true
+  - type: textarea
+    id: regression
+    attributes:
+      label: Regression-test requirements
+      description: What must be tested so this bug cannot return unnoticed.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Verifiable conditions for calling this fixed.
+    validations:
+      required: true

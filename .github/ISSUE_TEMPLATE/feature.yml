@@ -1,0 +1,114 @@
+name: Feature
+description: A new capability or behaviour change with an independently verifiable outcome.
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Every piece of work begins as an issue. One feature per issue - split anything
+        with independently verifiable outcomes into additional issues.
+
+        If the feature depends on unknown upstream APIs, undocumented behaviour or
+        unresolved architecture, open an Investigation issue first and link it here.
+        This issue is ready for implementation only when every required section below
+        is satisfied.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What need or gap does this feature address, and for whom?
+    validations:
+      required: true
+  - type: textarea
+    id: requirements
+    attributes:
+      label: User-visible and technical requirements
+      description: Both what the player notices and what the code must do.
+      placeholder: |
+        User-visible: ...
+        Technical: ...
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and explicit non-goals
+      description: What this issue covers, and what it deliberately does not cover.
+    validations:
+      required: true
+  - type: textarea
+    id: current-investigation
+    attributes:
+      label: Existing implementation investigation
+      description: What already exists in this repo, in sibling repos, or in upstream mods that relates to this feature.
+  - type: textarea
+    id: upstream-evidence
+    attributes:
+      label: Upstream APIs and source evidence
+      description: |
+        Source URL or repository reference, exact version, class/method/event/config/data format,
+        what the evidence establishes, and what remains unverified. If nothing is verified yet,
+        link the Investigation issue that will establish it.
+      placeholder: |
+        <url> @ <version>: <class.method> - establishes ...; unverified: ...
+    validations:
+      required: true
+  - type: textarea
+    id: approaches
+    attributes:
+      label: Candidate implementation approaches
+      description: Approaches considered, including rejected ones.
+  - type: textarea
+    id: selected-approach
+    attributes:
+      label: Selected approach and rationale
+      description: Why this approach wins on evidence, trade-offs and limitations.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Verifiable conditions. Each line should be checkable as pass or fail.
+    validations:
+      required: true
+  - type: textarea
+    id: config-data
+    attributes:
+      label: Configuration and data implications
+      description: New settings, defaults, precedence (client preference vs server policy vs world override vs datapack), migration of existing values.
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and dependency implications
+      description: Affected repositories, optional dependencies, load-order or missing-mod behaviour, conflicts with existing functionality.
+  - type: textarea
+    id: security
+    attributes:
+      label: Security and server-authority considerations
+      description: What the client can attempt, what the server must enforce, resource-consumption risks.
+  - type: textarea
+    id: testing
+    attributes:
+      label: Testing plan
+      description: Unit tests, GameTests, integration and multiplayer checks, and any manual in-game validation steps.
+    validations:
+      required: true
+  - type: textarea
+    id: documentation
+    attributes:
+      label: Documentation requirements
+      description: README, config docs, datapack docs, changelog entries this feature needs.
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Prerequisite issues and affected repositories
+      description: Blocking issue links and the repos that gain issues because of this one.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Implementation notes and known limitations
+      description: Filled in during and after implementation. Record deviations from the selected approach here.

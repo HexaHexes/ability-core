@@ -1,0 +1,364 @@
+name: CI
+
+# Three checks back the branch protection rulesets (junit, gametest,
+# version-bump): PRs cannot merge without them. The version-bump job also runs
+# on workflow_dispatch because GitHub deliberately runs no workflows for a pull
+# request raised by the default GITHUB_TOKEN - a PR it opens would otherwise sit
+# with no checks at all, and with required status checks, no way to merge but
+# admin. Its guard falls back to the default branch when there is no
+# pull_request context, so a dispatch validates exactly what the pull_request
+# run would have.
+#
+# This template is self-contained, so both build checks run from a clean
+# checkout. Mod repos derived from it resolve their dependencies through
+# CurseMaven coordinates (never gitignored libs/ or testmods/ folders) - keep
+# it that way or CI cannot run.
+#
+# The junit job also carries a datapack drift gate: where a repo commits
+# generated output at src/generated/resources, runData must reproduce it
+# byte-identically and the jar must ship every file. It activates on that
+# directory's presence, so this template and non-datagen derivatives skip
+# with a notice (see issue #20).
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  junit:
+    name: junit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Build and run JUnit suite
+        run: ./gradlew build --no-daemon --stacktrace
+
+      # gradlew build reports SUCCESS when there are no test sources at all -
+      # the :test task is simply NO-SOURCE. Assert a non-zero count so the check
+      # cannot pass by running nothing.
+      - name: Assert the JUnit suite actually ran
+        run: |
+          if [ ! -d build/test-results/test ]; then
+            echo "::error::No test results directory. :test was NO-SOURCE, so nothing ran."
+            exit 1
+          fi
+
+          TOTAL=$(grep -ho 'tests="[0-9]*"' build/test-results/test/TEST-*.xml 2>/dev/null \
+                  | grep -o '[0-9]*' | awk '{s+=$1} END {print s+0}')
+          FAILED=$(grep -ho 'failures="[0-9]*"' build/test-results/test/TEST-*.xml 2>/dev/null \
+                   | grep -o '[0-9]*' | awk '{s+=$1} END {print s+0}')
+          ERRORED=$(grep -ho 'errors="[0-9]*"' build/test-results/test/TEST-*.xml 2>/dev/null \
+                    | grep -o '[0-9]*' | awk '{s+=$1} END {print s+0}')
+
+          echo "tests=$TOTAL failures=$FAILED errors=$ERRORED"
+
+          if [ "$TOTAL" -le 0 ]; then
+            echo "::error::The JUnit suite ran 0 tests. This check must not pass vacuously."
+            exit 1
+          fi
+          if [ "$FAILED" -gt 0 ] || [ "$ERRORED" -gt 0 ]; then
+            echo "::error::JUnit suite reported $FAILED failures and $ERRORED errors."
+            exit 1
+          fi
+          echo "JUnit suite ran $TOTAL tests, all passing."
+
+      # Datapack drift gate (issue #20). Self-adapting on the org convention:
+      # repos that ship generated output commit it at src/generated/resources,
+      # and only they have a runData task - so the directory's presence is the
+      # activation signal and this template (and every non-datagen derivative)
+      # skips with a notice instead of failing on a task that does not exist.
+      # The checks themselves are the ones proven green on
+      # tensura-iaf-growth's build job and tensura-iss-growth#18.
+      - name: Regenerate the datapack and fail on drift
+        run: |
+          set -euo pipefail
+
+          if [ ! -d src/generated/resources ]; then
+            echo "::notice::No committed generated output at src/generated/resources - datapack drift gate does not apply."
+            exit 0
+          fi
+
+          ./gradlew runData --no-daemon --stacktrace
+
+          COUNT=$(find src/generated/resources/data -name '*.json' 2>/dev/null | wc -l)
+          echo "generated datapack files: $COUNT"
+          if [ "$COUNT" -le 0 ]; then
+            echo "::error::Datagen wrote no datapack files, so an unchanged tree would prove nothing."
+            exit 1
+          fi
+
+          STATUS=$(git status --porcelain -- src/generated/resources)
+          if [ -n "$STATUS" ]; then
+            echo "$STATUS"
+            echo "::error::src/generated/resources is stale. Run ./gradlew runData and commit the result."
+            exit 1
+          fi
+
+          echo "Committed datapack is byte-identical to the datagen output."
+
+      # The datapack lives inside the jar, not beside it. Missing it would
+      # ship a mod that loads and then does nothing; path sets are asserted by
+      # count so a template-derived repo needs no edits here.
+      - name: Assert the jar ships the datapack
+        run: |
+          set -euo pipefail
+
+          if [ ! -d src/generated/resources ]; then
+            echo "::notice::No committed generated output - jar assertion does not apply."
+            exit 0
+          fi
+
+          MOD_ID=$(grep '^mod_id=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          JAR=$(ls build/libs/"$MOD_ID"-*.jar | head -1)
+          echo "jar: $JAR"
+
+          # Subset, not count equality: a repo may also hand-author data/**
+          # files that belong in the jar alongside the generated ones
+          # (tiered-echoes ships three), and the failure that matters is a
+          # GENERATED file left out of the jar.
+          unzip -l "$JAR" | awk '{print $NF}' | grep '^data/.*\.json$' | sort > jar_files.txt
+          (cd src/generated/resources && find data -name '*.json' | sort) > disk_files.txt
+          MISSING=$(comm -23 disk_files.txt jar_files.txt)
+
+          if [ -n "$MISSING" ]; then
+            echo "::error::Generated datapack files missing from the jar:"
+            echo "$MISSING"
+            exit 1
+          fi
+
+          echo "Jar ships all $(wc -l < disk_files.txt) generated datapack files."
+
+      - name: Upload jar
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jar
+          path: build/libs/*.jar
+          if-no-files-found: ignore
+          retention-days: 7
+
+  gametest:
+    name: gametest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      # The exit code of this task is NOT a reliable pass signal. A run that
+      # printed "Failed to start the minecraft server" and executed zero tests
+      # still returned BUILD SUCCESSFUL. The success line in the log is the
+      # only trustworthy signal, so this step never decides the job outcome.
+      - name: Run GameTest server
+        run: |
+          set +e
+          ./gradlew runGameTestServer --no-daemon 2>&1 | tee gametest.log
+          echo "gradle exit code: $?" >> gametest.log
+
+      - name: Assert GameTests ran and passed
+        run: |
+          # The server prints "All 0 required tests passed :)" when the tree
+          # carries no GameTests at all, so matching the phrase alone lets this
+          # check pass while verifying nothing. The count is what makes it real.
+          LINE=$(grep -E "All [0-9]+ required tests passed" gametest.log || true)
+
+          if [ -z "$LINE" ]; then
+            echo "::error::GameTest run never reported a result. The task exit code is not reliable, so this assertion is authoritative."
+            echo "--- last 120 lines ---"
+            tail -120 gametest.log
+            exit 1
+          fi
+
+          # Anchor on "All N" rather than grabbing the first number on the line:
+          # the line begins with a timestamp, so a bare [0-9]+ match returns the
+          # hour and the guard would never trip.
+          COUNT=$(echo "$LINE" | sed -E 's/.*All ([0-9]+) required tests passed.*/\1/')
+
+          if [ "$COUNT" -le 0 ]; then
+            echo "::error::GameTest server ran 0 tests. This tree carries no @GameTest methods, so the check would be passing vacuously."
+            exit 1
+          fi
+
+          echo "GameTests reported success: $COUNT tests passed."
+
+      - name: Upload GameTest log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gametest-log
+          path: gametest.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  version-bump:
+    name: version-bump
+    runs-on: ubuntu-latest
+
+    # Label creation is issue-scoped, so this one job asks for more than the
+    # workflow's read-only default. Everything it already does stays read; the only
+    # write is the label below.
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Ensure the breaking label exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # The PR template tells authors to apply the `breaking` label and the
+          # magnitude rule below reads merged PRs by it, but labels live per
+          # repository and nothing created them - so the query could only ever come
+          # back empty and a breaking change could ship in a patch release with CI
+          # green. Creating it here means every repo running this workflow carries
+          # the label without anyone having clicked it into existence.
+          #
+          # Only created when missing, so a label someone has recoloured or
+          # re-described is left alone. A fork PR runs with a read-only token and
+          # cannot create it: warn loudly rather than fail the check, because a red
+          # required check would block the whole external contribution.
+          if gh label view breaking --repo "$REPO" >/dev/null 2>&1; then
+            echo "breaking label already present in $REPO."
+            exit 0
+          fi
+
+          if gh label create breaking --repo "$REPO" --color b60205 \
+               --description "Breaking change: the next clean bump must raise major or minor"; then
+            echo "created the breaking label in $REPO."
+          else
+            echo "::warning::Could not create the 'breaking' label - a fork PR has a read-only token. Add it by hand, or re-run from a branch in this repo."
+          fi
+
+      - name: Enforce version bump rules
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+
+          NEW_VERSION=$(grep '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          OLD_VERSION=$(git show "$BASE:gradle.properties" | grep '^mod_version=' | cut -d= -f2 | tr -d '[:space:]')
+
+          echo "base mod_version: $OLD_VERSION"
+          echo "head mod_version: $NEW_VERSION"
+
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD")
+          echo "--- changed files ---"
+          echo "$CHANGED"
+
+          if [ "$NEW_VERSION" = "$OLD_VERSION" ]; then
+            echo "No version bump. This PR builds as an alpha (nightly). OK."
+            exit 0
+          fi
+
+          case "$NEW_VERSION" in
+            *-alpha*|*-Alpha*|*-ALPHA*) CHANNEL="alpha" ;;
+            *-*) CHANNEL="beta" ;;
+            *) CHANNEL="stable" ;;
+          esac
+
+          echo "detected channel: $CHANNEL"
+
+          if [ "$CHANNEL" = "alpha" ]; then
+            echo "Alpha version bump. Bundling other changes is permitted. OK."
+            exit 0
+          fi
+
+          EXTRA=$(echo "$CHANGED" | grep -v '^gradle\.properties$' | grep -v '^$' || true)
+          if [ -n "$EXTRA" ]; then
+            echo "::error::A $CHANNEL version bump must change gradle.properties and nothing else."
+            echo "::error::These files must not accompany a $CHANNEL bump:"
+            echo "$EXTRA"
+            echo "::error::Either split the version bump into its own PR, or use an -alpha suffix to bundle it with the work."
+            exit 1
+          fi
+
+          echo "Isolated $CHANNEL version bump. OK."
+
+      - name: Enforce breaking changes require a major or minor bump
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          NEW_VERSION=$(grep '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          OLD_VERSION=$(git show "$BASE:gradle.properties" | grep '^mod_version=' | cut -d= -f2 | tr -d '[:space:]')
+
+          if [ "$NEW_VERSION" = "$OLD_VERSION" ]; then
+            echo "No version bump. Magnitude rule does not apply."
+            exit 0
+          fi
+
+          case "$NEW_VERSION" in
+            *-*) SUFFIXED="yes" ;;
+            *)   SUFFIXED="no" ;;
+          esac
+
+          if [ "$SUFFIXED" = "yes" ]; then
+            echo "Pre-release bump. Magnitude rule applies to the next clean bump, not this one."
+            exit 0
+          fi
+
+          BASELINE=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+
+          if [ -z "$BASELINE" ]; then
+            echo "No stable tag exists yet. Nothing to be compatible with. OK."
+            exit 0
+          fi
+
+          echo "last stable tag: $BASELINE"
+
+          BREAKING=$(gh pr list --state merged --label breaking --search "merged:>=$(git log -1 --format=%cI "$BASELINE")" --json number --jq '.[].number' || true)
+
+          if [ -z "$BREAKING" ]; then
+            echo "No breaking PRs merged since $BASELINE. Any bump is permitted. OK."
+            exit 0
+          fi
+
+          echo "breaking PRs since $BASELINE: $BREAKING"
+
+          OLD_BASE="${BASELINE#v}"
+          MAJOR_OLD=$(echo "$OLD_BASE" | cut -d. -f1)
+          MINOR_OLD=$(echo "$OLD_BASE" | cut -d. -f2)
+          MAJOR_NEW=$(echo "$NEW_VERSION" | cut -d. -f1)
+          MINOR_NEW=$(echo "$NEW_VERSION" | cut -d. -f2)
+
+          if [ "$MAJOR_NEW" -gt "$MAJOR_OLD" ] || [ "$MINOR_NEW" -gt "$MINOR_OLD" ]; then
+            echo "Bump $OLD_BASE -> $NEW_VERSION raises major or minor. OK."
+            exit 0
+          fi
+
+          echo "::error::Breaking changes are outstanding since $BASELINE (PRs: $BREAKING)."
+          echo "::error::A breaking change cannot ship in a patch release."
+          echo "::error::Bump $OLD_BASE to a higher major or minor version, not $NEW_VERSION."
+          exit 1

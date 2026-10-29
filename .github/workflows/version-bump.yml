@@ -1,0 +1,230 @@
+name: Version Bump
+
+# Opens an isolated version-bump PR on demand.
+#
+# Separate from Release, which reacts to pushes already on the default branch. This is
+# the deliberate act of raising the version, and it produces a PR rather than a commit
+# because the version-bump CI check is what decides whether the bump is allowed - a
+# workflow that force-pushes would sidestep its own guard.
+#
+# The PR it opens touches gradle.properties and nothing else, and asserts as much before
+# pushing: the same rule CI enforces.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: >-
+          Which part of the version to raise. Ignored once a pre-release train has
+          started - the base was chosen when it began.
+        type: choice
+        required: true
+        default: minor
+        options:
+          - major
+          - minor
+          - patch
+          - none
+      channel:
+        description: >-
+          stable leaves a clean version. beta appends -beta.N, incrementing while the
+          version stays a pre-release of the same base.
+        type: choice
+        required: true
+        default: stable
+        options:
+          - stable
+          - beta
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Never cancelled. A branch pushed with no PR open is harder to clean up than a slow run
+# is to wait for.
+concurrency:
+  group: version-bump
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: open-bump-pr
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.BUMP_PR_TOKEN || github.token }}
+
+      - name: Resolve the new version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          set -euo pipefail
+
+          CURRENT=$(grep '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          echo "current mod_version: $CURRENT"
+
+          BASE="${CURRENT%%-*}"
+          SUFFIX=""
+          if [ "$CURRENT" != "$BASE" ]; then
+            SUFFIX="${CURRENT#"$BASE"}"
+            SUFFIX="${SUFFIX#-}"
+          fi
+
+          if ! printf '%s' "$BASE" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::mod_version is '$CURRENT', whose base '$BASE' is not X.Y.Z."
+            echo "::error::Fix gradle.properties by hand; guessing here would produce a version neither CI nor Release understands."
+            exit 1
+          fi
+
+          MAJOR=$(printf '%s' "$BASE" | cut -d. -f1)
+          MINOR=$(printf '%s' "$BASE" | cut -d. -f2)
+          PATCH=$(printf '%s' "$BASE" | cut -d. -f3)
+
+          if [ -n "$SUFFIX" ]; then
+            echo "Already a pre-release ($CURRENT); keeping base $BASE."
+            NEW_BASE="$BASE"
+          else
+            case "$BUMP" in
+              major) NEW_BASE="$((MAJOR + 1)).0.0" ;;
+              minor) NEW_BASE="$MAJOR.$((MINOR + 1)).0" ;;
+              patch) NEW_BASE="$MAJOR.$MINOR.$((PATCH + 1))" ;;
+              none)  NEW_BASE="$BASE" ;;
+              *) echo "::error::Unknown bump '$BUMP'."; exit 1 ;;
+            esac
+          fi
+
+          if [ "$CHANNEL" = "stable" ]; then
+            NEW_VERSION="$NEW_BASE"
+            if [ -n "$SUFFIX" ]; then
+              echo "Cutting $NEW_BASE out of the $CURRENT pre-release train."
+            fi
+          else
+            N=1
+            if [ -n "$SUFFIX" ] && [ "$NEW_BASE" = "$BASE" ] && printf '%s' "$SUFFIX" | grep -Eq '^beta\.[0-9]+$'; then
+              N=$((${SUFFIX#beta.} + 1))
+            fi
+            NEW_VERSION="${NEW_BASE}-beta.${N}"
+          fi
+
+          if [ "$NEW_VERSION" = "$CURRENT" ]; then
+            echo "::error::This run produces no change: $CURRENT -> $NEW_VERSION."
+            echo "::error::Choose a bump, or switch channel to beta to open a pre-release of $BASE."
+            exit 1
+          fi
+
+          echo "new mod_version: $NEW_VERSION"
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "branch=version-bump/$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Branch, commit and push
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.version }}
+          BRANCH: ${{ steps.version.outputs.branch }}
+        run: |
+          set -euo pipefail
+
+          git checkout -b "$BRANCH"
+          sed -i "s/^mod_version=.*/mod_version=$NEW_VERSION/" gradle.properties
+
+          APPLIED=$(grep '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          if [ "$APPLIED" != "$NEW_VERSION" ]; then
+            echo "::error::sed wrote '$APPLIED' but '$NEW_VERSION' was expected."
+            exit 1
+          fi
+
+          git add gradle.properties
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "Bump mod_version to $NEW_VERSION"
+
+          TOUCHED=$(git show --name-only --format= HEAD)
+          if [ "$TOUCHED" != "gradle.properties" ]; then
+            echo "::error::Bump commit touched more than gradle.properties:"
+            echo "$TOUCHED"
+            exit 1
+          fi
+
+          git push origin "$BRANCH"
+          echo "Pushed $BRANCH"
+
+      - name: Open the pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.BUMP_PR_TOKEN || github.token }}
+          NEW_VERSION: ${{ steps.version.outputs.version }}
+          BRANCH: ${{ steps.version.outputs.branch }}
+          BUMP: ${{ inputs.bump }}
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          set -euo pipefail
+
+          # Resolve the default branch instead of hardcoding master/main, so this
+          # workflow is correct in any repo regardless of its branch naming.
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+
+          CURRENT=$(git show "origin/$DEFAULT_BRANCH:gradle.properties" | grep '^mod_version=' | cut -d= -f2 | tr -d '[:space:]')
+
+          cat > body.md <<EOF
+          ## Changeset
+
+          Isolated \`mod_version\` bump: \`$CURRENT\` -> \`$NEW_VERSION\`
+          (bump: \`$BUMP\`, channel: \`$CHANNEL\`).
+
+          \`gradle.properties\` is the only file changed. That is not tidiness -
+          the \`version-bump\` CI check fails any beta or stable bump that
+          arrives with any other file, so a red check here would mean the
+          workflow misbehaved rather than that anything about the version is
+          wrong.
+
+          ## Checklist
+
+          - [x] This PR contains **one** logical changeset
+          - [x] This PR bumps \`mod_version\` **and nothing else**
+          EOF
+
+          if [ "$CHANNEL" = "stable" ]; then
+            echo "- [x] New version is a clean bump (\`$NEW_VERSION\`) - releases as stable" >> body.md
+          else
+            echo "- [x] New version has a \`-beta\` suffix (\`$NEW_VERSION\`) - releases as beta" >> body.md
+          fi
+
+          cat >> body.md <<EOF
+
+          ## Breaking change
+
+          - [ ] This change is **breaking** - apply the \`breaking\` label before merge
+
+          Tick only if this bump ships a breaking change that has not already been
+          labelled on its own PR; the magnitude rule reads merged PRs, not this one.
+          EOF
+
+          URL=$(gh pr create --base "$DEFAULT_BRANCH" --head "$BRANCH" \
+            --title "Bump mod_version to $NEW_VERSION" \
+            --body-file body.md)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Opened $URL"
+
+      # The recursion guard. GitHub deliberately does not run workflows for the
+      # pull_request event raised by the default GITHUB_TOKEN, so a PR this workflow
+      # opens with it would sit with no checks at all. Dispatching CI on the branch
+      # reports the same job names, so the required checks still arrive.
+      - name: Run CI on the branch
+        env:
+          GH_TOKEN: ${{ secrets.BUMP_PR_TOKEN || github.token }}
+          BRANCH: ${{ steps.version.outputs.branch }}
+          BUMP_PR_TOKEN: ${{ secrets.BUMP_PR_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${BUMP_PR_TOKEN:-}" ]; then
+            echo "PR was opened with BUMP_PR_TOKEN, so its pull_request event runs CI normally."
+            exit 0
+          fi
+
+          echo "::warning::No BUMP_PR_TOKEN secret, so this PR was opened with the default GITHUB_TOKEN and GitHub will not run its pull_request workflows. Dispatching ci.yml on $BRANCH instead."
+          gh workflow run ci.yml --ref "$BRANCH"
+          echo "Dispatched CI on $BRANCH. If the required checks do not appear within a minute, run it from the Actions tab."

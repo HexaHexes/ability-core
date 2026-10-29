@@ -1,0 +1,178 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'net.neoforged.moddev' version '2.0.148'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    // Keep in sync with rootProject.name in settings.gradle and mod_id in
+    // gradle.properties. The shipped jar is <archivesName>-<version>.jar.
+    archivesName = mod_id
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+// Game tests live in their own source set: they compile against main, and are
+// deliberately NOT part of sourceSets.main - so none of it is packaged into the
+// released jar. Declared before neoForge because the mods block below joins it.
+sourceSets {
+    gametest {
+        compileClasspath += sourceSets.main.output + configurations.compileClasspath
+        runtimeClasspath += output + sourceSets.main.output + configurations.runtimeClasspath
+    }
+}
+
+neoForge {
+    version = project.neo_version
+
+    runs {
+        client {
+            client()
+        }
+
+        server {
+            server()
+            programArgument '--nogui'
+        }
+
+        // Headless test runner. NeoForge's patched server Main boots a
+        // GameTestServer that runs every registered @GameTest and exits - no
+        // window, no live instance. This is the only verification gate.
+        gameTestServer {
+            type = "gameTestServer"
+            gameDirectory = project.layout.projectDirectory.dir('run')
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+            // The gametest source set joins the mod for the dev runs so
+            // @GameTestHolder is discovered from FML's scan data. It is still
+            // not in the jar - the jar only packages sourceSets.main.
+            sourceSet sourceSets.gametest
+        }
+    }
+}
+
+// Expand the ${...} placeholders in src/main/templates into the real
+// neoforge.mods.toml at build time, so mod identity is edited in one place
+// (gradle.properties) rather than duplicated in the toml.
+def generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    def replaceProperties = [
+            minecraft_version      : minecraft_version,
+            minecraft_version_range: minecraft_version_range,
+            neo_version            : neo_version,
+            loader_version_range   : loader_version_range,
+            mod_id                 : mod_id,
+            mod_name               : mod_name,
+            mod_license            : mod_license,
+            mod_version            : mod_version,
+            mod_authors            : mod_authors,
+            mod_description        : mod_description,
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    from 'src/main/templates'
+    into layout.buildDirectory.dir('generated/sources/modMetadata')
+}
+// Feed the generated metadata in as a resource dir; passing the task provider
+// wires the dependency so the toml is generated before resources are processed.
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+// JUnit suite: the CI junit check grades it and refuses to pass on an empty
+// run, so this configuration must stay wired in every derived repo.
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+// --- GameTest harness -------------------------------------------------------
+
+// Grade the run on the log summary, not the exit code: the GameTestServer prints
+// "All N required tests passed :)" when every required test succeeds. Keep
+// expectedTests in sync with the @GameTest methods in src/gametest.
+tasks.matching { it.name == 'runGameTestServer' }.configureEach {
+    def expectedTests = 1
+    doLast {
+        def log = file('run/logs/latest.log')
+        if (!log.exists()) {
+            throw new GradleException("GameTest produced no log at ${log}")
+        }
+        def text = log.text
+        def problems = []
+        def passMatcher = (text =~ /All (\d+) required tests passed/)
+        if (passMatcher.find()) {
+            def passed = passMatcher.group(1) as int
+            if (passed != expectedTests) {
+                problems << "only ${passed}/${expectedTests} tests passed"
+            }
+        } else if ((text =~ /\d+ required tests failed/).find()) {
+            problems << 'GameTest reported failed tests'
+        } else {
+            problems << 'no GameTest summary found in log'
+        }
+        if (text.contains('Encountered an unexpected exception')) {
+            problems << 'server crashed during tests'
+        }
+        if (problems) {
+            throw new GradleException("GameTest failed: ${problems.join('; ')} - see ${log}")
+        }
+        logger.lifecycle("GameTest OK: all ${expectedTests} tests passed")
+    }
+}
+
+// --- Publishing -------------------------------------------------------------
+
+// Every repo in the org publishes its artifact to the org's GitHub Packages
+// Maven registry for alpha, beta and stable releases (see agents/AGENTS.md):
+// release.yml cuts the GitHub release, publish.yml runs on "release published"
+// and drives this block. Credentials come from the workflow token in CI; a
+// local publish can supply gpr.user / gpr.key in ~/.gradle/gradle.properties.
+// Keep the URL pointing at THIS repository - the rename checklist covers it.
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            from components.java
+            artifactId = mod_id
+            pom {
+                name = mod_name
+                description = mod_description
+                licenses {
+                    license {
+                        name = mod_license
+                    }
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = 'GitHubPackages'
+            url = uri('https://maven.pkg.github.com/HexaHexes/neoforge-mod-template')
+            credentials {
+                username = System.getenv('GITHUB_ACTOR') ?: project.findProperty('gpr.user')
+                password = System.getenv('GITHUB_TOKEN') ?: project.findProperty('gpr.key')
+            }
+        }
+    }
+}

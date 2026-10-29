@@ -1,0 +1,14 @@
+# Pin LF for authored text so the Linux CI runners and local Windows checkouts read
+# the same bytes, and git stops rewriting line endings on every touch (the
+# "LF will be replaced by CRLF" warnings). gradlew.bat stays CRLF - batch files need it.
+
+*.gradle     text eol=lf
+gradlew      text eol=lf
+*.properties text eol=lf
+*.toml       text eol=lf
+*.yml        text eol=lf
+*.yaml       text eol=lf
+*.json       text eol=lf
+*.md         text eol=lf
+
+gradlew.bat  text eol=crlf
