@@ -141,6 +141,9 @@ public final class ActivationPipeline {
         if (declaration.model() == ChargingModel.EXTERNAL) {
             chargeExternally(request, player, context, definitions);
         }
+        // COOLDOWN start - built-in: EXTERNAL-owned cooldowns start post-activation
+        // (REQ-CORE-05; NATIVE cooldowns are started by the provider's own pipeline)
+        ExternalCooldownStep.startExternalCooldown(request, player);
         return result;
     }
 
