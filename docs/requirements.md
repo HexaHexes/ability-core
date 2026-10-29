@@ -43,22 +43,22 @@ written into the implementation issues; this table records that they exist.
 
 | ID | Requirement | Type | Pri | Status | Depends | Milestone |
 |---|---|---|---|---|---|---|
-| REQ-ISS-01 | Replace Tensura staves and grimoires with ISS equivalents across all acquisition paths (recipes, loot tables, merchants, other) | F | P1 | awaiting-spike | SPIKE-iss-1, SPIKE-iss-3 | Phase 3 |
-| REQ-ISS-02 | Preserve existing inventories and old item references - no deletion, no silent migration (additive/versioned only) | F | P0 | awaiting-spike | SPIKE-iss-3 | Phase 3 |
-| REQ-ISS-03 | Equipment-based elemental affinity bonuses | F | P1 | awaiting-spike | SPIKE-iss-1, SPIKE-iss-4 | Phase 3 |
+| REQ-ISS-01 | Replace Tensura staves and grimoires with ISS equivalents across all acquisition paths (recipes, loot tables, merchants, other) | F | P1 | designed | SPIKE-iss-3 (closed) -> iss#8; blocked on trade-path confirmation from SPIKE-iss-2 evidence | Phase 3 |
+| REQ-ISS-02 | Preserve existing inventories and old item references - no deletion, no silent migration (additive/versioned only) | F | P0 | designed | SPIKE-iss-3 (closed) -> iss#9 | Phase 3 |
+| REQ-ISS-03 | Equipment-based elemental affinity bonuses | F | P1 | designed | SPIKE-iss-1 (closed) -> iss#13; SPIKE-iss-4 (open, mapping) | Phase 3 |
 | REQ-ISS-04 | Explicit Tensura-element to ISS-school mapping: aspectual/conceptual get explicit elements, summoning has none, unknown mappings grant nothing | F | P1 | awaiting-spike | SPIKE-iss-4 | Phase 3 |
 | REQ-ISS-05 | Opposing-element penalties optional and disabled by default | F | P2 | awaiting-spike | REQ-ISS-04 | Phase 3 |
-| REQ-ISS-06 | Native Tensura magic cast through ISS-compatible interfaces; scroll/learned-magic casting paths | F | P1 | awaiting-spike | SPIKE-iss-2, SPIKE-iss-1 | Phase 3 |
-| REQ-ISS-07 | Reuse native Tensura magic icons in compatible UI | F | P2 | awaiting-spike | SPIKE-iss-2 | Phase 3 |
-| REQ-ISS-08 | Configurable casting policies `allow` / `disabled` / `capacity_limited` with global defaults, per-category and per-magic overrides where feasible | F | P1 | awaiting-spike | SPIKE-iss-1, SPIKE-cfg-1 | Phase 3 |
-| REQ-ISS-09 | Casting-power cap from maximum magicule capacity, validated after all modifiers so equipment cannot bypass it | F | P1 | awaiting-spike | SPIKE-iss-1 | Phase 3 |
+| REQ-ISS-06 | Native Tensura magic cast through ISS-compatible interfaces; scroll/learned-magic casting paths | F | P1 | designed | SPIKE-iss-1+2 (closed) -> iss#17 | Phase 3 |
+| REQ-ISS-07 | Reuse native Tensura magic icons in compatible UI | F | P2 | designed | SPIKE-iss-2 (closed) -> iss#18 | Phase 3 |
+| REQ-ISS-08 | Configurable casting policies `allow` / `disabled` / `capacity_limited` with global defaults, per-category and per-magic overrides where feasible | F | P1 | designed | SPIKE-iss-1+cfg-1 (closed) -> iss#10; targets await SPIKE-iss-4 | Phase 3 |
+| REQ-ISS-09 | Casting-power cap from maximum magicule capacity, validated after all modifiers so equipment cannot bypass it | F | P1 | designed | SPIKE-iss-1 (closed) -> iss#11 (damage-only scope recorded) | Phase 3 |
 | REQ-ISS-10 | Additional resource cost for capacity-limited casting | F | P2 | awaiting-spike | REQ-ISS-08, REQ-CORE-04 | Phase 3 |
-| REQ-ISS-11 | Independent configurable disable of native Tensura skill equipping | F | P2 | awaiting-spike | SPIKE-iss-2 | Phase 3 |
-| REQ-ISS-12 | Independent configurable disable of Tensura RPG System skill equipping | F | P2 | awaiting-spike | SPIKE-iss-2 | Phase 3 |
-| REQ-ISS-13 | Alternate adapters must not bypass those restrictions (enforcement, not advisory) | F | P1 | awaiting-spike | REQ-ISS-11, REQ-ISS-12 | Phase 3 |
-| REQ-ISS-14 | Configurable ISS mana bar visibility | F | P2 | awaiting-spike | SPIKE-iss-1 | Phase 3 |
-| REQ-ISS-15 | Audit overlap and conflicts with the official `tensura_iron_spells` compat (2.0.0.0) and `tensura-iss-growth` | I | P0 | awaiting-spike | SPIKE-iss-3 | Phase 1 |
-| REQ-ISS-16 | Analysis/discovery: which Tensura staves and grimoires exist, all acquisition paths, actual item ids | I | P1 | awaiting-spike | SPIKE-iss-2 | Phase 1 |
+| REQ-ISS-11 | Independent configurable disable of native Tensura skill equipping | F | P2 | awaiting-design | SPIKE-iss-2 (closed) -> iss#14 (origin semantics open) | Phase 3 |
+| REQ-ISS-12 | Independent configurable disable of Tensura RPG System skill equipping | F | P2 | awaiting-design | SPIKE-iss-2 (closed) -> iss#15 (origin detection open) | Phase 3 |
+| REQ-ISS-13 | Alternate adapters must not bypass those restrictions (enforcement, not advisory) | F | P1 | awaiting-design | iss#16 (bypass audit + guard decision) | Phase 3 |
+| REQ-ISS-14 | Configurable ISS mana bar visibility | F | P2 | designed | SPIKE-iss-1 (closed; upstream already ships it) -> iss#12 (decision) | Phase 3 |
+| REQ-ISS-15 | Audit overlap and conflicts with the official `tensura_iron_spells` compat (2.0.0.0) and `tensura-iss-growth` | I | P0 | implemented | SPIKE-iss-3 (closed, findings+matrix in iss#4) | Phase 1 |
+| REQ-ISS-16 | Analysis/discovery: which Tensura staves and grimoires exist, all acquisition paths, actual item ids | I | P1 | implemented | SPIKE-iss-2 (closed; item ids in iss#3 findings 5; trade path noted for iss#8) | Phase 1 |
 
 ## C. Ability hotbar - `tensura-ability-hotbar`
 
@@ -67,7 +67,7 @@ written into the implementation issues; this table records that they exist.
 | REQ-HOT-01 | Default nine-slot ability bar | F | P0 | awaiting-spike | REQ-CORE-01..03 | Phase 3 |
 | REQ-HOT-02 | Vanilla hotbar textures plus compatible dynamic ability icons | F | P1 | awaiting-spike | REQ-HOT-01 | Phase 3 |
 | REQ-HOT-03 | ISS spell support in the bar | F | P1 | awaiting-spike | SPIKE-hot-1 | Phase 3 |
-| REQ-HOT-04 | Tensura skill and magic support in the bar | F | P1 | awaiting-spike | SPIKE-hot-2 | Phase 3 |
+| REQ-HOT-04 | Tensura skill and magic support in the bar | F | P1 | awaiting-design | SPIKE-hot-2 (closed) -> hotbar#16 (dependency model open) | Phase 3 |
 | REQ-HOT-05 | Battlewill support in the bar | F | P1 | awaiting-spike | REQ-BW-07 | Phase 3 |
 | REQ-HOT-06 | Optional provider extension points for future ability systems | F | P2 | awaiting-design | REQ-CORE-09 | Phase 3 |
 | REQ-HOT-07 | Configurable layout: horizontal/vertical, position, scale, opacity, icon rendering | F | P1 | awaiting-spike | SPIKE-cfg-1 | Phase 3 |
@@ -79,7 +79,7 @@ written into the implementation issues; this table records that they exist.
 | REQ-HOT-13 | Client/server synchronisation of bar contents | F | P0 | awaiting-spike | REQ-CORE-08 | Phase 3 |
 | REQ-HOT-14 | Per-player assignment persistence | F | P1 | awaiting-spike | SPIKE-hot-4 | Phase 3 |
 | REQ-HOT-15 | Diagnostics for invalid or missing abilities in a slot | F | P2 | awaiting-design | REQ-HOT-01 | Phase 3 |
-| REQ-HOT-16 | Native Tensura ability-mode integration (mode switch keybind, mode-aware behaviour) | F | P2 | awaiting-spike | SPIKE-hot-2 | Phase 5 |
+| REQ-HOT-16 | Native Tensura ability-mode integration (mode switch keybind, mode-aware behaviour) | F | P2 | designed | SPIKE-hot-2 (closed) -> hotbar#17 | Phase 5 |
 | REQ-HOT-17 | Default controls (all configurable): Ctrl+wheel select slot, Ctrl+1-9 activate slot, G selected-slot, menu keybind, mode-switch keybind | F | P1 | awaiting-spike | SPIKE-hot-3 | Phase 3 |
 | REQ-HOT-18 | Preserve ordinary vanilla hotbar controls and wheel; no interception in chat or incompatible GUI contexts | F | P0 | awaiting-spike | SPIKE-hot-3 | Phase 3 |
 | REQ-HOT-19 | Empty/restricted/unaffordable/cooldown/invalid abilities fail safely with no resource consumption | F | P0 | awaiting-design | REQ-CORE-07 | Phase 3 |
@@ -111,16 +111,16 @@ Tracked independently of REQ-HOT-22 (different problem, different issues).
 
 | ID | Requirement | Type | Pri | Status | Depends | Milestone |
 |---|---|---|---|---|---|---|
-| REQ-BR-01 | Extend combo-chain integration to supported Tensura abilities, battlewills and other providers | F | P1 | awaiting-spike | SPIKE-br-1 | Phase 4 |
-| REQ-BR-02 | Reuse Better Combat timing/hit detection and Better Spellcasting's existing ISS behaviour; no duplicated combo/animation systems | F | P0 | awaiting-spike | SPIKE-br-1 | Phase 4 |
-| REQ-BR-03 | Trigger timing `on_attack` and `on_hit` honoured for bridge payloads | F | P1 | awaiting-spike | SPIKE-br-1 | Phase 4 |
-| REQ-BR-04 | Documented policy for channelled and other unsupported activation types (excluded until safe) | F | P2 | awaiting-spike | SPIKE-br-1 | Phase 4 |
+| REQ-BR-01 | Extend combo-chain integration to supported Tensura abilities, battlewills and other providers | F | P1 | designed | SPIKE-br-1 (closed) -> bridge#7 | Phase 4 |
+| REQ-BR-02 | Reuse Better Combat timing/hit detection and Better Spellcasting's existing ISS behaviour; no duplicated combo/animation systems | F | P0 | designed | SPIKE-br-1 (closed; pattern-reuse, no ARR code) -> bridge#7 | Phase 4 |
+| REQ-BR-03 | Trigger timing `on_attack` and `on_hit` honoured for bridge payloads | F | P1 | designed | SPIKE-br-1 (closed) -> bridge#8 | Phase 4 |
+| REQ-BR-04 | Documented policy for channelled and other unsupported activation types (excluded until safe) | F | P2 | designed | SPIKE-br-1 (closed) -> bridge#9 | Phase 4 |
 | REQ-BR-05 | Eligibility policies: independent whitelist/blacklist per type (skills, magics, battlewills); default active+compatible only; passives excluded; blacklist always wins; whitelist mode requires explicit inclusion; filters affect combo activation only; missing adapters unavailable even when whitelisted | F | P1 | awaiting-design | REQ-CORE-07 | Phase 4 |
 | REQ-BR-06 | Configurable resource payment modes per ability or ability type: `native` (default), `scaled`, `free`, `fixed`, `disabled` | F | P1 | awaiting-spike | SPIKE-br-2 | Phase 4 |
 | REQ-BR-07 | Documented cost calculation; prevention of duplicate native and bridge deductions | F | P0 | awaiting-spike | SPIKE-br-2 | Phase 4 |
 | REQ-BR-08 | If payment cannot be validated and enforced: no activation; on payment failure no execution, no consumption, ordinary weapon attack proceeds | F | P0 | awaiting-design | REQ-BR-06, REQ-BR-07 | Phase 4 |
 | REQ-BR-09 | Default one payment per combo activation (not per enemy hit); multi-ability steps and atomic all-or-nothing execution investigated separately, implemented only with safe reservation/rollback | F | P1 | awaiting-spike | SPIKE-br-2 | Phase 4 |
-| REQ-BR-10 | Failure handling compatible with weapon-specific combo definitions | F | P2 | awaiting-spike | SPIKE-br-1 | Phase 4 |
+| REQ-BR-10 | Failure handling compatible with weapon-specific combo definitions | F | P2 | designed | SPIKE-br-1 (closed) -> bridge#10 | Phase 4 |
 
 ## F. Battlewills - `tensura-battlewills`
 
@@ -155,9 +155,9 @@ Tracked independently of REQ-HOT-22 (different problem, different issues).
 
 | ID | Requirement | Type | Pri | Status | Depends | Milestone |
 |---|---|---|---|---|---|---|
-| REQ-CFG-01 | Consistent configuration strategy separating client preferences, server policy/hard limits, per-world overrides, runtime gamerules, datapack defaults | F | P0 | awaiting-spike | SPIKE-cfg-1 | Phase 1 |
-| REQ-CFG-02 | Explicit precedence: safety constraints > gamerules > world overrides > server config > datapack defaults > built-in fallback; client preferences can never widen server restrictions | F | P0 | awaiting-spike | SPIKE-cfg-1 | Phase 1 |
-| REQ-CFG-03 | Configuration migration preserves existing values and emits diagnostics for invalid or obsolete settings | F | P1 | awaiting-spike | SPIKE-cfg-1 | Phase 6 |
+| REQ-CFG-01 | Consistent configuration strategy separating client preferences, server policy/hard limits, per-world overrides, runtime gamerules, datapack defaults | F | P0 | designed | SPIKE-cfg-1 (closed) -> core#9 | Phase 1 |
+| REQ-CFG-02 | Explicit precedence: safety constraints > gamerules > world overrides > server config > datapack defaults > built-in fallback; client preferences can never widen server restrictions | F | P0 | designed | SPIKE-cfg-1 (closed) -> core#9 | Phase 1 |
+| REQ-CFG-03 | Configuration migration preserves existing values and emits diagnostics for invalid or obsolete settings | F | P1 | designed | SPIKE-cfg-1 (closed) -> core#10 | Phase 6 |
 | REQ-CFG-04 | Data-driven definitions never presented as capable of arbitrary Java behaviour without an execution adapter | D | P1 | awaiting-design | REQ-BW-07 | Phase 1 |
 
 ## I. Testing and quality gates
@@ -208,7 +208,46 @@ Tracked independently of REQ-HOT-22 (different problem, different issues).
 
 | ID | Conflict / decision | Handling |
 |---|---|---|
-| DEC-01 | Better Spellcasting licence contradiction (gradle.properties "All Rights Reserved" vs mods.toml "LGPL-2.1-or-later", no LICENSE file on the 1.21 branch) | Recorded in SPIKE-br-1; interop-only until resolved; no code copying |
-| DEC-02 | Spellbook hotbar implementation location: `tensura-ability-hotbar` ISS adapter vs `tensura-iss-integration` | SPIKE-sb-1 recommends, decision recorded before REQ-SB implementation issues are created |
-| DEC-03 | Whether `tensura-battlewills-better-combat` repository exists at all | SPIKE-bw-3 |
-| DEC-04 | Better Spellcasting is not installed in the local pack; its exact distributed 1.21.1 version must be pinned before bridge work | SPIKE-br-1 |
+| DEC-01 | Licence stance for Better Spellcasting and Better Combat (BS: "All Rights Reserved" vs mods.toml "LGPL-2.1-or-later" on branch 1.21, no LICENSE file; BC: "All Rights Reserved" without grant) | **RESOLVED** (SPIKE-br-1): treat both as ARR - interop via events/public API/datapack formats only, no copied code, no asset reuse; ISS separately grants addon-dependency use (ISS LICENSE.md, see iss#2 findings 10); mixins into BS require explicit maintainer approval |
+| DEC-02 | Spellbook hotbar implementation location: `tensura-ability-hotbar` ISS adapter vs `tensura-iss-integration` | **RESOLVED** (SPIKE-sb-1): `tensura-ability-hotbar` behind an isolated ISS adapter (rationale in hotbar#6 findings section 7); SB implementation issues #10-#15 created accordingly |
+| DEC-03 | Whether `tensura-battlewills-better-combat` repository exists at all | OPEN - SPIKE-bw-3 (battlewills #4) |
+| DEC-04 | Better Spellcasting exact distributed 1.21.1 version | **RESOLVED** (SPIKE-br-1): `BetterSpellcasting-1.21.1-1.2.0.jar` (CurseForge file 7571236); must be added to the pack before bridge implementation testing - currently absent |
+| DEC-05 | Brief says "conceptual magic"; Tensura 2.0.1.3 ships ASPECTUAL/SPIRITUAL/SUMMONING/MISC - no conceptual category | OPEN - raised on SPIKE-iss-4 (iss#5) with three options; must resolve before the element-school mapping table is designed |
+
+
+## Spike status (as of 2026-10-29)
+
+- **Closed with findings + follow-up issues:** SPIKE-cfg-1 (core#3), SPIKE-iss-1 (iss#2), SPIKE-iss-2 (iss#3), SPIKE-iss-3 (iss#4), SPIKE-br-1 (bridge#3), SPIKE-sb-1 (hotbar#6), SPIKE-hot-2 (hotbar#3).
+- **Open:** SPIKE-core-1 (core#2), SPIKE-cfg-2 (core#4), SPIKE-iss-4 (iss#5, carries DEC-05), SPIKE-hot-1 (hotbar#2), SPIKE-hot-3 (hotbar#4), SPIKE-hot-4 (hotbar#5), SPIKE-br-2 (bridge#2), SPIKE-bw-1 (bw#2), SPIKE-bw-2 (bw#3), SPIKE-bw-3 (bw#4).
+
+## Issue index (requirement -> implementation issue)
+
+| Requirement | Issue |
+|---|---|
+| REQ-CFG-01/02 | core#9 |
+| REQ-CFG-03 | core#10 |
+| REQ-ISS-01 | iss-integration#8 |
+| REQ-ISS-02 | iss-integration#9 |
+| REQ-ISS-03 | iss-integration#13 |
+| REQ-ISS-06 | iss-integration#17 |
+| REQ-ISS-07 | iss-integration#18 |
+| REQ-ISS-08 | iss-integration#10 |
+| REQ-ISS-09 | iss-integration#11 |
+| REQ-ISS-11 | iss-integration#14 |
+| REQ-ISS-12 | iss-integration#15 |
+| REQ-ISS-13 | iss-integration#16 |
+| REQ-ISS-14 | iss-integration#12 |
+| REQ-HOT-04 | hotbar#16 |
+| REQ-HOT-16 | hotbar#17 |
+| REQ-SB-01/02/03/10 | hotbar#10 |
+| REQ-SB-04/05 | hotbar#11 |
+| REQ-SB-06/07 | hotbar#12 |
+| REQ-SB-08 | hotbar#13 |
+| REQ-SB-09 | hotbar#14 |
+| REQ-SB-11/12 | hotbar#15 |
+| REQ-BR-01/02 | bridge#7 |
+| REQ-BR-03 | bridge#8 |
+| REQ-BR-04 | bridge#9 |
+| REQ-BR-10 | bridge#10 |
+
+Requirements without an index row have no implementation issue yet: they await an open spike or SPIKE-core-1 (Phase 2 contract issues).
