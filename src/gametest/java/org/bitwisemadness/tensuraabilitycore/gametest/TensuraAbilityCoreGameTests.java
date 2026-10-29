@@ -50,4 +50,24 @@ public final class TensuraAbilityCoreGameTests {
         });
         helper.succeed();
     }
+
+    /**
+     * The pipeline's built-in refusal path works against the real loaded
+     * registry: an unknown id answers REFUSED_UNAVAILABLE with no steps run
+     * (REQ-CORE-02 integration evidence).
+     */
+    @GameTest(template = "empty")
+    public static void pipeline_refuses_unknown_ability(GameTestHelper helper) throws GameTestAssertException {
+        var pipeline = new org.bitwisemadness.tensuraabilitycore.activation.ActivationPipeline(
+                new org.bitwisemadness.tensuraabilitycore.activation.ActivationHandlerRegistry());
+        var request = org.bitwisemadness.tensuraabilitycore.api.ActivationRequest.of(
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("tensura", "definitely_not_registered"),
+                org.bitwisemadness.tensuraabilitycore.api.ActivationSource.DIRECT_SLOT);
+        // player is legitimately absent: no step may execute before the RESOLVE refusal
+        var result = pipeline.run(request, null);
+        if (result.outcome() != org.bitwisemadness.tensuraabilitycore.api.ActivationOutcome.REFUSED_UNAVAILABLE) {
+            throw new GameTestAssertException("expected REFUSED_UNAVAILABLE, got " + result.outcome());
+        }
+        helper.succeed();
+    }
 }
