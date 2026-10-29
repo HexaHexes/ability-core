@@ -71,8 +71,8 @@ jobs:
 
           case "$VERSION" in
             *-alpha*|*-beta*)
-              if [ "${ALPHA_RELEASES:-false}" != "true" ]; then
-                echo "$VERSION is a pre-release and the ALPHA_RELEASES variable is not enabled; skipping."
+              if [ "${ALPHA_RELEASES:-true}" != "true" ]; then
+                echo "$VERSION is a pre-release and ALPHA_RELEASES is set to false; skipping (explicit opt-out)."
                 SKIP=true
               fi ;;
           esac
