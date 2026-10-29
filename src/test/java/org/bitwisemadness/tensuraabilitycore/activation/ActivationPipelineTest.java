@@ -14,13 +14,14 @@ import java.util.Map;
 import java.util.Optional;
 import net.minecraft.core.MappedRegistry;
 import net.minecraft.core.Registry;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import org.bitwisemadness.tensuraabilitycore.api.AbilityDefinition;
 import org.bitwisemadness.tensuraabilitycore.api.ActivationOutcome;
 import org.bitwisemadness.tensuraabilitycore.api.ActivationRequest;
 import org.bitwisemadness.tensuraabilitycore.api.ActivationResult;
 import org.bitwisemadness.tensuraabilitycore.api.ActivationSource;
+import org.bitwisemadness.tensuraabilitycore.api.ActivationType;
+import org.bitwisemadness.tensuraabilitycore.api.ChargingModel;
 import org.bitwisemadness.tensuraabilitycore.registry.AbilityRegistries;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,12 +29,15 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Order-and-guarantee tests for the activation pipeline (REQ-CORE-02's
- * acceptance: refusals short-circuit before ACTIVATION and before any charge;
- * successes charge exactly once, post-activation).
+ * acceptance plus REQ-CORE-04's chargingModel routing - ADR-002). The
+ * charge-side behaviour (consumer invocation, atomicity) is covered by
+ * {@link ResourceChargeStepTest}, which owns a consumer fixture.
  */
 class ActivationPipelineTest {
 
     private static final ResourceLocation KNOWN = ResourceLocation.fromNamespaceAndPath("tensura", "known");
+    private static final ResourceLocation EXTERNAL_KNOWN =
+            ResourceLocation.fromNamespaceAndPath("tensura", "external_known");
     private static final ResourceLocation UNKNOWN = ResourceLocation.fromNamespaceAndPath("tensura", "unknown");
 
     private ActivationHandlerRegistry handlers;
@@ -45,15 +49,11 @@ class ActivationPipelineTest {
     void setUp() {
         handlers = new ActivationHandlerRegistry();
         pipeline = new ActivationPipeline(handlers);
-        // fixture registry: an isolated MappedRegistry holding one definition
         previousRegistry = AbilityRegistries.registry();
         var fixture = new MappedRegistry<AbilityDefinition>(
                 AbilityRegistries.ABILITY_REGISTRY_KEY, Lifecycle.stable(), false);
-        Registry.register(fixture, KNOWN, new AbilityDefinition(
-                "tensura.skill.known", null,
-                ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
-                org.bitwisemadness.tensuraabilitycore.api.ActivationType.INSTANT,
-                null, java.util.Set.of(), Map.of()));
+        Registry.register(fixture, KNOWN, def());
+        Registry.register(fixture, EXTERNAL_KNOWN, def());
         AbilityRegistries.installRegistryForTests(fixture);
     }
 
@@ -62,14 +62,27 @@ class ActivationPipelineTest {
         AbilityRegistries.installRegistryForTests(previousRegistry);
     }
 
+    private static AbilityDefinition def() {
+        return new AbilityDefinition(
+                "tensura.skill.known", null,
+                ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
+                ActivationType.INSTANT, null, java.util.Set.of(), Map.of());
+    }
+
     private ActivationRequest request(ResourceLocation id) {
         return ActivationRequest.of(id, ActivationSource.DIRECT_SLOT);
     }
 
+    private ActivationPipeline.Step tracing(String label) {
+        return (req, player, context) -> {
+            trace.add(label);
+            return Optional.empty();
+        };
+    }
+
     @Test
     void unknownAbilityResolvesToUnavailableBeforeAnyStep() {
-        pipeline.registerStep(ActivationPipeline.PipelinePhase.ELIGIBILITY,
-                (req, player) -> { trace.add("eligibility"); return Optional.empty(); });
+        pipeline.registerStep(ActivationPipeline.PipelinePhase.ELIGIBILITY, tracing("eligibility"));
         var result = pipeline.run(request(UNKNOWN), null);
         assertEquals(ActivationOutcome.REFUSED_UNAVAILABLE, result.outcome());
         assertTrue(trace.isEmpty(), "no step may run for an unresolvable id");
@@ -77,8 +90,7 @@ class ActivationPipelineTest {
 
     @Test
     void missingHandlerResolvesToNoAdapterBeforeEligibility() {
-        pipeline.registerStep(ActivationPipeline.PipelinePhase.ELIGIBILITY,
-                (req, player) -> { trace.add("eligibility"); return Optional.empty(); });
+        pipeline.registerStep(ActivationPipeline.PipelinePhase.ELIGIBILITY, tracing("eligibility"));
         var result = pipeline.run(request(KNOWN), null);
         assertEquals(ActivationOutcome.REFUSED_NO_ADAPTER, result.outcome());
         assertTrue(trace.isEmpty(), "eligibility must not run without an adapter");
@@ -86,38 +98,42 @@ class ActivationPipelineTest {
 
     @Test
     void eligibilityRefusalShortCircuitsEverythingAfterIt() {
-        handlers.register(KNOWN, (req, player) -> { trace.add("activate"); return ActivationResult.ACTED; });
+        handlers.register(KNOWN, (req, player) -> {
+            trace.add("activate");
+            return ActivationResult.ACTED;
+        });
         pipeline.registerStep(ActivationPipeline.PipelinePhase.ELIGIBILITY,
-                (req, player) -> Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_RESTRICTED)));
-        pipeline.registerStep(ActivationPipeline.PipelinePhase.RESOURCE,
-                (req, player) -> { trace.add("resource"); return Optional.empty(); });
-        pipeline.registerCharge((req, player) -> trace.add("charge"));
+                (req, player, context) -> Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_RESTRICTED)));
+        pipeline.registerStep(ActivationPipeline.PipelinePhase.RESOURCE, tracing("resource"));
 
         var result = pipeline.run(request(KNOWN), null);
         assertEquals(ActivationOutcome.REFUSED_RESTRICTED, result.outcome());
-        assertEquals(List.of(), trace, "refusal must precede resource check, activation and charge");
+        assertEquals(List.of(), trace, "refusal must precede resource check and activation");
     }
 
     @Test
-    void unaffordableNeverReachesProviderOrCharge() {
-        handlers.register(KNOWN, (req, player) -> { trace.add("activate"); return ActivationResult.ACTED; });
+    void unaffordableNeverReachesProvider() {
+        handlers.register(KNOWN, (req, player) -> {
+            trace.add("activate");
+            return ActivationResult.ACTED;
+        });
         pipeline.registerStep(ActivationPipeline.PipelinePhase.RESOURCE,
-                (req, player) -> Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_UNAFFORDABLE)));
-        pipeline.registerCharge((req, player) -> trace.add("charge"));
+                (req, player, context) -> Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_UNAFFORDABLE)));
 
         var result = pipeline.run(request(KNOWN), null);
         assertEquals(ActivationOutcome.REFUSED_UNAFFORDABLE, result.outcome());
         assertFalse(trace.contains("activate"), "provider must not run");
-        assertFalse(trace.contains("charge"), "no charge after refusal");
     }
 
     @Test
     void cooldownRefusalOrderingIsPreserved() {
-        handlers.register(KNOWN, (req, player) -> { trace.add("activate"); return ActivationResult.ACTED; });
+        handlers.register(KNOWN, (req, player) -> {
+            trace.add("activate");
+            return ActivationResult.ACTED;
+        });
         pipeline.registerStep(ActivationPipeline.PipelinePhase.COOLDOWN,
-                (req, player) -> Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_COOLDOWN)));
-        pipeline.registerStep(ActivationPipeline.PipelinePhase.RESOURCE,
-                (req, player) -> { trace.add("resource"); return Optional.empty(); });
+                (req, player, context) -> Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_COOLDOWN)));
+        pipeline.registerStep(ActivationPipeline.PipelinePhase.RESOURCE, tracing("resource"));
 
         var result = pipeline.run(request(KNOWN), null);
         assertEquals(ActivationOutcome.REFUSED_COOLDOWN, result.outcome());
@@ -125,35 +141,44 @@ class ActivationPipelineTest {
     }
 
     @Test
-    void successChargesExactlyOnceAfterActivation() {
-        handlers.register(KNOWN, (req, player) -> { trace.add("activate"); return ActivationResult.ACTED; });
-        pipeline.registerStep(ActivationPipeline.PipelinePhase.RESOURCE,
-                (req, player) -> { trace.add("resource"); return Optional.empty(); });
-        pipeline.registerCharge((req, player) -> trace.add("charge-1"));
-        pipeline.registerCharge((req, player) -> trace.add("charge-2"));
+    void activationSucceedsAndDeclarationIsStashedForChargeRouting() {
+        handlers.register(KNOWN, (req, player) -> {
+            trace.add("activate");
+            return ActivationResult.ACTED;
+        });
+        // EXTERNAL declaration carries its model into the context for later phases
+        handlers.register(EXTERNAL_KNOWN, (req, player) -> ActivationResult.ACTED, ChargingModel.EXTERNAL);
 
-        var result = pipeline.run(request(KNOWN), null);
-        assertEquals(ActivationOutcome.ACTED, result.outcome());
-        assertTrue(result.isSuccess());
-        assertEquals(List.of("resource", "activate", "charge-1", "charge-2"), trace);
+        var nativeResult = pipeline.run(request(KNOWN), null);
+        assertEquals(ActivationOutcome.ACTED, nativeResult.outcome());
+        assertEquals(List.of("activate"), trace);
+
+        // direct context probe: run a step that inspects the stashed declaration
+        List<Object> seenModels = new ArrayList<>();
+        pipeline.registerStep(ActivationPipeline.PipelinePhase.ELIGIBILITY, (req, player, context) -> {
+            var decl = context.get(ActivationPipeline.DECLARATION, ActivationHandlerRegistry.Declaration.class);
+            decl.ifPresent(d -> seenModels.add(d.model()));
+            return Optional.empty();
+        });
+        pipeline.run(request(EXTERNAL_KNOWN), null);
+        assertEquals(List.of(ChargingModel.EXTERNAL), seenModels);
     }
 
     @Test
-    void pendingFromHandlerCountsAsSuccessAndStillCharges() {
-        handlers.register(KNOWN, (req, player) -> ActivationResult.PENDING);
-        pipeline.registerCharge((req, player) -> trace.add("charge"));
-        var result = pipeline.run(request(KNOWN), null);
+    void pendingFromHandlerCountsAsSuccess() {
+        handlers.register(EXTERNAL_KNOWN, (req, player) -> ActivationResult.PENDING,
+                ChargingModel.EXTERNAL);
+        var result = pipeline.run(request(EXTERNAL_KNOWN), null);
         assertEquals(ActivationOutcome.PENDING, result.outcome());
-        assertEquals(List.of("charge"), trace);
+        assertTrue(result.isSuccess());
     }
 
     @Test
-    void handlerRefusalIsReturnedVerbatimWithoutCharge() {
-        handlers.register(KNOWN, (req, player) -> ActivationResult.refused(ActivationOutcome.REFUSED_INVALID_TARGET));
-        pipeline.registerCharge((req, player) -> trace.add("charge"));
+    void handlerRefusalIsReturnedVerbatim() {
+        handlers.register(KNOWN, (req, player) ->
+                ActivationResult.refused(ActivationOutcome.REFUSED_INVALID_TARGET));
         var result = pipeline.run(request(KNOWN), null);
         assertEquals(ActivationOutcome.REFUSED_INVALID_TARGET, result.outcome());
-        assertTrue(trace.isEmpty());
     }
 
     @Test
@@ -165,11 +190,25 @@ class ActivationPipelineTest {
     }
 
     @Test
+    void declarationsCarryTheirChargingModel() {
+        handlers.register(KNOWN, (req, player) -> ActivationResult.ACTED);
+        handlers.register(EXTERNAL_KNOWN, (req, player) -> ActivationResult.ACTED, ChargingModel.EXTERNAL);
+        assertEquals(ChargingModel.NATIVE, handlers.modelOf(KNOWN));
+        assertEquals(ChargingModel.EXTERNAL, handlers.modelOf(EXTERNAL_KNOWN));
+        // unregistered ids fail closed to NATIVE (gates refuse before the model matters)
+        assertEquals(ChargingModel.NATIVE, handlers.modelOf(UNKNOWN));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ActivationHandlerRegistry.Declaration(null, ChargingModel.NATIVE));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ActivationHandlerRegistry.Declaration((req, player) -> ActivationResult.ACTED, null));
+    }
+
+    @Test
     void builtInPhasesRejectStepRegistration() {
         for (var phase : new ActivationPipeline.PipelinePhase[] {
                 ActivationPipeline.PipelinePhase.ACTIVATION, ActivationPipeline.PipelinePhase.CHARGE }) {
             assertThrows(IllegalArgumentException.class,
-                    () -> pipeline.registerStep(phase, (req, player) -> Optional.empty()));
+                    () -> pipeline.registerStep(phase, (req, player, context) -> Optional.empty()));
         }
     }
 
@@ -186,7 +225,6 @@ class ActivationPipelineTest {
         assertNull(ActivationRequest.fromWire("tensura:known", "sideways", -1, 0));
         assertNotNull(ActivationRequest.fromWire("tensura:known", "direct_slot", 3, 42L));
 
-        // every outcome has a stable message key; refusals refuse success factories
         for (ActivationOutcome outcome : ActivationOutcome.values()) {
             assertTrue(outcome.messageKey().startsWith("ability."));
         }

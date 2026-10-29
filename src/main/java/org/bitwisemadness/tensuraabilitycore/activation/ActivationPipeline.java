@@ -7,41 +7,50 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import net.minecraft.server.level.ServerPlayer;
-import org.bitwisemadness.tensuraabilitycore.TensuraAbilityCore;
 import org.bitwisemadness.tensuraabilitycore.api.AbilityDefinition;
 import org.bitwisemadness.tensuraabilitycore.api.ActivationOutcome;
 import org.bitwisemadness.tensuraabilitycore.api.ActivationRequest;
 import org.bitwisemadness.tensuraabilitycore.api.ActivationResult;
+import org.bitwisemadness.tensuraabilitycore.api.Affordability;
+import org.bitwisemadness.tensuraabilitycore.api.ChargingModel;
+import org.bitwisemadness.tensuraabilitycore.api.ResourceConsumer;
+import org.bitwisemadness.tensuraabilitycore.api.ResourceConsumers;
 import org.bitwisemadness.tensuraabilitycore.registry.AbilityRegistries;
 import org.slf4j.Logger;
 
 /**
- * The server-authoritative activation pipeline (REQ-CORE-02).
+ * The server-authoritative activation pipeline (REQ-CORE-02, extended by
+ * REQ-CORE-04).
  *
  * <p>Fixed phase order - cheap-first, contract-stable:</p>
  * <ol>
  *   <li>{@link PipelinePhase#RESOLVE} - built-in: id must exist in the core
  *       registry, else {@link ActivationOutcome#REFUSED_UNAVAILABLE}.</li>
- *   <li>{@link PipelinePhase#ADAPTER} - built-in: a handler must be
- *       registered, else {@link ActivationOutcome#REFUSED_NO_ADAPTER}.</li>
+ *   <li>{@link PipelinePhase#ADAPTER} - built-in: a declaration (handler +
+ *       charging model) must exist, else {@link ActivationOutcome#REFUSED_NO_ADAPTER};
+ *       the declaration is stashed in the {@link ActivationContext}.</li>
  *   <li>{@link PipelinePhase#ELIGIBILITY} - policy providers (REQ-CORE-07,
- *       core#18) register steps here; source-scoped rules live in their
+ *       core#18) register steps; source-scoped rules live in their
  *       implementations.</li>
  *   <li>{@link PipelinePhase#COOLDOWN} - cooldown pre-check (core#16).</li>
  *   <li>{@link PipelinePhase#RESOURCE} - affordability pre-check
- *       (core#15); a refusal here means the provider is never invoked.</li>
- *   <li>{@link PipelinePhase#ACTIVATION} - built-in: the registered
- *       {@link ActivationHandler} runs the provider's native pipeline.</li>
- *   <li>{@link PipelinePhase#CHARGE} - post-success charges only
- *       (core#15's EXTERNAL model); runs solely when activation returned
- *       ACTED/PENDING. Charge-phase failures are the explicit concern of
- *       core#15 (safety wrapper lands with that issue).</li>
+ *       ({@code ResourceChargeStep}); a refusal here means the provider is
+ *       never invoked and no charge can run. Also enforces: EXTERNAL
+ *       abilities must declare a cost.</li>
+ *   <li>{@link PipelinePhase#ACTIVATION} - built-in: the registered handler
+ *       runs the provider's native pipeline.</li>
+ *   <li>{@link PipelinePhase#CHARGE} - built-in, the single core charge site
+ *       (REQ-CORE-04): for {@link ChargingModel#EXTERNAL} abilities only,
+ *       calls the declared-cost resource's {@link ResourceConsumer#charge}
+ *       with the validated {@link Affordability} snapshot from the context,
+ *       after ACTED/PENDING. NATIVE abilities are skipped by construction.
+ *       Charge failures are logged, never re-attempted, never reported as
+ *       refusals (post-activation state cannot be un-done truthfully).</li>
  * </ol>
  *
- * <p>Every step returns {@code Optional.empty()} to continue or a terminal
- * result to short-circuit the whole pipeline. The ordering guarantees from
- * the brief are structural: a refusal before ACTIVATION means the handler was
- * never invoked and CHARGE never ran (no consumption, no execution).</p>
+ * <p>Steps share an {@link ActivationContext}. Every step returns
+ * {@code Optional.empty()} to continue or a terminal result to short-circuit
+ * the whole pipeline - the brief's refusal guarantees are structural.</p>
  *
  * <p>Exceptions thrown by a handler are deliberately <b>not</b> converted to
  * refusals here (see {@link ActivationHandler}): a partially-executed native
@@ -57,21 +66,17 @@ public final class ActivationPipeline {
         RESOLVE, ADAPTER, ELIGIBILITY, COOLDOWN, RESOURCE, ACTIVATION, CHARGE
     }
 
+    /** Context key for the ability's charging/activation declaration. */
+    public static final Object DECLARATION = new Object();
+
     /** A registered check: empty = continue, present = terminal result. */
     @FunctionalInterface
     public interface Step {
-        Optional<ActivationResult> evaluate(ActivationRequest request, ServerPlayer player);
-    }
-
-    /** Post-success charge action (EXTERNAL chargingModel only - ADR-002). */
-    @FunctionalInterface
-    public interface ChargeAction {
-        void charge(ActivationRequest request, ServerPlayer player);
+        Optional<ActivationResult> evaluate(ActivationRequest request, ServerPlayer player, ActivationContext context);
     }
 
     private final ActivationHandlerRegistry handlers;
     private final Map<PipelinePhase, List<Step>> steps = new EnumMap<>(PipelinePhase.class);
-    private final List<ChargeAction> charges = new CopyOnWriteArrayList<>();
 
     public ActivationPipeline(ActivationHandlerRegistry handlers) {
         this.handlers = java.util.Objects.requireNonNull(handlers, "handlers");
@@ -82,7 +87,7 @@ public final class ActivationPipeline {
 
     /**
      * Registers a pre-activation check. Only the pre-activation phases accept
-     * steps; ACTIVATION and CHARGE are built-in (handler / charge list).
+     * steps; ACTIVATION and CHARGE are built-in (handler / charge routing).
      */
     public void registerStep(PipelinePhase phase, Step step) {
         if (phase == PipelinePhase.ACTIVATION || phase == PipelinePhase.CHARGE) {
@@ -91,16 +96,10 @@ public final class ActivationPipeline {
         steps.get(phase).add(java.util.Objects.requireNonNull(step));
     }
 
-    /** Registers a post-success charge action (runs in registration order). */
-    public void registerCharge(ChargeAction action) {
-        charges.add(java.util.Objects.requireNonNull(action));
-    }
-
     /** Runs the full pipeline for one request (server-side only). */
     public ActivationResult run(ActivationRequest request, ServerPlayer player) {
         java.util.Objects.requireNonNull(request, "request");
-        // player: production callers always pass the real server player; unit-test
-        // fixtures may pass null (steps under test do not dereference it).
+        ActivationContext context = new ActivationContext(request, player);
 
         // RESOLVE - built-in
         var definitions = AbilityRegistries.registry();
@@ -108,16 +107,19 @@ public final class ActivationPipeline {
             return ActivationResult.refused(ActivationOutcome.REFUSED_UNAVAILABLE);
         }
         // ADAPTER - built-in
-        Optional<ActivationHandler> handler = handlers.get(request.abilityId());
-        if (handler.isEmpty()) {
+        Optional<ActivationHandlerRegistry.Declaration> declarationOpt =
+                handlers.declaration(request.abilityId());
+        if (declarationOpt.isEmpty()) {
             return ActivationResult.refused(ActivationOutcome.REFUSED_NO_ADAPTER);
         }
+        ActivationHandlerRegistry.Declaration declaration = declarationOpt.get();
+        context.put(DECLARATION, declaration);
 
         // Pre-activation phases
         for (PipelinePhase phase : new PipelinePhase[] {
                 PipelinePhase.ELIGIBILITY, PipelinePhase.COOLDOWN, PipelinePhase.RESOURCE }) {
             for (Step step : steps.get(phase)) {
-                Optional<ActivationResult> terminal = step.evaluate(request, player);
+                Optional<ActivationResult> terminal = step.evaluate(request, player, context);
                 if (terminal.isPresent()) {
                     return terminal.get();
                 }
@@ -125,7 +127,7 @@ public final class ActivationPipeline {
         }
 
         // ACTIVATION - built-in
-        ActivationResult result = handler.get().activate(request, player);
+        ActivationResult result = declaration.handler().activate(request, player);
         if (result == null) {
             // handler contract violation: treat as error, never as success
             LOGGER.error("Activation handler for {} returned null", request.abilityId());
@@ -135,10 +137,42 @@ public final class ActivationPipeline {
             return result;
         }
 
-        // CHARGE - built-in, only after success
-        for (ChargeAction charge : charges) {
-            charge.charge(request, player);
+        // CHARGE - built-in: the single core charge site (EXTERNAL only)
+        if (declaration.model() == ChargingModel.EXTERNAL) {
+            chargeExternally(request, player, context, definitions);
         }
         return result;
+    }
+
+    private void chargeExternally(ActivationRequest request, ServerPlayer player,
+            ActivationContext context, net.minecraft.core.Registry<AbilityDefinition> definitions) {
+        AbilityDefinition definition = definitions.get(request.abilityId());
+        var cost = definition == null ? null : definition.cost();
+        if (cost == null) {
+            // unreachable via ResourceChargeStep (it refuses EXTERNAL-without-cost
+            // before activation); defence in depth
+            LOGGER.error("EXTERNAL ability {} has no declared cost - cannot charge", request.abilityId());
+            return;
+        }
+        Affordability snapshot = context
+                .get(ResourceChargeStep.AFFORDABILITY_SNAPSHOT, Affordability.class)
+                .orElse(null);
+        if (snapshot == null) {
+            // unreachable (RESOURCE stashes it when a cost exists); defence in depth
+            LOGGER.error("EXTERNAL ability {} reached charging without an affordability snapshot",
+                    request.abilityId());
+            return;
+        }
+        ResourceConsumer consumer = ResourceConsumers.get(cost.resourceId()).orElse(null);
+        if (consumer == null) {
+            LOGGER.error("EXTERNAL ability {} - no consumer for '{}'", request.abilityId(), cost.resourceId());
+            return;
+        }
+        try {
+            consumer.charge(request.abilityId(), player, snapshot);
+        } catch (RuntimeException e) {
+            // post-activation: cannot un-act; log loudly, report success truthfully
+            LOGGER.error("Charging failed for {} after successful activation", request.abilityId(), e);
+        }
     }
 }
