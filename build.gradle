@@ -2,8 +2,8 @@ plugins {
     id 'java-library'
     id 'maven-publish'
     id 'net.neoforged.moddev' version '2.0.148'
-    id 'com.github.spotbugs' version '6.5.12'
-    id 'com.diffplug.spotless' version '8.10.3'
+    id 'com.github.spotbugs' version '6.5.13'
+    id 'com.diffplug.spotless' version '8.10.4'
 }
 
 version = mod_version
@@ -118,7 +118,7 @@ test {
 // "All N required tests passed :)" when every required test succeeds. Keep
 // expectedTests in sync with the @GameTest methods in src/gametest.
 tasks.matching { it.name == 'runGameTestServer' }.configureEach {
-    def expectedTests = 3
+    def expectedTests = 4
     doLast {
         def log = file('run/logs/latest.log')
         if (!log.exists()) {

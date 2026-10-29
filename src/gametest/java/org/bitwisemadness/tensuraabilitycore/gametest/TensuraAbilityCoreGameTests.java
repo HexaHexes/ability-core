@@ -5,7 +5,12 @@ import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+import java.util.Map;
+import java.util.Set;
+import net.minecraft.core.MappedRegistry;
+import net.minecraft.core.Registry;
 import org.bitwisemadness.tensuraabilitycore.TensuraAbilityCore;
+import org.bitwisemadness.tensuraabilitycore.registry.AbilityRegistries;
 import org.bitwisemadness.tensuraabilitycore.registry.AbilityRegistries;
 
 /**
@@ -68,6 +73,55 @@ public final class TensuraAbilityCoreGameTests {
         if (result.outcome() != org.bitwisemadness.tensuraabilitycore.api.ActivationOutcome.REFUSED_UNAVAILABLE) {
             throw new GameTestAssertException("expected REFUSED_UNAVAILABLE, got " + result.outcome());
         }
+        helper.succeed();
+    }
+
+    /**
+     * COOLDOWN-phase integration: an EXTERNAL-cooldown ability is refused
+     * while its tracker reports an active cooldown (REQ-CORE-05 wiring
+     * evidence - the step is registered on the canonical pipeline).
+     */
+    @GameTest(template = "empty")
+    public static void external_cooldown_gate_is_registered(GameTestHelper helper) throws GameTestAssertException {
+        var cooldownId = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                TensuraAbilityCore.MOD_ID, "gametest_cooled");
+        // RESOLVE runs before COOLDOWN: the id must be registered - install a
+        // fixture registry (test-support API), then restore the real one.
+        var previous = AbilityRegistries.registry();
+        var fixture = new MappedRegistry<org.bitwisemadness.tensuraabilitycore.api.AbilityDefinition>(
+                AbilityRegistries.ABILITY_REGISTRY_KEY, com.mojang.serialization.Lifecycle.stable(), false);
+        Registry.register(fixture, cooldownId, new org.bitwisemadness.tensuraabilitycore.api.AbilityDefinition(
+                "tensura.skill.gametest_cooled", null,
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
+                org.bitwisemadness.tensuraabilitycore.api.ActivationType.INSTANT, null, Set.of(), Map.of()));
+        AbilityRegistries.installRegistryForTests(fixture);
+        // ADAPTER runs before COOLDOWN: register a native-charging handler (an
+        // EXTERNAL-cooldown ability can be natively charged - the axes are orthogonal)
+        TensuraAbilityCore.HANDLERS.register(cooldownId, (req, player) ->
+                org.bitwisemadness.tensuraabilitycore.api.ActivationResult.ACTED);
+        org.bitwisemadness.tensuraabilitycore.api.CooldownOwners.declareExternal(cooldownId, 100L,
+                new org.bitwisemadness.tensuraabilitycore.api.CooldownTracker() {
+                    @Override
+                    public long remainingTicks(net.minecraft.resources.ResourceLocation abilityId,
+                            net.minecraft.server.level.ServerPlayer player) {
+                        return 999L; // permanently cooling for this test
+                    }
+
+                    @Override
+                    public void start(net.minecraft.resources.ResourceLocation abilityId,
+                            net.minecraft.server.level.ServerPlayer player, long durationTicks) {
+                        // no-op: nothing activates in this test
+                    }
+                });
+        var result = TensuraAbilityCore.PIPELINE.run(
+                org.bitwisemadness.tensuraabilitycore.api.ActivationRequest.of(cooldownId,
+                        org.bitwisemadness.tensuraabilitycore.api.ActivationSource.DIRECT_SLOT), null);
+        if (result.outcome() != org.bitwisemadness.tensuraabilitycore.api.ActivationOutcome.REFUSED_COOLDOWN) {
+            throw new GameTestAssertException("expected REFUSED_COOLDOWN, got " + result.outcome());
+        }
+        org.bitwisemadness.tensuraabilitycore.api.CooldownOwners.remove(cooldownId);
+        TensuraAbilityCore.HANDLERS.remove(cooldownId);
+        AbilityRegistries.installRegistryForTests(previous);
         helper.succeed();
     }
 }
