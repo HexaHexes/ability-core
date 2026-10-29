@@ -3,6 +3,7 @@ package org.bitwisemadness.tensuraabilitycore;
 import com.mojang.logging.LogUtils;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import org.bitwisemadness.tensuraabilitycore.registry.AbilityRegistries;
 import org.slf4j.Logger;
 
 /**
@@ -15,6 +16,7 @@ public final class TensuraAbilityCore {
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public TensuraAbilityCore(IEventBus modBus) {
+        modBus.addListener(AbilityRegistries::onNewRegistry);
         LOGGER.info("Tensura Ability Core initialized");
     }
 }
