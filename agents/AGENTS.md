@@ -18,7 +18,12 @@ Before starting any new development in this repo:
 
 1. **Open issues for the work.** Every piece of work begins as an issue - or
    several, for complex tasks - detailing what needs to be done; the PR
-   references them. No tracking issue, no work.
+   references them. No tracking issue, no work. Use the issue forms in
+   `.github/ISSUE_TEMPLATE/`: **Bug** (one bug per issue, with reproduction,
+   severity and regression-test requirements), **Feature** (one verifiable
+   outcome per issue, with upstream evidence and an acceptance gate) and
+   **Investigation** (resolve an unknown first - closes only with verified
+   findings and the follow-up implementation issues already created).
 2. **Check rule freshness.** Compare this repo's `agents/AGENTS.md` against the
    template's and reconcile any drift before touching code - rules changed in
    the template must have been pulled here first.
@@ -164,6 +169,40 @@ file into this repo verbatim as its own PR - never re-type or patch it by hand.
   status checks, no force-pushes, no branch deletion) and
   `require-review-from-write-access` (one approving review; the listed org owners
   bypass). Direct pushes to the default branch are rejected by GitHub.
+- `codeql.yml` runs free static analysis as the **analyze** check (CodeQL
+  *advanced setup* - a committed workflow, not GitHub's paid Code Quality
+  product, which meters AI credits per finding and cannot have its in-PR autofix
+  disabled; advanced setup is $0 on public repos: no license, no AI credits,
+  Actions minutes free). Java, `build-mode: manual` with an explicit
+  `./gradlew assemble` (moddev autobuild is unreliable), the
+  `security-and-quality` query suite, pinned `github/codeql-action@v4`. Runs on
+  PRs, pushes to a default branch and a weekly schedule; findings surface in the
+  Security tab and as PR annotations. After the first green run it joins the
+  `protect-main` required checks (with `junit`/`gametest`/`version-bump`). The
+  build step carries the step-scoped `PACKAGE_READ_TOKEN` so a derived repo
+  resolving cross-repo Packages works on a cold cache.
+- `ci.yml` also runs a **static** job: SpotBugs (`spotbugsMain`, `effort=MAX`)
+  and Spotless (minimal profile - trailing whitespace, final newline,
+  import order on `src/*/java` only; no formatter, so no repo-wide rewrites).
+  Both are **report-only during the grace period**: SpotBugs runs with
+  `ignoreFailures`, Spotless with `continue-on-error` in CI and
+  `enforceCheck false` in Gradle - so neither the `static` job nor the junit
+  job's `./gradlew build` can fail on findings. The SpotBugs HTML report is
+  uploaded as the `spotbugs-report` artifact every run. Gating turns on in a
+  follow-up once the finding volume is known (0 on the template at adoption);
+  that same follow-up runs one `spotlessApply` per repo to clear the baseline
+  and flips the four switches. The tools are pinned in `build.gradle`
+  (`com.github.spotbugs` 6.5.x, `com.diffplug.spotless` 8.x).
+- `dependency-submission.yml` + `dependency-review.yml` form the **dependency
+  review** gate: submission pushes a Gradle dependency snapshot on PRs and
+  default-branch pushes (Gradle cannot be parsed statically and no lockfiles
+  are committed, so review without submission would compare nothing and pass
+  vacuously), and the review fails a PR that *introduces* a vulnerable or
+  license-incompatible dependency, waiting up to 10 min for the head snapshot
+  (`retry-on-snapshot-warnings`). It is a diff against the merge base, so
+  pre-existing debt never blocks. Defaults only - no license allow/deny lists
+  yet; that policy is a separate decision. Free on public repos. Not a
+  required check initially: observe first, gate later if the signal is good.
 - `version-bump.yml` opens an isolated version-bump PR (only the version file changes).
 - `release.yml` publishes a GitHub release for `v<mod_version>` on a push to the default
   branch when that release does not exist yet, attaching the jar the build produced. The
