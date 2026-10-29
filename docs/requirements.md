@@ -131,8 +131,9 @@ Tracked independently of REQ-HOT-22 (different problem, different issues).
 | REQ-BW-03 | Weapon enhancements | F | P2 | awaiting-spike | SPIKE-bw-1 | Phase 3 |
 | REQ-BW-04 | Passive effects | F | P2 | awaiting-spike | SPIKE-bw-1 | Phase 3 |
 | REQ-BW-05 | Resource conversion and costs | F | P1 | designed | SPIKE-bw-2 (closed, discharged in bw#3 findings - aura currency) -> bw#12 | Phase 3 |
+| REQ-BW-02 (first content) | Unarmed technique set - first additive arts via DEC-06 (a) | F | P1 | designed | DEC-06 resolved -> bw#14; attribution bw#13 | Phase 3 |
 | REQ-BW-06 | Ability progression and restrictions | F | P2 | awaiting-spike | SPIKE-bw-1 | Phase 3 |
-| REQ-BW-07 | Datapack-driven definitions for metadata, costs, restrictions and mappings; code adapters only for execution behaviour | F | P1 | awaiting-design | SPIKE-bw-1 (closed) -> bw#11; blocked on DEC-06 (ManasCore GPLv3 linkage) before readiness | Phase 3 |
+| REQ-BW-07 | Datapack-driven definitions for metadata, costs, restrictions and mappings; code adapters only for execution behaviour | F | P1 | designed | SPIKE-bw-1 (closed) -> bw#11; DEC-06 resolved (option a, see bw#11 ruling) | Phase 3 |
 | REQ-BW-08 | Native ability activation path | F | P1 | awaiting-design | REQ-CORE-02 | Phase 3 |
 | REQ-BW-09 | Hotbar integration through compatible contracts | F | P1 | awaiting-design | REQ-HOT-05 | Phase 3 |
 | REQ-BW-10 | Combo integration through compatible bridges | F | P2 | awaiting-design | REQ-BR-01 | Phase 4 |
@@ -213,7 +214,7 @@ Tracked independently of REQ-HOT-22 (different problem, different issues).
 | DEC-03 | Whether `tensura-battlewills-better-combat` repository exists at all | **RESOLVED** (SPIKE-bw-3): do NOT create; style/attribute reads live in `tensura-battlewills` (bw#10), combo activation in the bridge (bridge#7..#14) |
 | DEC-04 | Better Spellcasting exact distributed 1.21.1 version | **RESOLVED** (SPIKE-br-1): `BetterSpellcasting-1.21.1-1.2.0.jar` (CurseForge file 7571236); must be added to the pack before bridge implementation testing - currently absent |
 | DEC-05 | Brief says "conceptual magic"; Tensura 2.0.1.3 ships ASPECTUAL/SPIRITUAL/SUMMONING/MISC - no conceptual category | **RESOLVED** (maintainer): brief's conceptual == game's SPIRITUAL (Option A); applied to mapping (iss#19) and documentation wording |
-| DEC-06 | Additive battlewills: registering new arts into ManasCore links our LGPL-2.1 repo to GPLv3 ManasCore API (Tensura itself ARR) | OPEN - alternatives (a) accept GPLv3 linkage / (b) core-registry abilities with EXTERNAL aura charge / (c) integration-only; recorded in bw#11, must resolve before additive-art implementation is marked ready |
+| DEC-06 | Additive battlewills: registering new arts into ManasCore links our LGPL-2.1 repo to GPLv3 ManasCore API (Tensura itself ARR) | **RESOLVED** (maintainer): option (a) - native skill registration accepted with attribution/linkage obligations (bw#13) and structural-use-only posture toward Tensura; ruling + consequences in bw#11 |
 
 
 ## Spike status (as of 2026-10-29, end of investigation wave)
@@ -285,7 +286,8 @@ Tracked independently of REQ-HOT-22 (different problem, different issues).
 | REQ-BR-10 | bridge#10 |
 | REQ-BW-01..04 (catalog) | bw#10 |
 | REQ-BW-05 | bw#12 |
-| REQ-BW-07 | bw#11 (blocked on DEC-06) |
+| REQ-BW-07 | bw#11 (DEC-06 resolved) |
+| REQ-BW-02 unarmed set | bw#14 (attribution: bw#13) |
 | REQ-XREF-07 | resolved in bw#4 (no issue needed) |
 | REQ-DOC-01 | milestones (implemented) |
 
