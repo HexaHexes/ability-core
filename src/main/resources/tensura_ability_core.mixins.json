@@ -1,7 +1,7 @@
 {
   "required": true,
   "minVersion": "0.8",
-  "package": "org.bitwisemadness.examplemod.mixin",
+  "package": "org.bitwisemadness.tensuraabilitycore.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [],
   "client": [],
