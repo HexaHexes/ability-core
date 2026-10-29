@@ -4,7 +4,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.resources.ResourceLocation;
-import org.jetbrains.annotations.Nullable;
 
 /**
  * Per-ability activation handlers (REQ-CORE-02's ADAPTER presence check).
@@ -45,12 +44,13 @@ public final class ActivationHandlerRegistry {
         return handlers.size();
     }
 
-    /** Visible for tests: replaces a handler without duplicate semantics. */
-    void replaceForTest(ResourceLocation abilityId, @Nullable ActivationHandler handler) {
-        if (handler == null) {
-            handlers.remove(abilityId);
-        } else {
-            handlers.put(abilityId, handler);
-        }
+    /**
+     * Removes the handler for an id (test isolation and future mod-reload
+     * paths; providers register once per load, so normal flows never call this).
+     *
+     * @return true if a handler was present
+     */
+    public boolean remove(ResourceLocation abilityId) {
+        return handlers.remove(abilityId) != null;
     }
 }

@@ -28,6 +28,15 @@ class ApiLeakGateTest {
             "io/github/manasmods/",
             "net/bettercombat/",
             "net/kayn/better_spellcasting/",
+            // issue #14 AC: discovery must never branch on ModList presence -
+            // provider presence IS registration presence
+            "net/neoforged/fml/ModList",
+    };
+
+    private static final String[] SCANNED_PACKAGES = {
+            "org/bitwisemadness/tensuraabilitycore/api/",
+            "org/bitwisemadness/tensuraabilitycore/registry/",
+            "org/bitwisemadness/tensuraabilitycore/discovery/",
     };
 
     @Test
@@ -38,8 +47,13 @@ class ApiLeakGateTest {
         try (Stream<Path> walk = Files.walk(mainClasses)) {
             for (Path classFile : walk.filter(p -> p.toString().endsWith(".class")).toList()) {
                 String relative = mainClasses.relativize(classFile).toString().replace('\\', '/');
-                boolean inContractPackages = relative.startsWith("org/bitwisemadness/tensuraabilitycore/api/")
-                        || relative.startsWith("org/bitwisemadness/tensuraabilitycore/registry/");
+                boolean inContractPackages = false;
+                for (String prefix : SCANNED_PACKAGES) {
+                    if (relative.startsWith(prefix)) {
+                        inContractPackages = true;
+                        break;
+                    }
+                }
                 if (!inContractPackages) {
                     continue;
                 }

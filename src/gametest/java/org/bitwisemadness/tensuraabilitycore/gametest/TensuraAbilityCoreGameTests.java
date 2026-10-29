@@ -34,16 +34,16 @@ public final class TensuraAbilityCoreGameTests {
      */
     @GameTest(template = "empty")
     public static void ability_registry_is_registered(GameTestHelper helper) throws GameTestAssertException {
-        if (AbilityRegistries.ABILITY_REGISTRY == null) {
+        if (AbilityRegistries.registry() == null) {
             throw new GameTestAssertException("ability registry was not created during mod loading");
         }
-        if (!AbilityRegistries.ABILITY_REGISTRY_KEY.equals(AbilityRegistries.ABILITY_REGISTRY.key())) {
+        if (!AbilityRegistries.ABILITY_REGISTRY_KEY.equals(AbilityRegistries.registry().key())) {
             throw new GameTestAssertException("ability registry has unexpected key: "
-                    + AbilityRegistries.ABILITY_REGISTRY.key());
+                    + AbilityRegistries.registry().key());
         }
         // Registry mechanics sanity: ids resolve as resource locations and the
         // registry is enumerable (content may be empty at this stage).
-        AbilityRegistries.ABILITY_REGISTRY.keySet().forEach(location -> {
+        AbilityRegistries.registry().keySet().forEach(location -> {
             if (location == null) {
                 throw new GameTestAssertException("registry entry with null location");
             }
