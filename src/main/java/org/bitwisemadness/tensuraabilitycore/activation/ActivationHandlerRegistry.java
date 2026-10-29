@@ -4,53 +4,86 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.resources.ResourceLocation;
+import org.bitwisemadness.tensuraabilitycore.api.ChargingModel;
 
 /**
- * Per-ability activation handlers (REQ-CORE-02's ADAPTER presence check).
+ * Per-ability activation handlers plus their charging declarations
+ * (REQ-CORE-02's ADAPTER presence check, REQ-CORE-04's chargingModel
+ * exclusivity - ADR-002).
  *
- * <p>Providers register during their mod setup (FMLCommonSetup enqueueWork);
- * the registry is instance-based so tests (and future sub-registries) stay
- * isolated - the pipeline takes its registry explicitly. Duplicate
- * registration for the same id fails loudly (two adapters claiming one
- * ability is exactly the conflict class the brief forbids).</p>
+ * <p>One declaration per ability id: handler + charging model. The model is
+ * informational-plus-enforced: {@link ChargingModel#EXTERNAL} abilities must
+ * declare a cost on their definition (enforced by the RESOURCE phase before
+ * activation, which routes the single core charge site -
+ * {@code ResourceConsumer#charge} - and nothing else can run), NATIVE
+ * abilities get no core charge at all. Duplicate handler registration for one
+ * id fails loudly (two adapters claiming one ability is the conflict class
+ * the brief forbids).</p>
  */
 public final class ActivationHandlerRegistry {
 
-    private final Map<ResourceLocation, ActivationHandler> handlers = new ConcurrentHashMap<>();
+    /** One ability's activation + charging declaration. */
+    public record Declaration(ActivationHandler handler, ChargingModel model) {
 
-    /**
-     * Registers the provider adapter for one ability id.
-     *
-     * @throws IllegalStateException if an adapter is already registered (loud
-     *         conflict, never silent overwrite)
-     */
-    public void register(ResourceLocation abilityId, ActivationHandler handler) {
-        ActivationHandler previous = handlers.putIfAbsent(abilityId, handler);
-        if (previous != null) {
-            throw new IllegalStateException(
-                    "Duplicate activation handler for ability " + abilityId + " - two adapters claim one ability");
+        public Declaration {
+            if (handler == null || model == null) {
+                throw new IllegalArgumentException("handler and model must not be null");
+            }
         }
     }
 
-    public Optional<ActivationHandler> get(ResourceLocation abilityId) {
-        return Optional.ofNullable(handlers.get(abilityId));
-    }
+    private final Map<ResourceLocation, Declaration> declarations = new ConcurrentHashMap<>();
 
-    public boolean has(ResourceLocation abilityId) {
-        return handlers.containsKey(abilityId);
-    }
-
-    public int size() {
-        return handlers.size();
+    /** Registers a natively-charged ability (the default: providers charge themselves). */
+    public void register(ResourceLocation abilityId, ActivationHandler handler) {
+        register(abilityId, handler, ChargingModel.NATIVE);
     }
 
     /**
-     * Removes the handler for an id (test isolation and future mod-reload
+     * Registers an ability with its explicit charging model.
+     *
+     * @throws IllegalStateException on duplicate registration (loud conflict,
+     *         never silent overwrite)
+     */
+    public void register(ResourceLocation abilityId, ActivationHandler handler, ChargingModel model) {
+        Declaration declaration = new Declaration(handler, model);
+        Declaration previous = declarations.putIfAbsent(abilityId, declaration);
+        if (previous != null) {
+            throw new IllegalStateException(
+                    "Duplicate activation declaration for ability " + abilityId + " - two adapters claim one ability");
+        }
+    }
+
+    public Optional<Declaration> declaration(ResourceLocation abilityId) {
+        return Optional.ofNullable(declarations.get(abilityId));
+    }
+
+    public Optional<ActivationHandler> get(ResourceLocation abilityId) {
+        return declaration(abilityId).map(Declaration::handler);
+    }
+
+    public boolean has(ResourceLocation abilityId) {
+        return declarations.containsKey(abilityId);
+    }
+
+    public ChargingModel modelOf(ResourceLocation abilityId) {
+        Declaration declaration = declarations.get(abilityId);
+        // fail-closed default for unregistered ids: treat as NATIVE (RESOLVE/ADAPTER
+        // gates refuse before any model matters)
+        return declaration == null ? ChargingModel.NATIVE : declaration.model();
+    }
+
+    public int size() {
+        return declarations.size();
+    }
+
+    /**
+     * Removes the declaration for an id (test isolation and future mod-reload
      * paths; providers register once per load, so normal flows never call this).
      *
-     * @return true if a handler was present
+     * @return true if a declaration was present
      */
     public boolean remove(ResourceLocation abilityId) {
-        return handlers.remove(abilityId) != null;
+        return declarations.remove(abilityId) != null;
     }
 }

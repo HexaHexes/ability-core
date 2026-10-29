@@ -5,6 +5,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import org.bitwisemadness.tensuraabilitycore.activation.ActivationHandlerRegistry;
 import org.bitwisemadness.tensuraabilitycore.activation.ActivationPipeline;
+import org.bitwisemadness.tensuraabilitycore.activation.ResourceChargeStep;
 import org.bitwisemadness.tensuraabilitycore.registry.AbilityRegistries;
 import org.slf4j.Logger;
 
@@ -36,6 +37,8 @@ public final class TensuraAbilityCore {
 
     public TensuraAbilityCore(IEventBus modBus) {
         modBus.addListener(AbilityRegistries::onNewRegistry);
+        // REQ-CORE-04: affordability pre-check runs for every pipeline execution
+        PIPELINE.registerStep(ActivationPipeline.PipelinePhase.RESOURCE, ResourceChargeStep.INSTANCE);
         LOGGER.info("Tensura Ability Core initialized");
     }
 }
