@@ -1,16 +1,15 @@
 package org.bitwisemadness.tensuraabilitycore.gametest;
 
+import java.util.Map;
+import java.util.Set;
+import net.minecraft.core.MappedRegistry;
+import net.minecraft.core.Registry;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
-import java.util.Map;
-import java.util.Set;
-import net.minecraft.core.MappedRegistry;
-import net.minecraft.core.Registry;
 import org.bitwisemadness.tensuraabilitycore.TensuraAbilityCore;
-import org.bitwisemadness.tensuraabilitycore.registry.AbilityRegistries;
 import org.bitwisemadness.tensuraabilitycore.registry.AbilityRegistries;
 
 /**
@@ -39,16 +38,17 @@ public final class TensuraAbilityCoreGameTests {
      */
     @GameTest(template = "empty")
     public static void ability_registry_is_registered(GameTestHelper helper) throws GameTestAssertException {
-        if (AbilityRegistries.registry() == null) {
+        var registry = AbilityRegistries.registry();
+        if (registry == null) {
             throw new GameTestAssertException("ability registry was not created during mod loading");
         }
-        if (!AbilityRegistries.ABILITY_REGISTRY_KEY.equals(AbilityRegistries.registry().key())) {
+        if (!AbilityRegistries.ABILITY_REGISTRY_KEY.equals(registry.key())) {
             throw new GameTestAssertException("ability registry has unexpected key: "
-                    + AbilityRegistries.registry().key());
+                    + registry.key());
         }
         // Registry mechanics sanity: ids resolve as resource locations and the
         // registry is enumerable (content may be empty at this stage).
-        AbilityRegistries.registry().keySet().forEach(location -> {
+        registry.keySet().forEach(location -> {
             if (location == null) {
                 throw new GameTestAssertException("registry entry with null location");
             }
