@@ -39,7 +39,7 @@ class ExternalCooldownTest {
     private static final ResourceLocation COOLED = ResourceLocation.fromNamespaceAndPath("tensura", "cooled");
     private static final ResourceLocation NATIVE = ResourceLocation.fromNamespaceAndPath("tensura", "native_cd");
     private static final ResourceLocation UNKNOWN = ResourceLocation.fromNamespaceAndPath("tensura", "unknown");
-    
+
     private ActivationHandlerRegistry handlers;
     private ActivationPipeline pipeline;
     private Registry<AbilityDefinition> previousRegistry;
