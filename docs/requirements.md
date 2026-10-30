@@ -25,7 +25,7 @@ The owning repository files the issues for each requirement; "Depends" lists
 requirement IDs or spikes that gate it. Acceptance criteria and test plans are
 written into the implementation issues; this table records that they exist.
 
-## A. Shared ability contracts - `tensura-ability-core`
+## A. Shared ability contracts - `ability-core`
 
 | ID | Requirement | Type | Pri | Status | Depends | Milestone |
 |---|---|---|---|---|---|---|
@@ -187,9 +187,9 @@ Tracked independently of REQ-HOT-22 (different problem, different issues).
 
 | Spike | Repository | Question | Unblocks |
 |---|---|---|---|
-| SPIKE-core-1 | tensura-ability-core | Shared contract surface: what genuinely must be shared vs stay per-repo; provider/consumer discovery model; sync strategy | REQ-CORE-*, REQ-XREF-02/03/04, REQ-TEST-04 |
-| SPIKE-cfg-1 | tensura-ability-core | NeoForge 1.21.1 configuration mechanisms (mod config types, gamerules, world data) and org conventions; precedence implementation | REQ-CFG-*, REQ-ISS-08, REQ-HOT-07, REQ-SB-03 |
-| SPIKE-cfg-2 | tensura-ability-core | Server-authoritative sync patterns on NeoForge 1.21.1 (payloads, login/game play sync) | REQ-CORE-08, REQ-HOT-13 |
+| SPIKE-core-1 | ability-core | Shared contract surface: what genuinely must be shared vs stay per-repo; provider/consumer discovery model; sync strategy | REQ-CORE-*, REQ-XREF-02/03/04, REQ-TEST-04 |
+| SPIKE-cfg-1 | ability-core | NeoForge 1.21.1 configuration mechanisms (mod config types, gamerules, world data) and org conventions; precedence implementation | REQ-CFG-*, REQ-ISS-08, REQ-HOT-07, REQ-SB-03 |
+| SPIKE-cfg-2 | ability-core | Server-authoritative sync patterns on NeoForge 1.21.1 (payloads, login/game play sync) | REQ-CORE-08, REQ-HOT-13 |
 | SPIKE-iss-1 | tensura-iss-integration | ISS 3.16.3 API surface: schools, casting pipeline, mana deduction points, equipment/school hooks, mana bar | REQ-ISS-03/08/09/14, REQ-BR-06/07 |
 | SPIKE-iss-2 | tensura-iss-integration | Tensura: Reincarnated public API: skills/magic registry, activation, element model, magicule capacity, equipping hooks (closed source) | REQ-ISS-06/07/11/12/16 |
 | SPIKE-iss-3 | tensura-iss-integration | Official `tensura_iron_spells` compat + `tensura-iss-growth` overlap audit; inventory safety surface | REQ-ISS-01/02/15 |

@@ -1,6 +1,6 @@
 # Architecture decision records
 
-Short, single-decision records for `tensura-ability-core` and the ecosystem it
+Short, single-decision records for `ability-core` and the ecosystem it
 anchors. Format: Context / Decision / Consequences / Links. Status values:
 `proposed`, `accepted`, `superseded`. New decisions get an ADR in the same PR
 that records them in the originating issue (traceability rule, issue #28).

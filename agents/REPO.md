@@ -1,4 +1,4 @@
-# Repo rules - tensura-ability-core
+# Repo rules - ability-core
 
 Repo-specific rules and notes. The org-wide `AGENTS.md` beside this file is
 maintained in [`neoforge-mod-template`](https://github.com/HexaHexes/neoforge-mod-template)
@@ -8,8 +8,8 @@ restating them.
 
 Architecture decision records: `docs/adr/` (index in `docs/adr/README.md`; new decisions get an ADR in the same PR that records them).
 
-**Repo:** `HexaHexes/tensura-ability-core` - **Mod ID:** `tensura_ability_core` - **Branch:** `main`
-**Platform:** Minecraft 1.21.1 / NeoForge 21.1.259 / JDK 21 - **Jar:** `build/libs/tensura_ability_core-<version>.jar`
+**Repo:** `HexaHexes/ability-core` - **Mod ID:** `ability_core` - **Branch:** `main`
+**Platform:** Minecraft 1.21.1 / NeoForge 21.1.259 / JDK 21 - **Jar:** `build/libs/ability_core-<version>.jar`
 
 Shared, provider-independent ability infrastructure for the Tensura RPG pack:
 ability registration and metadata, activation request/result contracts, resource,
@@ -23,7 +23,7 @@ the consuming adapters.
 - Optional: none, and none should appear - keep this repo free of upstream-mod
   dependencies so every consumer can share it. Adapters live in the consumer repos.
 
-**Test:** `./gradlew runGameTestServer` - `TensuraAbilityCoreGameTests` (1 test). `expectedTests = 1`
+**Test:** `./gradlew runGameTestServer` - `AbilityCoreGameTests` (1 test). `expectedTests = 1`
 in `build.gradle` must match the `@GameTest` count.
 
 **Gotchas**

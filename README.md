@@ -1,6 +1,6 @@
-# Tensura Ability Core
+# Ability Core
 
-Tensura Ability Core is the shared foundation of the Tensura RPG pack's ability
+Ability Core is the shared foundation of the Tensura RPG pack's ability
 mods. It defines how an ability is described, discovered, activated and paid
 for, independent of where the ability comes from.
 
@@ -23,7 +23,7 @@ full plan, research tables and open design decisions.)*
 |---|---|---|
 | Required | Minecraft / NeoForge | 1.21.1 / 21.1.259 |
 
-Tensura Ability Core is a library. The pack's ability mods (the hotbar, the
+Ability Core is a library. The pack's ability mods (the hotbar, the
 integrations, the battlewills) depend on it, not the other way round.
 
 ## Credits
