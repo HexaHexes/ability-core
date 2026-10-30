@@ -121,8 +121,14 @@ file into this repo verbatim as its own PR - never re-type or patch it by hand.
 - Push only after checks are green **and** the user has given the go.
 - Never sweep the user's uncommitted work into a commit ΓÇö commit only what is intended.
 - Commit subjects: concise, imperative.
-- **Version bump on finish:** always bump `mod_version` in `gradle.properties`
-  when a new feature or bugfix is finished.
+- **Version bump on finish:** every feature change or bugfix that lands in a
+  mod bumps `mod_version` in `gradle.properties` - the `-alpha.N` channel,
+  incremented, riding the work PR (alphas are the one channel allowed to
+  bundle; clean and beta bumps stay isolated as the `version-bump` check
+  enforces). **Template-parity pulls never bump:** a PR whose content is only
+  pulled from `neoforge-mod-template` (rulebook, workflows, build config,
+  pins, shared filters, doc sections) changes no mod behavior and must leave
+  `mod_version` untouched.
 - **One feature or bugfix per branch:** develop each on its own feature branch and
   merge it into the default branch through a pull request with a **squash merge**.
   The PR body must detail the work done, following `.github/pull_request_template.md`.
