@@ -27,7 +27,7 @@ Consumers extend core through exactly four mechanisms:
    `ActivationHandlerRegistry.register(...)`.
 3. **Eligibility rules** — policy providers register `EligibilityRule`
    instances (source-scoped) via `EligibilityChain.register(...)` on
-   `TensuraAbilityCore.ELIGIBILITY` or a composed child chain.
+   `AbilityCore.ELIGIBILITY` or a composed child chain.
 4. **Sync events** — consumers listen for `AbilitySyncNeededEvent` on the
    NeoForge game bus and send their state payloads.
 
