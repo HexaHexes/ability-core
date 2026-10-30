@@ -23,7 +23,9 @@
 
 ## Version bump
 
-<!-- Only complete this section if gradle.properties is changing. -->
+<!-- Ruling: feature changes and bug fixes bump the -alpha.N channel in this
+     PR; template-parity pulls from neoforge-mod-template never bump. Complete
+     this section if and only if gradle.properties is changing. -->
 
 - [ ] This PR bumps `mod_version` **and nothing else**
 - [ ] New version is a clean bump (e.g. `1.0.0`) - releases as stable
