@@ -6,6 +6,8 @@ and pulled in verbatim - **never hand-edit it.** Everything in this file is this
 repo's own and is edited freely; keep it aligned with the org rules rather than
 restating them.
 
+API surface policy: `docs/api-surface.md` (stable packages, extension points, breaking-change policy, dependency coordinates).
+
 Architecture decision records: `docs/adr/` (index in `docs/adr/README.md`; new decisions get an ADR in the same PR that records them).
 
 **Repo:** `HexaHexes/ability-core` - **Mod ID:** `ability_core` - **Branch:** `main`
