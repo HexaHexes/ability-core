@@ -183,15 +183,15 @@ publishing {
     }
 }
 
-// --- Static analysis (report-only grace period) ----------------------------
-// Both tools run as the `static` CI job. During the grace period neither can
-// block a build: SpotBugs findings are recorded but never fail the task, and
-// Spotless is detached from `check` (enforceCheck false) so the junit job's
-// `./gradlew build` stays style-agnostic. Gating flips on in a follow-up once
-// the finding volume is known; that follow-up also runs one spotlessApply per
-// repo to clear the baseline.
+// --- Static analysis (enforced) ----------------------------------------------
+// Both tools gate in the `static` CI job: SpotBugs findings fail
+// `spotbugsMain` and Spotless violations fail `spotlessCheck`. SpotBugs sits
+// on the `check` graph, so `./gradlew build` fails on findings too; Spotless
+// stays detached (`enforceCheck false`), keeping the junit job's build
+// style-agnostic by design - the static check is the style gate, junit is
+// not. The SpotBugs HTML report still uploads as the `spotbugs-report`
+// artifact every run (the CI step uses if: always()).
 spotbugs {
-    ignoreFailures = true
     effort = com.github.spotbugs.snom.Effort.MAX
     // Shared EI_EXPOSE_REP/EI_EXPOSE_REP2 exclusions; scope rule in the file.
     excludeFilter = file('config/spotbugs-exclude.xml')}

@@ -226,23 +226,23 @@ jobs:
           java-version: '21'
           cache: gradle
 
-      # ignoreFailures in build.gradle: SpotBugs findings never fail this
-      # step during the grace period - the job exists to surface volume.
+      # Enforced since #52: findings fail this step (ignoreFailures dropped
+      # from build.gradle). The report still uploads below via if: always().
       - name: SpotBugs
         env:
           PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN || github.token }}
         run: ./gradlew spotbugsMain --no-daemon --stacktrace
 
-      # Report-only during the grace period: violations print in the log
-      # and the step annotates, but the job - and thus the check - stays
-      # green. Remove continue-on-error to gate.
+      # Enforced since #52: violations fail this step and so the static
+      # check. Spotless stays out of Gradle `check` (enforceCheck false),
+      # so junit's `./gradlew build` remains style-agnostic - this job is
+      # the style gate.
       - name: Spotless check
         env:
           PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN || github.token }}
         run: ./gradlew spotlessCheck --no-daemon --stacktrace
-        continue-on-error: true
 
       - name: Upload the SpotBugs report
         if: always()
