@@ -7,6 +7,7 @@ import org.bitwisemadness.tensuraabilitycore.activation.ActivationHandlerRegistr
 import org.bitwisemadness.tensuraabilitycore.activation.ActivationPipeline;
 import org.bitwisemadness.tensuraabilitycore.activation.ExternalCooldownStep;
 import org.bitwisemadness.tensuraabilitycore.activation.ResourceChargeStep;
+import org.bitwisemadness.tensuraabilitycore.activation.TargetValidationStep;
 import org.bitwisemadness.tensuraabilitycore.registry.AbilityRegistries;
 import org.slf4j.Logger;
 
@@ -40,6 +41,9 @@ public final class TensuraAbilityCore {
         modBus.addListener(AbilityRegistries::onNewRegistry);
         // REQ-CORE-04: affordability pre-check runs for every pipeline execution
         PIPELINE.registerStep(ActivationPipeline.PipelinePhase.RESOURCE, ResourceChargeStep.INSTANCE);
+        // REQ-CORE-06: target hints resolve first - provider eligibility rules
+        // (registered later) run against resolved targets, not raw hints
+        PIPELINE.registerStep(ActivationPipeline.PipelinePhase.ELIGIBILITY, TargetValidationStep.INSTANCE);
         // REQ-CORE-05: EXTERNAL-cooldown gate runs after charge pre-validation,
         // before activation; EXTERNAL starts happen post-activation (built-in)
         PIPELINE.registerStep(ActivationPipeline.PipelinePhase.COOLDOWN, ExternalCooldownStep.INSTANCE);
