@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Shared SpotBugs exclusions (template-first: ships verbatim to every
+  template-lineage repo; decision + rationale recorded on
+  neoforge-mod-template#52).
+
+  EI_EXPOSE_REP / EI_EXPOSE_REP2: returning or storing a reference to a mutable
+  object. In NeoForge mod code that is the idiomatic shape by design - fields
+  hold Level, ItemStack, and capability objects because the game model IS
+  shared mutable state; upstream SpotBugs has no Minecraft awareness and flags
+  the correct pattern as a vulnerability (~45 findings org-wide at flip time,
+  all noise).
+
+  Scope rule: these TWO patterns only. Any future addition needs an issue-first
+  decision recorded on #52 - this file must never become a dumping ground.
+  Everything else (MS_EXPOSE_REP, PA_PUBLIC_PRIMITIVE_ATTRIBUTE, MS_PKGPROTECT,
+  and every correctness/security detector) stays enforced everywhere.
+-->
+<FindBugsFilter>
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+</FindBugsFilter>

@@ -1,16 +1,15 @@
 package org.bitwisemadness.tensuraabilitycore.gametest;
 
+import java.util.Map;
+import java.util.Set;
+import net.minecraft.core.MappedRegistry;
+import net.minecraft.core.Registry;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
-import java.util.Map;
-import java.util.Set;
-import net.minecraft.core.MappedRegistry;
-import net.minecraft.core.Registry;
 import org.bitwisemadness.tensuraabilitycore.TensuraAbilityCore;
-import org.bitwisemadness.tensuraabilitycore.registry.AbilityRegistries;
 import org.bitwisemadness.tensuraabilitycore.registry.AbilityRegistries;
 
 /**
