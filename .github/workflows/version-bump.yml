@@ -35,6 +35,7 @@ on:
         options:
           - stable
           - beta
+          - alpha
 
 permissions:
   contents: write
