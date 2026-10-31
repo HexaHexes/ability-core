@@ -120,7 +120,13 @@ file into this repo verbatim as its own PR - never re-type or patch it by hand.
 - Remote is SSH: `git@github.com:HexaHexes/<name>.git`.
 - Push only after checks are green **and** the user has given the go.
 - Never sweep the user's uncommitted work into a commit ΓÇö commit only what is intended.
-- Commit subjects: concise, imperative.
+- **Commit subjects are changelog lines.** Releases carry an auto-generated
+  changelog (GitHub's generator, one PR per line) - write each PR title as a
+  player-facing sentence: imperative, present tense, what changed and for
+  whom. No closing keywords, issue numbers, or internal vocabulary in
+  titles; those live in the PR body. Internal and template-parity work
+  carries the `template-parity` label so it is excluded from changelogs
+  (see `.github/release.yml`); concise and imperative still apply.
 - **Version bump on finish:** every feature change or bugfix that lands in a
   mod bumps `mod_version` in `gradle.properties` - the `-alpha.N` channel,
   incremented, riding the work PR (alphas are the one channel allowed to

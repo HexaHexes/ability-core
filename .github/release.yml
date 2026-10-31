@@ -1,0 +1,27 @@
+# Auto-generated changelog configuration for GitHub release notes
+# (used by `gh release create --generate-notes` in release.yml).
+#
+# Categories: PRs labelled by their type; everything unlabelled lands in
+# "Other changes". Labels in exclude.labels keep internal and template-parity
+# work out of player-facing changelogs - see the changelog ruling in
+# agents/AGENTS.md.
+changelog:
+  categories:
+    - title: Breaking changes
+      labels:
+        - breaking
+    - title: Features
+      labels:
+        - feature
+        - enhancement
+    - title: Bug fixes
+      labels:
+        - bug
+        - fix
+    - title: Other changes
+      labels:
+        - "*"
+  exclude:
+    labels:
+      - skip-changelog
+      - template-parity
