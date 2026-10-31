@@ -120,13 +120,7 @@ file into this repo verbatim as its own PR - never re-type or patch it by hand.
 - Remote is SSH: `git@github.com:HexaHexes/<name>.git`.
 - Push only after checks are green **and** the user has given the go.
 - Never sweep the user's uncommitted work into a commit — commit only what is intended.
-- **Commit subjects are changelog lines.** Releases carry an auto-generated
-  changelog (GitHub's generator, one PR per line) - write each PR title as a
-  player-facing sentence: imperative, present tense, what changed and for
-  whom. No closing keywords, issue numbers, or internal vocabulary in
-  titles; those live in the PR body. Internal and template-parity work
-  carries the `template-parity` label so it is excluded from changelogs
-  (see `.github/release.yml`); concise and imperative still apply.
+- Commit subjects: concise, imperative.
 - **Version bump on finish:** every feature change or bugfix that lands in a
   mod bumps `mod_version` in `gradle.properties` - the `-alpha.N` channel,
   incremented, riding the work PR (alphas are the one channel allowed to
@@ -143,6 +137,14 @@ file into this repo verbatim as its own PR - never re-type or patch it by hand.
 
 - **No icons** unless the user explicitly asks. Icons are being removed across all repos.
 - **No emojis, ever.** Prohibited in all code, docs, configs, and commit messages.
+- **Short comments only - three lines at most.** A comment earns its place by
+  stating a fact the code cannot: a non-obvious reason, where a constant comes
+  from, an upstream quirk. If a block needs more than that to explain how, why
+  or what it does, the block is the problem - rework it into smaller named
+  pieces until the code says it. No narration of the line below, no
+  commented-out code, no changelog-in-a-comment. Javadoc on public API is
+  documentation, not commentary, and stays where it explains a contract.
+  Enforced for Java by Checkstyle (`config/checkstyle/checkstyle.xml`).
 - READMEs are **player-facing only**: pitch, mechanics in plain terms, in-game usage,
   required/optional dependencies, credits, license. No build internals, no class names.
 - **AI disclosure in every README.** Every `README.md` ends with the org's
@@ -247,10 +249,13 @@ The org's approved rewrite of record is `tensura-jade` PR #27
   `protect-main` required checks (with `junit`/`gametest`/`version-bump`). The
   build step carries the step-scoped `PACKAGE_READ_TOKEN` so a derived repo
   resolving cross-repo Packages works on a cold cache.
-- `ci.yml` also runs a **static** job: SpotBugs (`spotbugsMain`, `effort=MAX`)
-  and Spotless (minimal profile - trailing whitespace, final newline,
-  import order on `src/*/java` only; no formatter, so no repo-wide rewrites).
-  Both are **enforced** (since #52): SpotBugs findings fail their step and,
+- `ci.yml` also runs a **static** job: SpotBugs (`spotbugsMain`, `effort=MAX`),
+  Checkstyle (structural rules only: comment blocks over three lines, star /
+  redundant / unused imports; cyclomatic complexity 10 is reported as info,
+  not gated) and Spotless (minimal
+  profile - trailing whitespace, final newline, import order on `src/*/java`
+  only; no formatter, so no repo-wide rewrites).
+  All three are **enforced** (since #52): SpotBugs findings fail their step and,
   SpotBugs sitting on Gradle's `check` graph, also junit's `./gradlew build`;
   Spotless violations fail their step and so the `static` check, while
   `enforceCheck false` keeps Spotless out of `check` - junit stays
@@ -266,7 +271,28 @@ The org's approved rewrite of record is `tensura-jade` PR #27
   reference exposure is idiomatic NeoForge (fields hold `Level`/`ItemStack`/
   capability objects by design), everything else stays enforced. Adding a
   pattern to that file needs an issue-first decision (#52) - never grow it
-  silently.
+  silently. Checkstyle's ruleset is `config/checkstyle/checkstyle.xml`, shared
+  verbatim like the SpotBugs filter. It rides Gradle's `check` graph, so a
+  violation fails the `static` check **and** junit's `./gradlew build` - the
+  rules are structural (a formatting nit never fails it), which keeps the
+  junit-is-not-the-style-gate split honest. A repo pulling this change clears
+  its baseline first, exactly like the SpotBugs flip. A repo that carries
+  grandfathered findings lists them in its own
+  `config/checkstyle/suppressions.xml` (the shared config imports it,
+  optionally), one line per finding, and burns them down - the file only ever
+  shrinks, and never covers code written after the pull.
+- **SonarQube: free for us, deliberately not wired.** Public OSI-licensed repos
+  (all of ours - LGPL v2.1) qualify for the free OSS plan: unlimited public
+  projects, full analysis rules, PR decoration, quality gates. Private projects
+  are free up to 50k LOC. Not adopted because the cost is not license fees but
+  wiring: a per-repo `SONAR_TOKEN`, a GitHub App install on the org, and
+  CI-based analysis (Java automatic analysis has known gaps and reports no
+  coverage). A template that must build green from a clean checkout cannot ship
+  a required check that fails without a secret, and CodeQL
+  (`security-and-quality`) already covers the deterministic half. Revisit per
+  repo when code volume makes the duplication and cognitive-complexity report
+  worth the token; the decision and its reason are recorded here so it is not
+  re-litigated.
 - `dependency-submission.yml` + `dependency-review.yml` form the **dependency
   review** gate: submission pushes a Gradle dependency snapshot on PRs and
   default-branch pushes (Gradle cannot be parsed statically and no lockfiles

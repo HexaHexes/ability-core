@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE module PUBLIC "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+        "https://checkstyle.org/dtds/configuration_1_3.dtd">
+<!--
+  Shared Checkstyle ruleset (template-first: ships verbatim to every
+  template-lineage repo, like config/spotbugs-exclude.xml).
+
+  Deliberately structural, never formatting: Spotless owns whitespace, so a
+  violation here is a design signal. Every rule below is either an industry
+  default (import hygiene, complexity) or an org rule from AGENTS.md (short
+  comments only). Nothing is suppressed - a repo that wants an exception
+  changes its code.
+-->
+<module name="Checker">
+    <property name="charset" value="UTF-8"/>
+    <property name="severity" value="error"/>
+
+    <!-- Grandfathered findings live in the repo's own suppressions.xml (optional:
+         most repos have none). Every entry is a burn-down item, never new code. -->
+    <module name="SuppressionFilter">
+        <property name="file" value="${config_loc}/suppressions.xml"/>
+        <property name="optional" value="true"/>
+    </module>
+
+    <!--
+      A block of four or more consecutive line comments means the code below it
+      cannot speak for itself. The fix is a smaller, named block of code, not a
+      "checkstyle:ignore" comment. Javadoc is documentation and is exempt.
+    -->
+    <module name="RegexpMultiline">
+        <property name="format" value="(?m)(?:^[ \t]*//[^\r\n]*\R)(?:[ \t]*//[^\r\n]*\R){3,}"/>
+        <property name="message"
+                  value="Comment block over 3 lines: rework the code until it explains itself."/>
+    </module>
+
+    <module name="TreeWalker">
+        <module name="AvoidStarImport">
+            <!-- Static star imports stay legal: NeoForge mods import Items/Blocks members that way. -->
+            <property name="allowStaticMemberImports" value="true"/>
+        </module>
+        <module name="RedundantImport"/>
+        <module name="UnusedImports">
+            <property name="processJavadoc" value="true"/>
+        </module>
+        <module name="IllegalImport"/>
+
+        <!-- Reported, not gated (severity info): 30+ methods org-wide exceed 10 today,
+             which is refactor work, not a parity pull. Flip to error per repo once a
+             repo's count reaches zero. -->
+        <module name="CyclomaticComplexity">
+            <property name="max" value="10"/>
+            <property name="severity" value="info"/>
+        </module>
+    </module>
+</module>

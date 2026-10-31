@@ -238,6 +238,15 @@ jobs:
       # check. Spotless stays out of Gradle `check` (enforceCheck false),
       # so junit's `./gradlew build` remains style-agnostic - this job is
       # the style gate.
+      # Structural rules: comment-block length and import hygiene.
+      - name: Checkstyle
+        env:
+          PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN || github.token }}
+        run: >
+          ./gradlew checkstyleMain checkstyleTest checkstyleGametest
+          --no-daemon --stacktrace
+
       - name: Spotless check
         env:
           PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
