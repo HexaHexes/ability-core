@@ -262,13 +262,12 @@ jobs:
           path: build/reports/spotbugs/
           if-no-files-found: ignore
       - name: Upload the Checkstyle report
-
-            if: always()
-            uses: actions/upload-artifact@v7
-            with:
-              name: checkstyle-report
-              path: build/reports/checkstyle/
-              if-no-files-found: ignore
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: checkstyle-report
+          path: build/reports/checkstyle/
+          if-no-files-found: ignore
 
   version-bump:
     name: version-bump
