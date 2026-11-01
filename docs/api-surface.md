@@ -8,7 +8,7 @@ for the four consumer repositories.
 
 | Package | Stability | Purpose |
 |---|---|---|
-| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer` |
+| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders` |
 | `org.bitwisemadness.abilitycore.registry` | **Stable** — public API | `AbilityRegistries` (registry key + `registry()` + `isReady()`) |
 | `org.bitwisemadness.abilitycore.discovery` | **Stable** — public API | `AbilityDiscovery` (presence, enumeration, filtering) |
 | `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler`, `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
@@ -30,6 +30,42 @@ Consumers extend core through exactly four mechanisms:
    `AbilityCore.ELIGIBILITY` or a composed child chain.
 4. **Sync events** — consumers listen for `AbilitySyncNeededEvent` on the
    NeoForge game bus and send their state payloads.
+5. **Overlay providers** — providers declare an `AvailabilityProvider` per
+   ability via `AvailabilityProviders.declare(...)` to feed the bar's
+   cooldown/cost/availability overlay (REQ-HOT-08).
+
+## Overlay data contract (REQ-HOT-08)
+
+The bar renders an ability's cooldown/cost/availability overlay from one
+provider-neutral tuple, `AbilityAvailability`, and never from a provider class:
+
+| Metric | Type | Meaning |
+|---|---|---|
+| `cooldown` | `Metric<Double>` | Cooldown progress `0..1` (0 = ready), or `Metric.unknown()` |
+| `cost` | `Metric<ResourceCost>` | Declarative resource cost, or `Metric.unknown()` |
+| `availability` | `AvailabilityState` | `Available` / `Unavailable(reason)` / `Unknown` |
+
+**Option-typed, never a wrong value.** Every metric is explicit about absence:
+a provider that does not expose a metric returns `Metric.unknown()` (or
+`AvailabilityState.Unknown`), and the overlay renders *no overlay* for it -
+never a guessed grey-out or a zeroed cooldown. `Metric.known(0.0)` means
+"ready"; `Metric.unknown()` means "we cannot tell" - these are deliberately
+distinct. `AbilityAvailability.allUnknown()` is the synthetic no-metric tuple.
+
+**Consumer mapping notes:**
+
+- **Providers (ISS, Tensura, battlewills)** map their *already-synced* native
+  state into the tuple once, at `AvailabilityProvider.availabilityFor(...)`.
+  Read only synced or contract-synced values (the client never holds
+  authority); return `unknown` for any metric the provider does not expose.
+- **The bar (consumer)** looks up `AvailabilityProviders.availabilityFor(player,
+  id)`. `Optional.empty()` (no provider declared) means render no overlay -
+  never crash. A provider returning `null` is logged and degraded to
+  `allUnknown()`. The consumer imports only these `api` types, never a provider
+  class.
+- **Side discipline:** the tuple is client-*renderable* but server-authoritative
+  in origin; providers must not mutate state or derive authority the client was
+  not given.
 
 ## Breaking change definition
 
