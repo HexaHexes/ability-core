@@ -3,12 +3,10 @@ package org.bitwisemadness.abilitycore.activation;
 import com.mojang.logging.LogUtils;
 import java.util.Optional;
 import net.minecraft.server.level.ServerPlayer;
-import org.bitwisemadness.abilitycore.api.AbilityDefinition;
 import org.bitwisemadness.abilitycore.api.ActivationOutcome;
 import org.bitwisemadness.abilitycore.api.ActivationRequest;
 import org.bitwisemadness.abilitycore.api.ActivationResult;
 import org.bitwisemadness.abilitycore.api.CooldownOwners;
-import org.bitwisemadness.abilitycore.registry.AbilityRegistries;
 import org.slf4j.Logger;
 
 /**
