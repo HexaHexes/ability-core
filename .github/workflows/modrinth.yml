@@ -67,19 +67,19 @@ jobs:
           # beta; no pre-release suffix at all means a clean bump, stable.
           case "$RELEASE_TAG" in
             *+g*|*-alpha*)
-              echo "channel=alpha"
-              echo "publish=false"
-              echo "reason=alphas are published to GitHub only, not Modrinth"
+              echo "channel=alpha" >> "$GITHUB_OUTPUT"
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              echo "reason=alphas are published to GitHub only, not Modrinth" >> "$GITHUB_OUTPUT"
               ;;
             *-*)
-              echo "channel=beta"
-              echo "publish=true"
-              echo "reason=tag carries a pre-release suffix"
+              echo "channel=beta" >> "$GITHUB_OUTPUT"
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+              echo "reason=tag carries a pre-release suffix" >> "$GITHUB_OUTPUT"
               ;;
             *)
-              echo "channel=stable"
-              echo "publish=true"
-              echo "reason=clean version tag"
+              echo "channel=stable" >> "$GITHUB_OUTPUT"
+              echo "publish=true" >> "$GITHUB_OUTPUT"
+              echo "reason=clean version tag" >> "$GITHUB_OUTPUT"
               ;;
           esac
 
