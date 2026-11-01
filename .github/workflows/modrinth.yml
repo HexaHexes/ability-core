@@ -129,13 +129,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p staged
-          gh release download "$RELEASE_TAG" \
+          gh release download "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" \
             --pattern '*.jar' \
             --dir staged
           ls -la staged
           echo "ASSET=$(ls staged/*.jar | head -1)" >> "$GITHUB_ENV"
 
-          gh release view "$RELEASE_TAG" --json body --jq '.body' > notes.md
+          gh release view "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --json body --jq '.body' > notes.md
           echo "Release notes ($(wc -c < notes.md) bytes):"
           cat notes.md
 
