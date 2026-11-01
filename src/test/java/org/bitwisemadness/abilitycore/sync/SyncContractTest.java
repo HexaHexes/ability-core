@@ -1,6 +1,5 @@
 package org.bitwisemadness.abilitycore.sync;
 
-import net.neoforged.bus.api.SubscribeEvent;
 import org.junit.jupiter.api.Test;
 
 /**

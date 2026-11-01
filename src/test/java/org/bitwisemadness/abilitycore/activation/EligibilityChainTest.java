@@ -6,18 +6,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import net.minecraft.resources.ResourceLocation;
-import org.bitwisemadness.abilitycore.api.AbilityDefinition;
 import org.bitwisemadness.abilitycore.api.ActivationOutcome;
 import org.bitwisemadness.abilitycore.api.ActivationRequest;
 import org.bitwisemadness.abilitycore.api.ActivationResult;
 import org.bitwisemadness.abilitycore.api.ActivationSource;
-import org.bitwisemadness.abilitycore.api.ActivationType;
-import org.bitwisemadness.abilitycore.registry.AbilityRegistries;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
