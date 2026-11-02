@@ -181,7 +181,7 @@ jobs:
           RESPONSE=$(curl --silent --show-error --fail-with-body \
             --request POST \
             --header "Authorization: $MODRINTH_TOKEN" \
-            --form "data=$METADATA" \
+            --form-string "data=$METADATA" \
             --form "file=@$ASSET;type=application/java-archive" \
             "https://api.modrinth.com/v2/version")
 
