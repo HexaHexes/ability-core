@@ -17,3 +17,4 @@ that records them in the originating issue (traceability rule, issue #28).
 | [008](008-no-battlewill-bc-repo.md) | No dedicated battlewill Better Combat repository | accepted |
 | [009](009-conceptual-is-spiritual.md) | Brief's "conceptual magic" maps to the game's SPIRITUAL category | accepted |
 | [010](010-native-skill-registration-for-additive-battlewills.md) | Additive battlewills register as native ManasCore skills | accepted |
+| [011](011-multi-hotbar-state-model.md) | Multi-hotbar state model, optimistic switch flow, derived bars stay out of the cycle | accepted |
