@@ -165,6 +165,7 @@ jobs:
             --arg versionNumber "$RELEASE_TAG" \
             --arg gameVersion "$MINECRAFT_VERSION" \
             --argjson loaders "$MOD_LOADERS" \
+            --argjson file_parts '["file"]' \
             --arg versionType "$VERSION_TYPE" \
             '{
               project_id: $projectId,
@@ -172,7 +173,8 @@ jobs:
               changelog: $changelog,
               game_versions: [$gameVersion],
               loaders: $loaders,
-              version_type: $versionType
+              version_type: $versionType,
+              file_parts: $file_parts
             }')
 
           echo "Uploading with metadata:"
@@ -183,7 +185,7 @@ jobs:
             --header "Authorization: $MODRINTH_TOKEN" \
             --form-string "data=$METADATA" \
             --form "file=@$ASSET;type=application/java-archive" \
-            "https://api.modrinth.com/v2/version")
+            "https://api.modrinth.com/v2/version") || true
 
           echo "Upload response:"
           echo "$RESPONSE" | jq .
