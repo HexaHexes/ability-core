@@ -170,11 +170,15 @@ jobs:
             '{
               project_id: $projectId,
               version_number: $versionNumber,
+              version_title: $versionNumber,
               changelog: $changelog,
               game_versions: [$gameVersion],
               loaders: $loaders,
               version_type: $versionType,
-              file_parts: $file_parts
+              file_parts: $file_parts,
+              primary_file: $file_parts[0],
+              featured: false,
+              dependencies: []
             }')
 
           echo "Uploading with metadata:"
