@@ -1,0 +1,69 @@
+name: Version bump (post-merge)
+
+# The alpha slot is owned by CI/CD, not by PRs (neoforge-mod-template #81).
+# Every push to the default branch that lands real changes bumps the -alpha.N
+# slot, commits it, and dispatches Release. Two deliberate mechanics:
+#
+#   - a GITHUB_TOKEN push does not cascade to other workflows, so dispatching
+#     Release here is the only way the bumped version actually ships;
+#   - .github/ pushes are ignored, so template syncs and workflow edits do not
+#     burn an alpha slot.
+#
+# Clean (x.y.z) and beta bumps stay owner-driven isolated PRs via the
+# version-bump dispatch - this workflow only advances the alpha train.
+
+on:
+  push:
+    branches: [ main, master ]
+    paths-ignore:
+      - '.github/**'
+
+permissions:
+  contents: write
+  # Dispatching Release needs actions: write - an explicit permissions block
+  # zeroes every scope it does not name.
+  actions: write
+
+concurrency:
+  group: version-bump-post-merge
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: version-bump
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Bump the alpha slot and dispatch Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          VERSION=$(grep '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          echo "current mod_version: $VERSION"
+
+          case "$VERSION" in
+            *-alpha.[0-9]*) : ;;
+            *)
+              echo "No -alpha slot on the current version - nothing to auto-bump."
+              exit 0
+              ;;
+          esac
+
+          BASE="${VERSION%-alpha.*}"
+          N="${VERSION##*-alpha.}"
+          NEXT="$BASE-alpha.$((N + 1))"
+          echo "next slot: $NEXT"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          sed -i "s/^mod_version=.*/mod_version=$NEXT/" gradle.properties
+          git add gradle.properties
+          git commit -m "Version slot $NEXT (post-merge auto-bump)"
+          git push origin HEAD:main
+
+          gh workflow run release.yml --ref main
+          echo "dispatched Release for $NEXT"
