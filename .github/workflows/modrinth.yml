@@ -70,16 +70,19 @@ jobs:
               echo "channel=alpha" >> "$GITHUB_OUTPUT"
               echo "publish=false" >> "$GITHUB_OUTPUT"
               echo "reason=alphas are published to GitHub only, not Modrinth" >> "$GITHUB_OUTPUT"
+              echo "version_type=alpha" >> "$GITHUB_OUTPUT"
               ;;
             *-*)
               echo "channel=beta" >> "$GITHUB_OUTPUT"
               echo "publish=true" >> "$GITHUB_OUTPUT"
               echo "reason=tag carries a pre-release suffix" >> "$GITHUB_OUTPUT"
+              echo "version_type=beta" >> "$GITHUB_OUTPUT"
               ;;
             *)
               echo "channel=stable" >> "$GITHUB_OUTPUT"
               echo "publish=true" >> "$GITHUB_OUTPUT"
               echo "reason=clean version tag" >> "$GITHUB_OUTPUT"
+              echo "version_type=release" >> "$GITHUB_OUTPUT"
               ;;
           esac
 
@@ -139,65 +142,21 @@ jobs:
           echo "Release notes ($(wc -c < notes.md) bytes):"
           cat notes.md
 
+      # mc-publish (Kir-Antipov/mc-publish@v3.3) is the org's chosen publishing
+      # action (ruling: neoforge-mod-template #82) - it owns the multipart
+      # metadata, the file parts and the platform API shape, replacing the
+      # hand-rolled curl upload that #74 had to debug line by line.
       - name: Upload to Modrinth
         if: steps.channel.outputs.publish == 'true' && steps.config.outputs.configured == 'true'
-        env:
-          MODRINTH_PROJECT_ID: ${{ secrets.MODRINTH_PROJECT_ID }}
-          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
-          CHANNEL: ${{ steps.channel.outputs.channel }}
-        run: |
-          set -euo pipefail
-
-          # Modrinth's three-valued version type: release, beta, alpha.
-          case "$CHANNEL" in
-            stable) VERSION_TYPE=release ;;
-            beta)   VERSION_TYPE=beta ;;
-            *)      VERSION_TYPE=alpha ;;
-          esac
-
-          # game_versions carries the Minecraft version; loaders are Modrinth's
-          # own lowercase names. A version or loader the project is not listed
-          # for is rejected outright, not silently accepted, so the declared
-          # values must match the project's listing.
-          METADATA=$(jq -n \
-            --rawfile changelog notes.md \
-            --arg projectId "$MODRINTH_PROJECT_ID" \
-            --arg versionNumber "$RELEASE_TAG" \
-            --arg gameVersion "$MINECRAFT_VERSION" \
-            --argjson loaders "$MOD_LOADERS" \
-            --argjson file_parts '["file"]' \
-            --arg versionType "$VERSION_TYPE" \
-            '{
-              project_id: $projectId,
-              version_number: $versionNumber,
-              version_title: $versionNumber,
-              changelog: $changelog,
-              game_versions: [$gameVersion],
-              loaders: $loaders,
-              version_type: $versionType,
-              file_parts: $file_parts,
-              primary_file: $file_parts[0],
-              featured: false,
-              dependencies: []
-            }')
-
-          echo "Uploading with metadata:"
-          echo "$METADATA" | jq .
-
-          RESPONSE=$(curl --silent --show-error --fail-with-body \
-            --request POST \
-            --header "Authorization: $MODRINTH_TOKEN" \
-            --form-string "data=$METADATA" \
-            --form "file=@$ASSET;type=application/java-archive" \
-            "https://api.modrinth.com/v2/version") || true
-
-          echo "Upload response:"
-          echo "$RESPONSE" | jq .
-
-          VERSION_ID=$(echo "$RESPONSE" | jq -r '.id // empty')
-          if [ -z "$VERSION_ID" ]; then
-            echo "::error::Modrinth accepted the request but returned no version id."
-            exit 1
-          fi
-
-          echo "Published Modrinth version $VERSION_ID as a $CHANNEL release."
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          modrinth-id: ${{ secrets.MODRINTH_PROJECT_ID }}
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          files: staged/*.jar
+          version: ${{ env.RELEASE_TAG }}
+          version-type: ${{ steps.channel.outputs.version_type }}
+          name: ${{ env.RELEASE_TAG }}
+          changelog-file: notes.md
+          game-versions: ${{ env.MINECRAFT_VERSION }}
+          loaders: ${{ env.MOD_LOADERS }}
+          modrinth-featured: false
