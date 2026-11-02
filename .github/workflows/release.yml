@@ -11,17 +11,25 @@ name: Release
 #   - the jar name is derived from mod_id instead of written out, because this file
 #     is copied into repos whose archivesName follows their own mod_id, so a rename
 #     needs no edit here;
-#   - the release notes are an example - edit them when promoting this file into a
-#     mod. They are player-facing, and the README rule about that applies.
+#   - release bodies are GitHub-native auto-generated changelogs (see
+#     .github/release.yml and the changelog ruling in agents/AGENTS.md) - there
+#     is no per-repo promo body to edit.
 #
-# Pre-releases are opt-in: an -alpha or -beta version publishes only when the
-# repository variable ALPHA_RELEASES is true, so a pre-release train cannot reach
-# the releases page by accident.
+# Pre-releases are enabled by default: an -alpha or -beta version publishes on
+# the first push that would create it. Set the repository variable
+# ALPHA_RELEASES to "false" to opt this repo out (skipped with a log line
+# rather than a failure). The default lives in the ${ALPHA_RELEASES:-true}
+# expression below - repository variables cannot ship in template content, so
+# the file itself must carry the default.
 
 on:
   push:
     branches:
       - main
+  # Dispatch entry for the post-merge version bump (#81): the bump lands on
+  # main first, then Release is dispatched to publish the new slot - a
+  # GITHUB_TOKEN push does not cascade to other workflows.
+  workflow_dispatch:
 
 permissions:
   contents: write
