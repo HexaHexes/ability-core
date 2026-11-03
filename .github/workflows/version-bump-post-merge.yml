@@ -2,12 +2,25 @@ name: Version bump (post-merge)
 
 # The alpha slot is owned by CI/CD, not by PRs (neoforge-mod-template #81).
 # Every push to the default branch that lands real changes bumps the -alpha.N
-# slot, commits it, and dispatches Release. Two deliberate mechanics:
+# slot and commits it. Mechanics:
 #
-#   - a GITHUB_TOKEN push does not cascade to other workflows, so dispatching
-#     Release here is the only way the bumped version actually ships;
+#   - the commit pushes with the BUMP_TOKEN secret (a fine-grained PAT owned by
+#     an account that is a bypass actor on the branch ruleset), because a
+#     GITHUB_TOKEN push is declined by protect-main's "changes must be made
+#     through a pull request" rule (GH013);
+#   - a PAT push cascades to other workflows, so the push itself triggers
+#     Release - no dispatch step here (a GITHUB_TOKEN push would not cascade,
+#     which is why release.yml keeps its workflow_dispatch entry as the retry);
+#   - that cascade re-triggers this workflow on the bump's own commit, so the
+#     job skips when the push carries the bump message - without the guard the
+#     slot would climb forever;
 #   - .github/ pushes are ignored, so template syncs and workflow edits do not
 #     burn an alpha slot.
+#
+# BUMP_TOKEN: fine-grained PAT with Contents: Read and write, owned by an
+# account that bypasses the branch ruleset, stored as a repository or
+# organization secret. Without it this job fails with instructions rather than
+# an opaque GH013.
 #
 # Clean (x.y.z) and beta bumps stay owner-driven isolated PRs via the
 # version-bump dispatch - this workflow only advances the alpha train.
@@ -17,12 +30,13 @@ on:
     branches: [ main, master ]
     paths-ignore:
       - '.github/**'
+  # Manual retry for a failed bump: dispatch instead of waiting for the next
+  # feature push. github.event.head_commit is absent on a dispatch, so the
+  # skip guard below lets it through.
+  workflow_dispatch:
 
 permissions:
-  contents: write
-  # Dispatching Release needs actions: write - an explicit permissions block
-  # zeroes every scope it does not name.
-  actions: write
+  contents: read # the bump authenticates with BUMP_TOKEN, not this token
 
 concurrency:
   group: version-bump-post-merge
@@ -33,14 +47,25 @@ jobs:
     name: version-bump
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # The bump's own push cascades back into this workflow (PAT pushes trigger
+    # workflows); without this guard the slot would climb forever.
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message || '', 'post-merge auto-bump)') }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.BUMP_TOKEN || github.token }}
 
-      - name: Bump the alpha slot and dispatch Release
+      - name: Bump the alpha slot
         env:
-          GH_TOKEN: ${{ github.token }}
+          BUMP_TOKEN: ${{ secrets.BUMP_TOKEN }}
         run: |
           set -euo pipefail
+
+          if [ -z "$BUMP_TOKEN" ]; then
+            echo "::error::BUMP_TOKEN secret is not set. A GITHUB_TOKEN push cannot land on this repository (branch ruleset: changes must be made through a pull request)."
+            echo "::error::Add a fine-grained PAT with Contents: Read and write, owned by a bypass actor, as the BUMP_TOKEN repository or organization secret, then re-run this workflow."
+            exit 1
+          fi
 
           VERSION=$(grep '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
           echo "current mod_version: $VERSION"
@@ -65,5 +90,4 @@ jobs:
           git commit -m "Version slot $NEXT (post-merge auto-bump)"
           git push origin HEAD:main
 
-          gh workflow run release.yml --ref main
-          echo "dispatched Release for $NEXT"
+          echo "pushed $NEXT - the push cascade triggers Release"
