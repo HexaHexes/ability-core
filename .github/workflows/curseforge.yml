@@ -61,8 +61,8 @@ jobs:
           case "$RELEASE_TAG" in
             *+g*|*-alpha*)
               echo "channel=alpha" >> "$GITHUB_OUTPUT"
-              echo "publish=true" >> "$GITHUB_OUTPUT"
-              echo "reason=alphas publish to CurseForge" >> "$GITHUB_OUTPUT"
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              echo "reason=alphas are published to GitHub only, not CurseForge" >> "$GITHUB_OUTPUT"
               echo "version_type=alpha" >> "$GITHUB_OUTPUT"
               ;;
             *-*)
