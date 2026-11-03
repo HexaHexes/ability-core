@@ -316,33 +316,33 @@ jobs:
             echo "::warning::Could not create the 'breaking' label - a fork PR has a read-only token. Add it by hand, or re-run from a branch in this repo."
           fi
 
-        - name: Enforce the version doctrine (bumps ride CI/CD)
-          env:
-            BASE: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
-            HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
-          run: |
-            set -euo pipefail
+      - name: Enforce the version doctrine (bumps ride CI/CD)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
 
-            CHANGED=$(git diff --name-only "$BASE" "$HEAD")
-            echo "--- changed files ---"
-            echo "$CHANGED"
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD")
+          echo "--- changed files ---"
+          echo "$CHANGED"
 
-            if ! echo "$CHANGED" | grep -q '^gradle\.properties$'; then
-              echo "No version files in this PR. The -alpha slot is owned by CI/CD post-merge (version-bump-post-merge.yml). OK."
-              exit 0
-            fi
+          if ! echo "$CHANGED" | grep -q '^gradle\.properties$'; then
+            echo "No version files in this PR. The -alpha slot is owned by CI/CD post-merge (version-bump-post-merge.yml). OK."
+            exit 0
+          fi
 
-            EXTRA=$(echo "$CHANGED" | grep -v '^gradle\.properties$' | grep -v '^$' || true)
-            if [ -n "$EXTRA" ]; then
-              echo "::error::Version bumps ride CI/CD after merge (neoforge-mod-template#81)."
-              echo "::error::A PR must not bundle gradle.properties with other changes. These files must not accompany it:"
-              echo "$EXTRA"
-              echo "::error::Revert the gradle.properties change from this PR, or split the bump into its own isolated PR."
-              exit 1
-            fi
+          EXTRA=$(echo "$CHANGED" | grep -v '^gradle\.properties$' | grep -v '^$' || true)
+          if [ -n "$EXTRA" ]; then
+            echo "::error::Version bumps ride CI/CD after merge (neoforge-mod-template#81)."
+            echo "::error::A PR must not bundle gradle.properties with other changes. These files must not accompany it:"
+            echo "$EXTRA"
+            echo "::error::Revert the gradle.properties change from this PR, or split the bump into its own isolated PR."
+            exit 1
+          fi
 
-            NEW_VERSION=$(grep '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
-            echo "Isolated version bump to $NEW_VERSION. OK (the stable/beta path)."
+          NEW_VERSION=$(grep '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          echo "Isolated version bump to $NEW_VERSION. OK (the stable/beta path)."
 
       - name: Enforce breaking changes require a major or minor bump
         env:
