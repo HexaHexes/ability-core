@@ -18,3 +18,4 @@ that records them in the originating issue (traceability rule, issue #28).
 | [009](009-conceptual-is-spiritual.md) | Brief's "conceptual magic" maps to the game's SPIRITUAL category | accepted |
 | [010](010-native-skill-registration-for-additive-battlewills.md) | Additive battlewills register as native ManasCore skills | accepted |
 | [011](011-multi-hotbar-state-model.md) | Multi-hotbar state model, optimistic switch flow, derived bars stay out of the cycle | accepted |
+| [012](012-hotbar-registration.md) | Hotbar registration API, assignability gating, active-by-id schema v3; supersedes 011's layers-not-cycle clause | accepted |
