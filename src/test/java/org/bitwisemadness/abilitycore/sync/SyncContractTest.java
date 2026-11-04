@@ -97,11 +97,30 @@ class SyncContractTest {
 
     @Test
     void syncNeededEventCarriesPlayerAndReason() {
-        // AbilitySyncNeededEvent is a simple event POJO; the GameTest exercises
-        // the actual firing via PlayerLoggedInEvent. This test documents the type.
+        // AbilitySyncNeededEvent is a simple event POJO with no unit-testable
+        // fire path (it needs ServerPlayer lifecycle events): this documents
+        // the type. Firing + lifecycle integration run in core#27's rows.
         assertEquals("LOGIN", AbilitySyncNeededEvent.Reason.LOGIN.name());
         assertEquals("RESPAWN", AbilitySyncNeededEvent.Reason.RESPAWN.name());
         assertEquals("DIMENSION_CHANGE", AbilitySyncNeededEvent.Reason.DIMENSION_CHANGE.name());
+    }
+
+    @Test
+    void activatePayloadStaysWithinTheServerboundBudget() {
+        // docs/sync.md: serverbound requests encode under 32 KiB. A generous
+        // worst case (a 4 000-char id, far past any real ResourceLocation)
+        // still fits with room to spare; transport frame limits bound the rest.
+        var payload = new ActivateAbilityPayload(
+                "tensura:" + "x".repeat(4000), "direct_slot", 18, Long.MAX_VALUE,
+                "entity", "entity=069c2a2d-6f5a-4a4b-8f42-5f4e5a5b6c7d");
+        var buf = io.netty.buffer.Unpooled.buffer();
+        try {
+            ActivateAbilityPayload.STREAM_CODEC.encode(buf, payload);
+            assertTrue(buf.readableBytes() < 32768,
+                    "encoded " + buf.readableBytes() + " bytes - over the 32 KiB budget");
+        } finally {
+            buf.release();
+        }
     }
 
     @Test
@@ -124,5 +143,9 @@ class SyncContractTest {
 
     private static void assertNull(Object actual) {
         org.junit.jupiter.api.Assertions.assertNull(actual);
+    }
+
+    private static void assertTrue(boolean condition, String message) {
+        org.junit.jupiter.api.Assertions.assertTrue(condition, message);
     }
 }
