@@ -1,6 +1,7 @@
 package org.bitwisemadness.abilitycore.activation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -135,6 +136,29 @@ class TargetValidationStepTest {
         assertTrue(result.isSuccess());
         assertEquals(1, seen.size());
         assertSame(resolvedSentinel, seen.get(0), "providers consume the server-resolved value, not the hint");
+    }
+
+    @Test
+    void payloadEntityHintFlowsThroughToTheResolvedEntityStash() {
+        // core#69 end-to-end wire fixture: payload -> toRequest -> pipeline ->
+        // the RESOLVED_ENTITY stash providers consume (kind/param keys are
+        // TargetContext.fromWire's vocabulary; resolution answers from test fields).
+        List<Object> seen = new ArrayList<>();
+        pipeline.registerStep(ActivationPipeline.PipelinePhase.RESOURCE, (req, player, context) -> {
+            seen.add(context.get(TargetValidationStep.RESOLVED_ENTITY, Object.class).orElseThrow());
+            return Optional.empty();
+        });
+
+        var payload = new org.bitwisemadness.abilitycore.sync.ActivateAbilityPayload(
+                ANY_KIND.toString(), "direct_slot", 3, 12345L,
+                "entity", "entity=" + entityId);
+        var fromPayload = org.bitwisemadness.abilitycore.sync.ActivateAbilityPayload.toRequest(payload);
+        assertNotNull(fromPayload);
+
+        var result = pipeline.run(fromPayload, null);
+        assertTrue(result.isSuccess());
+        assertEquals(1, seen.size());
+        assertSame(resolvedSentinel, seen.get(0), "the wire hint resolves server-side before providers run");
     }
 
     @Test
