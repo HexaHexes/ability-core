@@ -1,7 +1,10 @@
 package org.bitwisemadness.abilitycore.discovery;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import net.minecraft.resources.ResourceLocation;
 import org.bitwisemadness.abilitycore.AbilityCore;
@@ -86,6 +89,32 @@ public final class AbilityDiscovery {
         List<AbilityDefinition> out = new ArrayList<>();
         definitions.forEach(out::add);
         return List.copyOf(out);
+    }
+
+    /**
+     * Id-aware enumeration: every registered id paired with its definition,
+     * as an immutable map (core#67, consumed by hotbar#27's menu). The menu
+     * displays definitions but its requests name the ability by id, and
+     * definitions are <em>value-equal</em> records - a reverse lookup could
+     * collapse two abilities that share display metadata onto one id - so
+     * enumeration carries the id from the start. Same lifecycle as
+     * {@link #all()}: empty before the registry exists, never null. The map
+     * iterates in the registry's own order; callers needing presentation
+     * order sort themselves.
+     */
+    public static Map<ResourceLocation, AbilityDefinition> entries() {
+        var definitions = AbilityRegistries.registry();
+        if (definitions == null) {
+            return Map.of();
+        }
+        Map<ResourceLocation, AbilityDefinition> out = new LinkedHashMap<>();
+        for (ResourceLocation id : definitions.keySet()) {
+            AbilityDefinition definition = definitions.get(id);
+            if (definition != null) {
+                out.put(id, definition);
+            }
+        }
+        return Collections.unmodifiableMap(out);
     }
 
     /** Definitions of one open category (e.g. {@code tensura:battlewill}). */

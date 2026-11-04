@@ -2,6 +2,7 @@ package org.bitwisemadness.abilitycore;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.mojang.serialization.Lifecycle;
@@ -70,6 +71,39 @@ class AbilityDiscoveryTest {
         assertEquals(PresenceState.NOT_READY, AbilityDiscovery.presence(SKILL));
         assertTrue(AbilityDiscovery.all().isEmpty());
         assertFalse(AbilityDiscovery.isRegistered(SKILL));
+    }
+
+    @Test
+    void entriesCarryIdsEvenForValueEqualDefinitions() {
+        // core#67: two abilities sharing display metadata must not collapse -
+        // a reverse lookup keyed on the definition alone would map both to
+        // one id and a consumer would then send the wrong ability.
+        ResourceLocation twin = ResourceLocation.fromNamespaceAndPath("tensura", "skill_a_twin");
+        Registry.register(AbilityRegistries.registry(), twin,
+                def("tensura.skill.a", ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
+                        Set.of("active")));
+
+        Map<ResourceLocation, AbilityDefinition> entries = AbilityDiscovery.entries();
+
+        assertEquals(3, entries.size());
+        assertEquals(entries.get(SKILL), entries.get(twin),
+                "the twins are value-equal but separately keyed");
+        assertEquals("tensura.skill.a", entries.get(twin).displayNameKey());
+        assertThrows(UnsupportedOperationException.class,
+                () -> entries.put(ABSENT, entries.get(SKILL)), "the map is immutable");
+    }
+
+    @Test
+    void entriesMirrorAllAndEmptyPreReady() {
+        Map<ResourceLocation, AbilityDefinition> entries = AbilityDiscovery.entries();
+
+        assertEquals(AbilityDiscovery.all().size(), entries.size());
+        assertTrue(entries.containsKey(SKILL));
+        assertTrue(entries.containsKey(BATTLEWILL));
+        assertEquals(AbilityDiscovery.get(SKILL).orElseThrow(), entries.get(SKILL));
+
+        AbilityRegistries.installRegistryForTests(null);
+        assertTrue(AbilityDiscovery.entries().isEmpty(), "empty pre-ready, like all()");
     }
 
     @Test
