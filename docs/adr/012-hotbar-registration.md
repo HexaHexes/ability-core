@@ -60,7 +60,11 @@ during cycling, and assignment screens are exempt from that skipping.
    full list; an index beyond it is ignored fail-closed. The switch payload
    names the target bar by id; the server validates against its own registry
    and ceiling.
-5. **Skip-empty** (`hotbar.skipEmptyBars`, default ON, client-only): applies
+5. **Skip-empty** (`display.skipEmptyBars`, default ON, client-only - the
+   name as shipped; the originally settled `hotbar.skipEmptyBars` was renamed
+   because a client `[hotbar]` section collides with the server spec's
+   section in the config screen's label-key derivation, hotbar's
+   `ConfigLocalisationTest` guard): applies
    to wheel cycling only - Alt+N always lands where pressed. A bar counts as
    empty when every slot is unassigned (inert ids count as assigned) or, for a
    non-assignable bar, when its content provider reports no content. If every
