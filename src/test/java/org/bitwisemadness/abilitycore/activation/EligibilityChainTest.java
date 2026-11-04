@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import net.minecraft.resources.ResourceLocation;
+import org.apache.logging.log4j.Level;
+import org.bitwisemadness.abilitycore.LogCapture;
 import org.bitwisemadness.abilitycore.api.ActivationOutcome;
 import org.bitwisemadness.abilitycore.api.ActivationRequest;
 import org.bitwisemadness.abilitycore.api.ActivationResult;
@@ -160,5 +162,49 @@ class EligibilityChainTest {
     @Test
     void ruleRegistrationRejectsNull() {
         assertThrows(NullPointerException.class, () -> chain.register(null));
+    }
+
+    @Test
+    void refusalReasonIsDebugLoggedOncePerKey() {
+        // REQ-CORE-07 AC5: the refusal reason reaches the debug log, and an
+        // identical repeat (held activation key) is suppressed - once per key.
+        chain.register(allSources("ability.refused.restricted", true));
+
+        try (LogCapture logs = LogCapture.forLogger(EligibilityChain.class, Level.DEBUG)) {
+            var first = chain.check(request(ActivationSource.MENU), null, new ActivationContext(
+                    request(ActivationSource.MENU), null));
+            assertTrue(first.isPresent());
+            var repeat = chain.check(request(ActivationSource.MENU), null, new ActivationContext(
+                    request(ActivationSource.MENU), null));
+            assertTrue(repeat.isPresent());
+
+            assertEquals(1, logs.messages().size(),
+                    "identical refusals must log exactly once, not once per press");
+            String line = logs.messages().get(0);
+            assertTrue(line.contains("tensura:ability"), line);
+            assertTrue(line.contains("REFUSED_RESTRICTED"), line);
+            assertTrue(line.contains("ability.refused.restricted"), line);
+        }
+    }
+
+    @Test
+    void distinctRefusalKeysEachLogAndPermitsNeverLog() {
+        // a different source (hence key) logs anew; a permitting rule logs nothing
+        chain.register(scoped(ActivationSource.COMBO, "ability.refused.restricted", true));
+        chain.register(allSources("ability.refused.other", true));
+
+        try (LogCapture logs = LogCapture.forLogger(EligibilityChain.class, Level.DEBUG)) {
+            chain.check(request(ActivationSource.COMBO), null, new ActivationContext(
+                    request(ActivationSource.COMBO), null));
+            assertEquals(1, logs.messages().size(), "first distinct key logs");
+        }
+
+        chain = new EligibilityChain();
+        chain.register(allSources("pass", false));
+        try (LogCapture logs = LogCapture.forLogger(EligibilityChain.class, Level.DEBUG)) {
+            assertTrue(chain.check(request(ActivationSource.MENU), null, new ActivationContext(
+                    request(ActivationSource.MENU), null)).isEmpty());
+            assertTrue(logs.messages().isEmpty(), "a permitted request must never log");
+        }
     }
 }
