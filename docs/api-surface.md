@@ -13,6 +13,7 @@ for the four consumer repositories.
 | `org.bitwisemadness.abilitycore.discovery` | **Stable** — public API | `AbilityDiscovery` (presence, enumeration, filtering) |
 | `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler`, `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
 | `org.bitwisemadness.abilitycore.sync` | **Stable** — public API | `ActivateAbilityPayload`, `NetworkRegistration`, `AbilitySyncNeededEvent`, `SyncEventWiring` |
+| `org.bitwisemadness.abilitycore.config` | **Stable** — public API | `CoreConfig` (reference SERVER/CLIENT specs, `RefusalLogMode`), `ConfigDiagnostics` (loud-but-safe reads, notice hook) |
 
 **Everything not listed above is internal and subject to change without notice.**
 

@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import net.minecraft.resources.ResourceLocation;
 import org.apache.logging.log4j.Level;
 import org.bitwisemadness.abilitycore.LogCapture;
@@ -15,6 +16,7 @@ import org.bitwisemadness.abilitycore.api.ActivationOutcome;
 import org.bitwisemadness.abilitycore.api.ActivationRequest;
 import org.bitwisemadness.abilitycore.api.ActivationResult;
 import org.bitwisemadness.abilitycore.api.ActivationSource;
+import org.bitwisemadness.abilitycore.config.CoreConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -206,5 +208,53 @@ class EligibilityChainTest {
                     request(ActivationSource.MENU), null)).isEmpty());
             assertTrue(logs.messages().isEmpty(), "a permitted request must never log");
         }
+    }
+
+    @Test
+    void refusalLogModeOffSilencesDebugLogging() {
+        // issue #9: the server knob (diagnostics.refusalLog) is the real reader
+        chain = new EligibilityChain(null, () -> CoreConfig.RefusalLogMode.OFF);
+        chain.register(allSources("ability.refused.restricted", true));
+
+        try (LogCapture logs = LogCapture.forLogger(EligibilityChain.class, Level.DEBUG)) {
+            chain.check(request(ActivationSource.MENU), null, new ActivationContext(
+                    request(ActivationSource.MENU), null));
+            chain.check(request(ActivationSource.MENU), null, new ActivationContext(
+                    request(ActivationSource.MENU), null));
+            assertTrue(logs.messages().isEmpty(), "off mode must log nothing: " + logs.messages());
+        }
+    }
+
+    @Test
+    void refusalLogModeEveryLogsEachPress() {
+        chain = new EligibilityChain(null, () -> CoreConfig.RefusalLogMode.EVERY);
+        chain.register(allSources("ability.refused.restricted", true));
+
+        try (LogCapture logs = LogCapture.forLogger(EligibilityChain.class, Level.DEBUG)) {
+            chain.check(request(ActivationSource.MENU), null, new ActivationContext(
+                    request(ActivationSource.MENU), null));
+            chain.check(request(ActivationSource.MENU), null, new ActivationContext(
+                    request(ActivationSource.MENU), null));
+            assertEquals(2, logs.messages().size(),
+                    "every mode logs each press - the debugging knob");
+        }
+    }
+
+    @Test
+    void refusalLogModeIsReadLivePerRefusal() {
+        // AC4 demonstration: never cached, so a ModConfigEvent.Reloading that
+        // changes the value applies to the very next refusal - one read each.
+        AtomicInteger reads = new AtomicInteger();
+        chain = new EligibilityChain(null, () -> {
+            reads.incrementAndGet();
+            return CoreConfig.RefusalLogMode.ONCE_PER_KEY;
+        });
+        chain.register(allSources("ability.refused.restricted", true));
+
+        chain.check(request(ActivationSource.MENU), null, new ActivationContext(
+                request(ActivationSource.MENU), null));
+        chain.check(request(ActivationSource.MENU), null, new ActivationContext(
+                request(ActivationSource.MENU), null));
+        assertEquals(2, reads.get(), "one live mode read per refusal - never cached");
     }
 }
