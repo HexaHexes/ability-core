@@ -103,6 +103,16 @@ jobs:
             esac
           fi
 
+          # Semver (#100): a pre-release after a clean stable must advance the
+          # base - bump=none would version $BASE-alpha.N BELOW the stable
+          # already published. Choose patch (fix line), minor (new features)
+          # or major (breaking); trains in progress keep ignoring bump.
+          if [ "$CHANNEL" != "stable" ] && [ -z "$SUFFIX" ] && [ "$NEW_BASE" = "$BASE" ]; then
+            echo "::error::Semver: leaving stable $CURRENT for a pre-release must raise the base."
+            echo "::error::Choose bump=patch (fixes), minor (new features) or major (breaking); 'none' would ship below $CURRENT."
+            exit 1
+          fi
+
           if [ "$CHANNEL" = "stable" ]; then
             NEW_VERSION="$NEW_BASE"
             if [ -n "$SUFFIX" ]; then
