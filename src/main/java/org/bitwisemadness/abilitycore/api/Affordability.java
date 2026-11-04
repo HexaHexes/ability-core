@@ -64,4 +64,20 @@ public record Affordability(String resourceId, double amount, State state) {
             case UNKNOWN -> null;
         };
     }
+
+    /**
+     * Maps this verdict into the availability slot of the overlay tuple
+     * (REQ-CORE-04 acceptance): {@code SUFFICIENT} -> available,
+     * {@code INSUFFICIENT} -> unavailable with reason
+     * {@code "insufficient_<resourceId>"}, {@code UNKNOWN} -> unknown. The
+     * fail-closed state never becomes available - the tuple must never lie
+     * about what it cannot tell.
+     */
+    public AvailabilityState toAvailability() {
+        return switch (state) {
+            case SUFFICIENT -> AvailabilityState.available();
+            case INSUFFICIENT -> AvailabilityState.unavailable("insufficient_" + resourceId);
+            case UNKNOWN -> AvailabilityState.unknown();
+        };
+    }
 }
