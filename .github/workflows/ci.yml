@@ -323,6 +323,20 @@ jobs:
         run: |
           set -euo pipefail
 
+          # On workflow_dispatch (the version-bump path: version-bump.yml runs
+          # `gh workflow run ci.yml --ref <branch>`) there is no pull_request
+          # event, so BASE falls back to the default branch NAME - and that
+          # checkout only materializes the dispatched ref. Git's revision DWIM
+          # does not walk to refs/remotes/origin/<name>, so `git diff main ...`
+          # dies with "ambiguous argument" (exit 128). Compare against the
+          # remote-tracking ref instead; fetch it if even that is missing.
+          if ! printf '%s' "$BASE" | grep -Eq '^[0-9a-f]{40}$'; then
+            BASE="origin/$BASE"
+            if ! git rev-parse --verify -q "$BASE^{commit}" >/dev/null 2>&1; then
+              git fetch --no-tags origin "+refs/heads/${BASE#origin/}:refs/remotes/origin/${BASE#origin/}"
+            fi
+          fi
+
           CHANGED=$(git diff --name-only "$BASE" "$HEAD")
           echo "--- changed files ---"
           echo "$CHANGED"
@@ -350,6 +364,16 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch }}
         run: |
           set -euo pipefail
+
+          # Same dispatch fallback as above: on workflow_dispatch BASE is the
+          # default branch name, which this checkout has no local ref for -
+          # resolve it to the remote-tracking ref before `git show` uses it.
+          if ! printf '%s' "$BASE" | grep -Eq '^[0-9a-f]{40}$'; then
+            BASE="origin/$BASE"
+            if ! git rev-parse --verify -q "$BASE^{commit}" >/dev/null 2>&1; then
+              git fetch --no-tags origin "+refs/heads/${BASE#origin/}:refs/remotes/origin/${BASE#origin/}"
+            fi
+          fi
 
           NEW_VERSION=$(grep '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
           OLD_VERSION=$(git show "$BASE:gradle.properties" | grep '^mod_version=' | cut -d= -f2 | tr -d '[:space:]')
