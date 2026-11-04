@@ -61,6 +61,30 @@ renderer. Core renders nothing; without a sink the diagnostic is log-only.
 The sink receives an English message - map it to a translation key on your
 side if you display it.
 
+### Loud file inspection (REQ-CFG-03)
+
+NeoForge corrects invalid values in the *loaded in-memory model* and logs
+only one generic line per file ("Configuration file ... is not correct.
+Correcting") - it never names the key, and unknown keys are silently
+ignored. `ConfigDiagnostics.inspectFile(spec, path, source)` closes that
+gap: it re-reads the file (parse-only - **never writes, never deletes**,
+unknown keys intact) and logs at **WARN**:
+
+- every key the spec does not define: `Config <file> contains unknown key
+  <key> - ignored, never removed`;
+- every value the spec corrects, with key and offending value:
+  `Config <file> key <key> holds an invalid value (<bad>); corrected to
+  (<value>) (<action>)`. The correction rule itself is NeoForge's, verified:
+  an **out-of-range value clamps into range** (999 in a 1..18 spec becomes
+  18), an **unreadable value resets to the default** - observation only, the
+  live config was already corrected by NeoForge in memory.
+
+Core wires this for its own specs from `ModConfigEvent.Loading` and
+`ModConfigEvent.Reloading` (`ConfigInspection`); consumers copy the same
+one-liner for theirs. Inspection never throws - a config load always
+continues. Core ships **no config rewriter**: the only writer of a config
+file is NeoForge itself, and its file model preserves unknown keys.
+
 ## Reload handling (`ModConfigEvent.Loading` / `Reloading`)
 
 The pattern, in two rules:
