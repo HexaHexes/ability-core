@@ -99,6 +99,29 @@ The pattern, in two rules:
    in a `ModConfigEvent.Reloading` handler for your spec - the ISS idiom
    (`SpellConfigManager`). Never keep a stale derived value past a reload.
 
+## Migration policy (REQ-CFG-03)
+
+The hard rule: **never fatal, always per-value** - a config problem costs one
+value (defaulted, logged), never a crash and never a silently mutated
+preference; a wholly corrupt file falls back to full defaults with one loud
+error.
+
+- **TOML specs (what ships today)** need no `schema_version`: across a mod
+  version bump NeoForge keeps every value whose key still exists, fills new
+  keys with defaults, and leaves removed ("obsolete") keys untouched on
+  disk - which `inspectFile` *reports by key name* instead of anyone
+  deleting them. Corrections are per-value and clamped/defaulted by the
+  platform, logged as shown above.
+- **Custom formats we own** (none ship today; the AC's versioned-format
+  test is conditional on one existing) must carry `schema_version`, a
+  `migrate()` that preserves user-set (non-default) values, obsolete-key
+  reporting through the shared log format, and the same never-fatal rule.
+- When a legacy custom file actually needs converting, use the ISS
+  `LegacyConfigConverter` **one-shot command** pattern - never a silent
+  in-place rewrite.
+- Datapack-layer values are world-owned and replaced wholesale by design -
+  out of migration scope.
+
 ## Core's reference config
 
 | File | Key | Type | Default | Reader |
