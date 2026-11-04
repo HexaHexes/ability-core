@@ -27,8 +27,9 @@ on:
           - none
       channel:
         description: >-
-          stable leaves a clean version. beta appends -beta.N, incrementing while the
-          version stays a pre-release of the same base.
+          stable leaves a clean version. beta appends -beta.NN and alpha appends -alpha.NN (two digits, zero-padded), each incrementing while the version stays a pre-release of the
+          same base. Alphas are GitHub-only releases (modrinth.yml never publishes
+          them).
         type: choice
         required: true
         default: stable
@@ -40,6 +41,10 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # The no-BUMP_PR_TOKEN fallback runs `gh workflow run ci.yml --ref <branch>`;
+  # creating a dispatch event requires actions:write on this token, or the step
+  # 403s and marks an otherwise successful bump run as failed (issue #94).
+  actions: write
 
 # Never cancelled. A branch pushed with no PR open is harder to clean up than a slow run
 # is to wait for.
@@ -104,16 +109,22 @@ jobs:
               echo "Cutting $NEW_BASE out of the $CURRENT pre-release train."
             fi
           else
+            # beta and alpha share one shape: the channel name IS the suffix, so
+            # -beta.2 continues a beta train and -alpha.3 continues an alpha train
+            # on the same base. The suffix must match the REQUESTED channel, so
+            # switching channels restarts at 01 rather than carrying the count.
+            # Owner ruling (issue #98): counters are always two digits, and the
+            # 10# keeps a padded suffix (08/09) from being read as octal.
             N=1
-            if [ -n "$SUFFIX" ] && [ "$NEW_BASE" = "$BASE" ] && printf '%s' "$SUFFIX" | grep -Eq '^beta\.[0-9]+$'; then
-              N=$((${SUFFIX#beta.} + 1))
+            if [ -n "$SUFFIX" ] && [ "$NEW_BASE" = "$BASE" ] && printf '%s' "$SUFFIX" | grep -Eq "^${CHANNEL}\.[0-9]+$"; then
+              N=$((10#${SUFFIX#*.} + 1))
             fi
-            NEW_VERSION="${NEW_BASE}-beta.${N}"
+            NEW_VERSION=$(printf '%s-%s.%02d' "$NEW_BASE" "$CHANNEL" "$N")
           fi
 
           if [ "$NEW_VERSION" = "$CURRENT" ]; then
             echo "::error::This run produces no change: $CURRENT -> $NEW_VERSION."
-            echo "::error::Choose a bump, or switch channel to beta to open a pre-release of $BASE."
+            echo "::error::Choose a bump, or switch channel to beta or alpha to open a pre-release of $BASE."
             exit 1
           fi
 
@@ -176,7 +187,7 @@ jobs:
           (bump: \`$BUMP\`, channel: \`$CHANNEL\`).
 
           \`gradle.properties\` is the only file changed. That is not tidiness -
-          the \`version-bump\` CI check fails any beta or stable bump that
+          the \`version-bump\` CI check fails any non-alpha bump that
           arrives with any other file, so a red check here would mean the
           workflow misbehaved rather than that anything about the version is
           wrong.
@@ -189,8 +200,10 @@ jobs:
 
           if [ "$CHANNEL" = "stable" ]; then
             echo "- [x] New version is a clean bump (\`$NEW_VERSION\`) - releases as stable" >> body.md
+          elif [ "$CHANNEL" = "alpha" ]; then
+            echo "- [x] New version has an \`-alpha.N\` suffix (\`$NEW_VERSION\`) - GitHub-only prerelease" >> body.md
           else
-            echo "- [x] New version has a \`-beta\` suffix (\`$NEW_VERSION\`) - releases as beta" >> body.md
+            echo "- [x] New version has a \`-beta.N\` suffix (\`$NEW_VERSION\`) - releases as beta" >> body.md
           fi
 
           cat >> body.md <<EOF
