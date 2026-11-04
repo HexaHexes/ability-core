@@ -22,8 +22,10 @@ name: Version bump (post-merge)
 # organization secret. Without it this job fails with instructions rather than
 # an opaque GH013.
 #
-# Clean (x.y.z) and beta bumps stay owner-driven isolated PRs via the
-# version-bump dispatch - this workflow only advances the alpha train.
+# Owner ruling (issue #96): this workflow always advances the train - a clean
+# (x.y.z) starts -alpha.1 on the same base, and -alpha.N / -beta.N each
+# increment. Only manual bumps via the version-bump dispatch ever produce
+# a stable version.
 
 on:
   push:
@@ -71,16 +73,29 @@ jobs:
           echo "current mod_version: $VERSION"
 
           case "$VERSION" in
-            *-alpha.[0-9]*) : ;;
+            *-alpha.[0-9]*)
+              BASE="${VERSION%-alpha.*}"
+              N="${VERSION##*-alpha.}"
+              NEXT="$BASE-alpha.$((N + 1))"
+              ;;
+            *-beta.[0-9]*)
+              # Owner ruling (issue #96): beta trains advance automatically too.
+              BASE="${VERSION%-beta.*}"
+              N="${VERSION##*-beta.}"
+              NEXT="$BASE-beta.$((N + 1))"
+              ;;
             *)
-              echo "No -alpha slot on the current version - nothing to auto-bump."
-              exit 0
+              # Owner ruling (issue #96): a clean stable starts the alpha train
+              # on the same base - the automatic step never emits a stable, and
+              # an unknown suffix (e.g. -rc.1) stays a no-op.
+              if printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+                NEXT="$VERSION-alpha.1"
+              else
+                echo "No alpha/beta train on '$VERSION' and not a clean X.Y.Z - nothing to auto-bump."
+                exit 0
+              fi
               ;;
           esac
-
-          BASE="${VERSION%-alpha.*}"
-          N="${VERSION##*-alpha.}"
-          NEXT="$BASE-alpha.$((N + 1))"
           echo "next slot: $NEXT"
 
           git config user.name "github-actions[bot]"
