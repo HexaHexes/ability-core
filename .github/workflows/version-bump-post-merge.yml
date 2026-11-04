@@ -23,7 +23,7 @@ name: Version bump (post-merge)
 # an opaque GH013.
 #
 # Owner ruling (issue #96): this workflow always advances the train - a clean
-# (x.y.z) starts -alpha.01 on the same base, and -alpha.N / -beta.N each
+# (x.y.z) starts x.y.(z+1)-alpha.01 - semver advances the patch (#100), and -alpha.N / -beta.N each
 # increment. Only manual bumps via the version-bump dispatch ever produce
 # a stable version.
 
@@ -88,12 +88,12 @@ jobs:
               NEXT=$(printf '%s-beta.%02d' "$BASE" "$((10#$N + 1))")
               ;;
             *)
-              # Owner ruling (issue #96): a clean stable starts the alpha train
-              # on the same base - the automatic step never emits a stable, and
-              # an unknown suffix (e.g. -rc.1) stays a no-op. First number of a
-              # train is 01 (#98).
+              # Owner rulings (#96/#98/#100): a clean stable starts a train on the NEXT
+              # patch line - semver's floor for unpublished work after a release
+              # (2.2.0 -> 2.2.1-alpha.01), never a stable itself; unknown
+              # suffixes (e.g. -rc.1) stay a no-op.
               if printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-                NEXT="$VERSION-alpha.01"
+                NEXT=$(printf '%s.%d-alpha.01' "${VERSION%.*}" "$((10#${VERSION##*.} + 1))")
               else
                 echo "No alpha/beta train on '$VERSION' and not a clean X.Y.Z - nothing to auto-bump."
                 exit 0
