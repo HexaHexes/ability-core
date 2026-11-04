@@ -17,12 +17,15 @@ import net.minecraft.core.MappedRegistry;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import org.bitwisemadness.abilitycore.ResourceConsumersDeclarations;
 import org.bitwisemadness.abilitycore.api.AbilityDefinition;
 import org.bitwisemadness.abilitycore.api.ActivationOutcome;
 import org.bitwisemadness.abilitycore.api.ActivationRequest;
 import org.bitwisemadness.abilitycore.api.ActivationResult;
 import org.bitwisemadness.abilitycore.api.ActivationSource;
 import org.bitwisemadness.abilitycore.api.ActivationType;
+import org.bitwisemadness.abilitycore.api.ChargingModel;
+import org.bitwisemadness.abilitycore.api.ResourceCost;
 import org.bitwisemadness.abilitycore.api.TargetContext;
 import org.bitwisemadness.abilitycore.registry.AbilityRegistries;
 import org.junit.jupiter.api.AfterEach;
@@ -92,6 +95,7 @@ class TargetValidationStepTest {
     @AfterEach
     void tearDown() {
         AbilityRegistries.installRegistryForTests(previousRegistry);
+        ResourceConsumersDeclarations.reset();
     }
 
     private static AbilityDefinition definition(Map<String, String> data) {
@@ -177,6 +181,85 @@ class TargetValidationStepTest {
                 pipeline.run(request(BLOCK_ONLY, new TargetContext.EntityHint(entityId)), null).outcome());
         assertTrue(pipeline.run(request(BLOCK_ONLY,
                 new TargetContext.BlockHint(new BlockPos(0, 64, 0))), null).isSuccess());
+    }
+
+    @Test
+    void selfOnlyAbilityRefusesAnEntityContext() {
+        // AC3: a definition declaring accepted_targets=self behaves per its
+        // declared kinds when the request carries an ENTITY context.
+        ResourceLocation selfOnly = ResourceLocation.fromNamespaceAndPath("tensura", "self_only");
+        Registry.register(AbilityRegistries.registry(), selfOnly, definition(
+                Map.of(TargetValidationStep.ACCEPTED_TARGETS_KEY, "self")));
+        handlers.register(selfOnly, (req, player) -> ActivationResult.ACTED);
+
+        var withEntity = pipeline.run(request(selfOnly, new TargetContext.EntityHint(entityId)), null);
+        assertEquals(ActivationOutcome.REFUSED_INVALID_TARGET, withEntity.outcome());
+
+        var withSelf = pipeline.run(request(selfOnly, new TargetContext.Self()), null);
+        assertEquals(ActivationOutcome.ACTED, withSelf.outcome());
+    }
+
+    @Test
+    void areaHintRequiresItsCenterLoaded() {
+        var loaded = pipeline.run(request(ANY_KIND,
+                new TargetContext.AreaHint(new BlockPos(0, -60, 0), 4.0)), null);
+        assertEquals(ActivationOutcome.ACTED, loaded.outcome());
+
+        blockLoaded = false;
+        var unloaded = pipeline.run(request(ANY_KIND,
+                new TargetContext.AreaHint(new BlockPos(0, -60, 0), 4.0)), null);
+        assertEquals(ActivationOutcome.REFUSED_INVALID_TARGET, unloaded.outcome());
+    }
+
+    @Test
+    void allFiveContextKindsRoundTripToTheProvider() {
+        // AC1: request -> resolution -> provider mapping for every kind; the
+        // mock adapter records what it actually received, unchanged.
+        ResourceLocation mapped = ResourceLocation.fromNamespaceAndPath("tensura", "mapped");
+        Registry.register(AbilityRegistries.registry(), mapped, definition(Map.of()));
+        List<TargetContext> seen = new ArrayList<>();
+        handlers.register(mapped, (req, player) -> {
+            seen.add(req.target());
+            return ActivationResult.ACTED;
+        });
+
+        List<TargetContext> kinds = List.of(
+                new TargetContext.None(), new TargetContext.Self(),
+                new TargetContext.EntityHint(entityId),
+                new TargetContext.BlockHint(new BlockPos(0, -60, 0)),
+                new TargetContext.AreaHint(new BlockPos(0, -60, 0), 4.0));
+        for (TargetContext kind : kinds) {
+            var result = pipeline.run(request(mapped, kind), null);
+            assertEquals(ActivationOutcome.ACTED, result.outcome(), "kind must pass: " + kind);
+        }
+        assertEquals(kinds, seen, "every kind reaches the provider unchanged after resolution");
+    }
+
+    @Test
+    void invalidTargetRefusalConsumesNothing() {
+        // AC2 unit half: REFUSED_INVALID_TARGET precedes RESOURCE, so an armed
+        // consumer sees no validate and no charge; the control run below proves
+        // the arm was live rather than vacuous.
+        ResourceLocation paid = ResourceLocation.fromNamespaceAndPath("tensura", "paid_targeted");
+        Registry.register(AbilityRegistries.registry(), paid, new AbilityDefinition(
+                "tensura.skill.paid", null, ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
+                ActivationType.INSTANT, new ResourceCost(ResourceConsumersDeclarations.RESOURCE, 10.0),
+                Set.of(), Map.of()));
+        handlers.register(paid, (req, player) -> ActivationResult.ACTED, ChargingModel.EXTERNAL);
+        pipeline.registerStep(ActivationPipeline.PipelinePhase.RESOURCE, ResourceChargeStep.INSTANCE);
+        ResourceConsumersDeclarations.sufficient();
+
+        resolved = false;
+        var refused = pipeline.run(request(paid, new TargetContext.EntityHint(entityId)), null);
+        assertEquals(ActivationOutcome.REFUSED_INVALID_TARGET, refused.outcome());
+        assertTrue(ResourceConsumersDeclarations.events().isEmpty(),
+                "no validate, no charge: " + ResourceConsumersDeclarations.events());
+
+        resolved = true;
+        var allowed = pipeline.run(request(paid, new TargetContext.EntityHint(entityId)), null);
+        assertEquals(ActivationOutcome.ACTED, allowed.outcome());
+        assertEquals(List.of("validate", "charge"), ResourceConsumersDeclarations.events(),
+                "the control run must charge, proving the arm was live");
     }
 
     @Test
