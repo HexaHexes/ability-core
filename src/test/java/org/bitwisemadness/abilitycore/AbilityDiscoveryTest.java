@@ -74,6 +74,35 @@ class AbilityDiscoveryTest {
     }
 
     @Test
+    void readdedProviderRestoresTheSameSavedReference() {
+        // AC2 round-trip: a saved id survives its provider's absence and
+        // resolves again - value-equal - when the provider returns.
+        AbilityDefinition saved = AbilityDiscovery.get(SKILL).orElseThrow();
+
+        // provider removed: its ids go absent, the other provider's remain
+        var withoutProvider = new MappedRegistry<AbilityDefinition>(
+                AbilityRegistries.ABILITY_REGISTRY_KEY, Lifecycle.stable(), false);
+        Registry.register(withoutProvider, BATTLEWILL, def("tensura.will.a",
+                ResourceLocation.fromNamespaceAndPath("tensura", "battlewill"), Set.of("active", "unarmed")));
+        AbilityRegistries.installRegistryForTests(withoutProvider);
+        assertEquals(PresenceState.INERT_MISSING, AbilityDiscovery.presence(SKILL));
+        assertFalse(AbilityDiscovery.get(SKILL).isPresent(), "a removed provider's ids are absent");
+
+        // provider re-added: a fresh registry carrying an equal definition
+        var withProvider = new MappedRegistry<AbilityDefinition>(
+                AbilityRegistries.ABILITY_REGISTRY_KEY, Lifecycle.stable(), false);
+        Registry.register(withProvider, SKILL, def("tensura.skill.a",
+                ResourceLocation.fromNamespaceAndPath("tensura", "skill"), Set.of("active")));
+        Registry.register(withProvider, BATTLEWILL, def("tensura.will.a",
+                ResourceLocation.fromNamespaceAndPath("tensura", "battlewill"), Set.of("active", "unarmed")));
+        AbilityRegistries.installRegistryForTests(withProvider);
+
+        assertEquals(PresenceState.AVAILABLE, AbilityDiscovery.presence(SKILL));
+        assertEquals(saved, AbilityDiscovery.get(SKILL).orElseThrow(),
+                "the same saved reference resolves again, value-equal");
+    }
+
+    @Test
     void entriesCarryIdsEvenForValueEqualDefinitions() {
         // core#67: two abilities sharing display metadata must not collapse -
         // a reverse lookup keyed on the definition alone would map both to
