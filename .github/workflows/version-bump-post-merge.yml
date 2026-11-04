@@ -23,7 +23,7 @@ name: Version bump (post-merge)
 # an opaque GH013.
 #
 # Owner ruling (issue #96): this workflow always advances the train - a clean
-# (x.y.z) starts -alpha.1 on the same base, and -alpha.N / -beta.N each
+# (x.y.z) starts -alpha.01 on the same base, and -alpha.N / -beta.N each
 # increment. Only manual bumps via the version-bump dispatch ever produce
 # a stable version.
 
@@ -74,22 +74,26 @@ jobs:
 
           case "$VERSION" in
             *-alpha.[0-9]*)
+              # Owner ruling (issue #98): the counter is always two digits, and
+              # 10# stops a padded value (08/09) from being read as octal.
               BASE="${VERSION%-alpha.*}"
               N="${VERSION##*-alpha.}"
-              NEXT="$BASE-alpha.$((N + 1))"
+              NEXT=$(printf '%s-alpha.%02d' "$BASE" "$((10#$N + 1))")
               ;;
             *-beta.[0-9]*)
-              # Owner ruling (issue #96): beta trains advance automatically too.
+              # Owner rulings: beta trains advance automatically (#96), padded to
+              # two digits with octal-safe parsing (#98).
               BASE="${VERSION%-beta.*}"
               N="${VERSION##*-beta.}"
-              NEXT="$BASE-beta.$((N + 1))"
+              NEXT=$(printf '%s-beta.%02d' "$BASE" "$((10#$N + 1))")
               ;;
             *)
               # Owner ruling (issue #96): a clean stable starts the alpha train
               # on the same base - the automatic step never emits a stable, and
-              # an unknown suffix (e.g. -rc.1) stays a no-op.
+              # an unknown suffix (e.g. -rc.1) stays a no-op. First number of a
+              # train is 01 (#98).
               if printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-                NEXT="$VERSION-alpha.1"
+                NEXT="$VERSION-alpha.01"
               else
                 echo "No alpha/beta train on '$VERSION' and not a clean X.Y.Z - nothing to auto-bump."
                 exit 0
