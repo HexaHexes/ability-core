@@ -12,9 +12,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import net.minecraft.core.MappedRegistry;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import org.bitwisemadness.abilitycore.ResourceConsumersDeclarations;
 import org.bitwisemadness.abilitycore.api.AbilityDefinition;
 import org.bitwisemadness.abilitycore.api.ActivationOutcome;
 import org.bitwisemadness.abilitycore.api.ActivationRequest;
@@ -22,6 +25,9 @@ import org.bitwisemadness.abilitycore.api.ActivationResult;
 import org.bitwisemadness.abilitycore.api.ActivationSource;
 import org.bitwisemadness.abilitycore.api.ActivationType;
 import org.bitwisemadness.abilitycore.api.ChargingModel;
+import org.bitwisemadness.abilitycore.api.CooldownOwners;
+import org.bitwisemadness.abilitycore.api.CooldownTracker;
+import org.bitwisemadness.abilitycore.api.ResourceCost;
 import org.bitwisemadness.abilitycore.registry.AbilityRegistries;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,11 +45,14 @@ class ActivationPipelineTest {
     private static final ResourceLocation EXTERNAL_KNOWN =
             ResourceLocation.fromNamespaceAndPath("tensura", "external_known");
     private static final ResourceLocation UNKNOWN = ResourceLocation.fromNamespaceAndPath("tensura", "unknown");
+    private static final ResourceLocation COMBO_PAID =
+            ResourceLocation.fromNamespaceAndPath("tensura", "combo_paid");
 
     private ActivationHandlerRegistry handlers;
     private ActivationPipeline pipeline;
     private Registry<AbilityDefinition> previousRegistry;
     private final List<String> trace = new ArrayList<>();
+    private final List<Long> startedDurations = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
@@ -54,19 +63,27 @@ class ActivationPipelineTest {
                 AbilityRegistries.ABILITY_REGISTRY_KEY, Lifecycle.stable(), false);
         Registry.register(fixture, KNOWN, def());
         Registry.register(fixture, EXTERNAL_KNOWN, def());
+        Registry.register(fixture, COMBO_PAID,
+                def(new ResourceCost(ResourceConsumersDeclarations.RESOURCE, 10.0)));
         AbilityRegistries.installRegistryForTests(fixture);
     }
 
     @AfterEach
     void tearDown() {
         AbilityRegistries.installRegistryForTests(previousRegistry);
+        CooldownOwners.remove(COMBO_PAID);
+        ResourceConsumersDeclarations.reset();
     }
 
     private static AbilityDefinition def() {
+        return def(null);
+    }
+
+    private static AbilityDefinition def(ResourceCost cost) {
         return new AbilityDefinition(
                 "tensura.skill.known", null,
                 ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
-                ActivationType.INSTANT, null, java.util.Set.of(), Map.of());
+                ActivationType.INSTANT, cost, Set.of(), Map.of());
     }
 
     private ActivationRequest request(ResourceLocation id) {
@@ -109,6 +126,73 @@ class ActivationPipelineTest {
         var result = pipeline.run(request(KNOWN), null);
         assertEquals(ActivationOutcome.REFUSED_RESTRICTED, result.outcome());
         assertEquals(List.of(), trace, "refusal must precede resource check and activation");
+    }
+
+    @Test
+    void comboRefusalLeavesNoReservationOrPendingResidue() {
+        // core#13 AC3: the combo miss. Downstream is fully armed - consumer,
+        // cooldown start, handler - so a broken short-circuit trips it. The
+        // consumer is instrumentation; charge semantics live in ResourceChargeStepTest.
+        ResourceConsumersDeclarations.sufficient();
+        CooldownOwners.declareExternal(COMBO_PAID, 100L, recordingTracker());
+        handlers.register(COMBO_PAID, (req, player) -> {
+            trace.add("activate");
+            return ActivationResult.ACTED;
+        }, ChargingModel.EXTERNAL);
+        pipeline.registerStep(ActivationPipeline.PipelinePhase.COOLDOWN, ExternalCooldownStep.INSTANCE);
+        pipeline.registerStep(ActivationPipeline.PipelinePhase.RESOURCE, ResourceChargeStep.INSTANCE);
+        EligibilityChain chain = new EligibilityChain();
+        chain.register(comboScopedRefusal());
+        pipeline.registerStep(ActivationPipeline.PipelinePhase.ELIGIBILITY, chain.asStep());
+
+        var refused = pipeline.run(ActivationRequest.of(COMBO_PAID, ActivationSource.COMBO), null);
+
+        assertEquals(ActivationOutcome.REFUSED_RESTRICTED, refused.outcome());
+        assertFalse(refused.isSuccess(), "a refusal must never read as pending or success");
+        assertEquals(List.of("combo-rule"), trace, "only the combo-scoped rule ran");
+        assertEquals(List.of(), ResourceConsumersDeclarations.events(),
+                "no validate, no charge: a refusal reserves nothing");
+        assertEquals(List.of(), startedDurations, "a refusal starts no cooldown");
+
+        // Control: the same arms fire for a permitted request, proving the
+        // assertions above were live rather than vacuous.
+        var acted = pipeline.run(ActivationRequest.of(COMBO_PAID, ActivationSource.DIRECT_SLOT), null);
+        assertEquals(ActivationOutcome.ACTED, acted.outcome());
+        assertEquals(List.of("combo-rule", "activate"), trace);
+        assertEquals(List.of("validate", "charge"), ResourceConsumersDeclarations.events());
+        assertEquals(List.of(100L), startedDurations, "the permitted run starts its cooldown");
+    }
+
+    /** The brief's combo miss: a rule scoped to COMBO that always refuses. */
+    private EligibilityRule comboScopedRefusal() {
+        return new EligibilityRule() {
+            @Override
+            public Optional<ActivationResult> evaluate(ActivationRequest request,
+                    ServerPlayer player, ActivationContext context) {
+                trace.add("combo-rule");
+                return Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_RESTRICTED));
+            }
+
+            @Override
+            public Set<ActivationSource> appliesTo() {
+                return Set.of(ActivationSource.COMBO);
+            }
+        };
+    }
+
+    /** Records starts so a refused run can prove it started no cooldown. */
+    private CooldownTracker recordingTracker() {
+        return new CooldownTracker() {
+            @Override
+            public long remainingTicks(ResourceLocation abilityId, ServerPlayer player) {
+                return 0L;
+            }
+
+            @Override
+            public void start(ResourceLocation abilityId, ServerPlayer player, long durationTicks) {
+                startedDurations.add(durationTicks);
+            }
+        };
     }
 
     @Test
