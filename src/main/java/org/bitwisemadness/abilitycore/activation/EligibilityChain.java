@@ -1,13 +1,17 @@
 package org.bitwisemadness.abilitycore.activation;
 
+import com.mojang.logging.LogUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.server.level.ServerPlayer;
 import org.bitwisemadness.abilitycore.api.ActivationRequest;
 import org.bitwisemadness.abilitycore.api.ActivationResult;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
 
 /**
  * The ordered eligibility chain (REQ-CORE-07), run as the pipeline's first
@@ -33,13 +37,28 @@ import org.jetbrains.annotations.Nullable;
  * {@code AbilityCore}) at their mod init. Duplicate rule objects are
  * permitted (the same rule may be registered on several chains); there is no
  * global static state.</p>
+ *
+ * <p>Diagnostics (REQ-CORE-07 acceptance): a refusal debug-logs its reason -
+ * ability, source, outcome and message key - <b>once per key</b> per chain
+ * instance, so holding the activation key logs one line instead of one per
+ * press; a different ability, source, outcome or reason logs anew. The
+ * per-instance set is bounded ({@value #MAX_LOGGED_KEYS} keys, cleared on
+ * overflow) so a rule that synthesises unique reasons cannot grow it without
+ * limit. Permitted requests and rules scoped out of the source are never
+ * logged - they are not refusals.</p>
  */
 public final class EligibilityChain {
+
+    /** Once-per-key cap: the refusal set clears when it reaches this size. */
+    private static final int MAX_LOGGED_KEYS = 1024;
+
+    private static final Logger LOGGER = LogUtils.getLogger();
 
     private record Registration(EligibilityRule rule) {
     }
 
     private final List<Registration> rules = new ArrayList<>();
+    private final Set<String> loggedRefusals = ConcurrentHashMap.newKeySet();
     @Nullable
     private final EligibilityChain parent;
 
@@ -86,6 +105,7 @@ public final class EligibilityChain {
                     throw new IllegalStateException(
                             "Eligibility rule returned a success outcome - rules may only refuse or pass");
                 }
+                logRefusalOnce(request, result);
                 return Optional.of(result);
             }
         }
@@ -98,5 +118,22 @@ public final class EligibilityChain {
     /** Adapter exposing this chain as a single ELIGIBILITY-phase pipeline step. */
     public ActivationPipeline.Step asStep() {
         return (request, player, context) -> check(request, player, context);
+    }
+
+    /**
+     * Debug-logs a refusal once per key (ability, source, outcome, message
+     * key) so a held activation key cannot spam the log; identical refusals
+     * are suppressed until the bounded set clears on overflow.
+     */
+    private void logRefusalOnce(ActivationRequest request, ActivationResult result) {
+        String key = request.abilityId() + "|" + request.source() + "|"
+                + result.outcome() + "|" + result.effectiveMessageKey();
+        if (loggedRefusals.size() >= MAX_LOGGED_KEYS) {
+            loggedRefusals.clear();
+        }
+        if (loggedRefusals.add(key)) {
+            LOGGER.debug("Refusing {} ({} from {}): {}", request.abilityId(),
+                    result.outcome(), request.source(), result.effectiveMessageKey());
+        }
     }
 }
