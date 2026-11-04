@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import net.minecraft.core.MappedRegistry;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
@@ -189,6 +190,43 @@ class ResourceChargeStepTest {
         assertEquals(ActivationOutcome.ACTED, result.outcome());
         assertEquals(1, consumerSeen.size(), "validate ran (pre-check), core charge did NOT (NATIVE owns charging)");
         assertEquals(List.of("activate"), trace);
+    }
+
+    @Test
+    void nativeAbilityDeductsExactlyOnceThroughItsOwnSite() {
+        // REQ-CORE-04 AC2 (mock half): one NATIVE activation = exactly one
+        // provider-side deduction, core's consumer sees only the pre-check.
+        // The ISS-backed observation is a release-time dev-run check (#30).
+        ResourceConsumers.declare(RESOURCE, answering(Affordability.sufficient(RESOURCE, 10.0)));
+        AtomicInteger deductions = new AtomicInteger();
+        handlers.register(PAID, (req, player) -> {
+            deductions.incrementAndGet(); // the provider's own charge site
+            return ActivationResult.ACTED;
+        }); // NATIVE
+
+        var result = pipeline.run(request(PAID), null);
+        assertEquals(ActivationOutcome.ACTED, result.outcome());
+        assertEquals(1, deductions.get(), "exactly one deduction per activation");
+        assertEquals(1, consumerSeen.size(),
+                "core validated only - a second deduction site must not exist");
+    }
+
+    @Test
+    void handlerRefusalNeverCharges() {
+        // REQ-CORE-04 AC3: the handler refuses AFTER validation, so the
+        // charge site (post-ACTED) must not fire. externalAbilityChargesOnce...
+        // is the paired control proving this charge arm fires on success.
+        ResourceConsumers.declare(RESOURCE, answering(Affordability.sufficient(RESOURCE, 10.0)));
+        handlers.register(PAID, (req, player) -> {
+            trace.add("activate");
+            return ActivationResult.refused(ActivationOutcome.REFUSED_RESTRICTED);
+        }, ChargingModel.EXTERNAL);
+
+        var result = pipeline.run(request(PAID), null);
+        assertEquals(ActivationOutcome.REFUSED_RESTRICTED, result.outcome());
+        assertEquals(List.of("activate"), trace, "the handler ran and refused");
+        assertEquals(1, consumerSeen.size(),
+                "validate ran, charge never did: a failed activation consumes nothing");
     }
 
     @Test

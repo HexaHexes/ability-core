@@ -44,6 +44,27 @@ class AbilityAvailabilityTest {
     }
 
     @Test
+    void affordabilityRoundTripsIntoTheTupleInclUnknown() {
+        // REQ-CORE-04 AC4: every Affordability state lands in the tuple's
+        // availability slot faithfully - above all, UNKNOWN stays unknown
+        // (the fail-closed verdict must never read as castable).
+        var sufficient = Affordability.sufficient("mana", 10.0).toAvailability();
+        assertTrue(sufficient.isAvailable(), "sufficient means castable");
+
+        var insufficient = Affordability.insufficient("mana", 10.0).toAvailability();
+        assertTrue(insufficient instanceof AvailabilityState.Unavailable,
+                "insufficient must become unavailable, not unknown or available");
+        assertEquals("insufficient_mana", ((AvailabilityState.Unavailable) insufficient).reason());
+
+        var unknown = Affordability.unknown("mana").toAvailability();
+        assertTrue(unknown instanceof AvailabilityState.Unknown,
+                "unknown must round-trip as unknown - never a guess");
+        AbilityAvailability tuple = new AbilityAvailability(
+                Metric.unknown(), Metric.unknown(), unknown);
+        assertFalse(tuple.isAvailable(), "the assembled tuple must not read as castable");
+    }
+
+    @Test
     void realProviderPopulatesEveryMetric() {
         AvailabilityProviders.declare(FIREBALL, (player, id) -> new AbilityAvailability(
                 Metric.known(0.5),

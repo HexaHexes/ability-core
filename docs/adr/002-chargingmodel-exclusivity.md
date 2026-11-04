@@ -15,15 +15,28 @@ there is no pipeline-level charge and no post-activation event.
 Every ability declares exactly one `chargingModel` at registration:
 `NATIVE` (provider's pipeline charges; core must not) or `EXTERNAL` (core
 charges after successful activation). Registration **rejects** misdeclared or
-dual-chargeable abilities. Bridge payment modes map onto the model and may only
-use sanctioned single-site hooks (ISS `SpellOnCastEvent` downward only;
-definition-time Tensura costs).
+dual-chargeable abilities.
+
+Bridge payment modes map onto the model exactly as follows (REQ-BR-06,
+SPIKE-br-2 §2) - the mapping is validation input, not a second charging site:
+
+| Bridge mode | For a `NATIVE` ability | For an `EXTERNAL` ability |
+|---|---|---|
+| `native` (default) | pass-through: the provider's single site charges | pass-through to core's single post-success site |
+| `scaled`, `fixed` | only the sanctioned hooks, as **modifications of the single site** (ISS `SpellOnCastEvent.setManaCost` downward; definition-time Tensura cost) - never an added site | core charges once post-success (the model's own site) |
+| `free`, `disabled` | **only with an explicit per-ability whitelist proving the native path charges zero - never assumed** | same whitelist precondition |
+
+A mode that would create a second charge site for a `NATIVE` ability is
+rejected loudly at registration/config load, never at combat time (shared
+validation with core#15).
 
 ## Consequences
 
 - Double-charging becomes a structural impossibility rather than a runtime
   heuristic; violations fail at registration with loud errors.
-- `free`/`fixed` modes carry explicit preconditions instead of assumptions.
+- `free`/`disabled` carry an explicit precondition (a per-ability whitelist
+  proving the native path charges zero) instead of an assumption; `scaled`/
+  `fixed` carry the single-site-only precondition (see the mapping table).
 - The multi-ability atomic all-or-nothing case stays deferred (no reservation
   primitive exists) - see bridge issue #14.
 
