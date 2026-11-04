@@ -34,8 +34,19 @@ during cycling, and assignment screens are exempt from that skipping.
    this mod owns - built-ins plus registered assignable bars - each with a
    persisted `bar_id`, active bar stored **by id** (not index), so ids survive
    re-registration order and index shifts. Non-assignable registrations carry
-   no attachment state; their content stays with the registering mod behind a
-   content-provider API (rendering slice). Inert preservation extends to
+   no attachment state **of their own**; their content stays with the
+   registering mod behind a content-provider API (shipped as hotbar#83/#84).
+   **Amended by hotbar#89 (2026-11-04):** a content-owned bar may
+   additionally carry **owner-seeded runtime assignments** in this
+   attachment - the owning mod writes the verb into its own cells server-side
+   (persisted, synced, a re-seed on content change authoritative over any
+   prior state), the fail-closed views then resolve those cells like any
+   stored bar so activation carries the cell index as slot context, and
+   decision 2's assignability gate keeps players out: their payload is
+   rejected outright once the bar is stored. The cell's *content* still
+   comes from the provider (item, texture, frame); only the verb rides the
+   attachment, and its overlays render alongside the provider's cells.
+   Inert preservation extends to
    identity: a stored `bar_id` with no live registration is kept, never
    remapped to a later registrant, re-adopted on re-registration. Loading
    reconciles state with the live registry (append missing assignable bars,
@@ -73,12 +84,19 @@ during cycling, and assignment screens are exempt from that skipping.
   bars (absent from the attachment) can be active.
 - ADR-011 remains the state-model record except its DERIVED-layers clause,
   which this ADR supersedes.
-- The content-provider API for rendering non-assignable bars is deferred to the
-  rendering slice; nothing here draws mod-owned content yet.
+- The content-provider API shipped as hotbar#83/#84 (mod-owned cells render
+  through the provider), and the owner-seeded assignment write shipped as
+  hotbar#89 - §3 above carries the seeding amendment.
+- Ability-to-bar scoping (an ability may belong to exactly one registered
+  bar) landed as hotbar#90 as a new axis: it changes neither the menu
+  exclusion here nor content placement, so this ADR records only its README
+  note.
 
 ## Links
 
 hotbar#77 (registration API), hotbar#27 (assignment screen), hotbar#28
-(multi-hotbar switching, controls, skip-empty); ADR-011 (state model,
+(multi-hotbar switching, controls, skip-empty), hotbar#83/#84 (content
+provider), hotbar#89 (owner-seeded assignments, §3 amendment), hotbar#90
+(ability-to-bar scoping); ADR-011 (state model,
 superseded clause), ADR-003 (sync), ADR-004 (versioned persistence),
 ADR-007 (spellbook hotbar location).
