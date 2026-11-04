@@ -7,6 +7,7 @@ repo's own and is edited freely; keep it aligned with the org rules rather than
 restating them.
 
 API surface policy: `docs/api-surface.md` (stable packages, extension points, breaking-change policy, dependency coordinates).
+Sync contract and payload inventory: `docs/sync.md` (channel discipline, version-bump checklist, manual checks).
 
 Architecture decision records: `docs/adr/` (index in `docs/adr/README.md`; new decisions get an ADR in the same PR that records them).
 

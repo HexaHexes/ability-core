@@ -29,7 +29,9 @@ Consumers extend core through exactly four mechanisms:
    instances (source-scoped) via `EligibilityChain.register(...)` on
    `AbilityCore.ELIGIBILITY` or a composed child chain.
 4. **Sync events** — consumers listen for `AbilitySyncNeededEvent` on the
-   NeoForge game bus and send their state payloads.
+   NeoForge game bus and send their state payloads. The payload inventory,
+   serverbound budget and version-bump checklist live in
+   [`docs/sync.md`](sync.md).
 5. **Overlay providers** — providers declare an `AvailabilityProvider` per
    ability via `AvailabilityProviders.declare(...)` to feed the bar's
    cooldown/cost/availability overlay (REQ-HOT-08).
