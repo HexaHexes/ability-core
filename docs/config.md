@@ -61,6 +61,30 @@ renderer. Core renders nothing; without a sink the diagnostic is log-only.
 The sink receives an English message - map it to a translation key on your
 side if you display it.
 
+### Loud file inspection (REQ-CFG-03)
+
+NeoForge corrects invalid values in the *loaded in-memory model* and logs
+only one generic line per file ("Configuration file ... is not correct.
+Correcting") - it never names the key, and unknown keys are silently
+ignored. `ConfigDiagnostics.inspectFile(spec, path, source)` closes that
+gap: it re-reads the file (parse-only - **never writes, never deletes**,
+unknown keys intact) and logs at **WARN**:
+
+- every key the spec does not define: `Config <file> contains unknown key
+  <key> - ignored, never removed`;
+- every value the spec corrects, with key and offending value:
+  `Config <file> key <key> holds an invalid value (<bad>); corrected to
+  (<value>) (<action>)`. The correction rule itself is NeoForge's, verified:
+  an **out-of-range value clamps into range** (999 in a 1..18 spec becomes
+  18), an **unreadable value resets to the default** - observation only, the
+  live config was already corrected by NeoForge in memory.
+
+Core wires this for its own specs from `ModConfigEvent.Loading` and
+`ModConfigEvent.Reloading` (`ConfigInspection`); consumers copy the same
+one-liner for theirs. Inspection never throws - a config load always
+continues. Core ships **no config rewriter**: the only writer of a config
+file is NeoForge itself, and its file model preserves unknown keys.
+
 ## Reload handling (`ModConfigEvent.Loading` / `Reloading`)
 
 The pattern, in two rules:
@@ -74,6 +98,29 @@ The pattern, in two rules:
 2. **If you must cache** (a parsed structure, a derived index), re-derive it
    in a `ModConfigEvent.Reloading` handler for your spec - the ISS idiom
    (`SpellConfigManager`). Never keep a stale derived value past a reload.
+
+## Migration policy (REQ-CFG-03)
+
+The hard rule: **never fatal, always per-value** - a config problem costs one
+value (defaulted, logged), never a crash and never a silently mutated
+preference; a wholly corrupt file falls back to full defaults with one loud
+error.
+
+- **TOML specs (what ships today)** need no `schema_version`: across a mod
+  version bump NeoForge keeps every value whose key still exists, fills new
+  keys with defaults, and leaves removed ("obsolete") keys untouched on
+  disk - which `inspectFile` *reports by key name* instead of anyone
+  deleting them. Corrections are per-value and clamped/defaulted by the
+  platform, logged as shown above.
+- **Custom formats we own** (none ship today; the AC's versioned-format
+  test is conditional on one existing) must carry `schema_version`, a
+  `migrate()` that preserves user-set (non-default) values, obsolete-key
+  reporting through the shared log format, and the same never-fatal rule.
+- When a legacy custom file actually needs converting, use the ISS
+  `LegacyConfigConverter` **one-shot command** pattern - never a silent
+  in-place rewrite.
+- Datapack-layer values are world-owned and replaced wholesale by design -
+  out of migration scope.
 
 ## Core's reference config
 

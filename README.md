@@ -18,6 +18,20 @@ full plan, research tables and open design decisions.)*
 - Synchronisation sends clients what they need to draw and use abilities, and
   nothing they are allowed to decide for themselves.
 
+## Configuration
+
+Core ships two small config files: `ability_core-server.toml`
+(`diagnostics.refusalLog` - how eligibility refusals reach the debug log) and
+`ability_core-client.toml` (`diagnostics.playerNotices` - whether your client
+surfaces notices). Server values are authoritative and synced; client values
+are display preferences only.
+
+Hand-edited problems never bite silently: an invalid or unknown/obsolete key
+is logged at **WARN naming the key**, the game keeps running on the corrected
+value, and core never rewrites or deletes your file - annotations and unused
+keys survive. The full contract (precedence, diagnostics, migration) is in
+[`docs/config.md`](docs/config.md).
+
 ## Dependencies
 | | Mod | Why |
 |---|---|---|
