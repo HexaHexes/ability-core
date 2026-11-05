@@ -27,7 +27,21 @@ public final class CooldownOwners {
         EXTERNAL
     }
 
-    private record Entry(Owner owner, long durationTicks, @Nullable CooldownTracker tracker) {
+    /**
+     * Read-through view of a provider's OWN native cooldown state (REQ-CORE-05
+     * projection rule, core#16): core stores this function, never the state -
+     * so the answer is the provider's by construction (exact parity), there is
+     * no core-side copy to re-sync, and a {@code /reload} or re-learn is
+     * visible on the next read. Server-side only: the client reads the
+     * provider's own synced state through the overlay tuple, never here.
+     */
+    @FunctionalInterface
+    public interface NativeProjection {
+        long remainingTicks(ResourceLocation abilityId, @Nullable ServerPlayer player);
+    }
+
+    private record Entry(Owner owner, long durationTicks, @Nullable CooldownTracker tracker,
+            @Nullable NativeProjection projection) {
         private Entry {
             if (owner == null) {
                 throw new IllegalArgumentException("owner must not be null");
@@ -40,6 +54,10 @@ public final class CooldownOwners {
                 throw new IllegalArgumentException(
                         "NATIVE cooldown forbids a core tracker - the provider owns its cooldown state");
             }
+            if (owner == Owner.EXTERNAL && projection != null) {
+                throw new IllegalArgumentException(
+                        "EXTERNAL cooldown forbids a projection - core's tracker is the answer source");
+            }
         }
     }
 
@@ -50,17 +68,30 @@ public final class CooldownOwners {
 
     /** Default semantics: providers own their cooldowns (most common case). */
     public static void declareNative(ResourceLocation abilityId) {
-        declare(abilityId, new Entry(Owner.NATIVE, 0L, null));
+        declare(abilityId, new Entry(Owner.NATIVE, 0L, null, null));
+    }
+
+    /**
+     * NATIVE with a read-through projection: core's contract reports this
+     * provider's remaining exactly (core#16 AC1 parity) while the provider's
+     * pipeline stays the only gate and start site. The projection is a
+     * function, not state - core never copies or re-syncs the answer.
+     */
+    public static void declareNative(ResourceLocation abilityId, NativeProjection projection) {
+        if (projection == null) {
+            throw new IllegalArgumentException("projection must not be null - use declareNative(id) without one");
+        }
+        declare(abilityId, new Entry(Owner.NATIVE, 0L, null, projection));
     }
 
     /** Core-tracked cooldown with the built-in non-persistent store. */
     public static void declareExternal(ResourceLocation abilityId, long durationTicks) {
-        declare(abilityId, new Entry(Owner.EXTERNAL, durationTicks, CoreCooldownTracker.INSTANCE));
+        declare(abilityId, new Entry(Owner.EXTERNAL, durationTicks, CoreCooldownTracker.INSTANCE, null));
     }
 
     /** Core-tracked cooldown with a provider-supplied tracker (e.g. for persisted state). */
     public static void declareExternal(ResourceLocation abilityId, long durationTicks, CooldownTracker tracker) {
-        declare(abilityId, new Entry(Owner.EXTERNAL, durationTicks, tracker));
+        declare(abilityId, new Entry(Owner.EXTERNAL, durationTicks, tracker, null));
     }
 
     private static void declare(ResourceLocation abilityId, Entry entry) {
@@ -85,6 +116,16 @@ public final class CooldownOwners {
         return entry == null || entry.owner() != Owner.EXTERNAL
                 ? Optional.empty()
                 : Optional.ofNullable(entry.tracker());
+    }
+
+    /**
+     * The registered native projection, or null (NATIVE without one, EXTERNAL,
+     * or undeclared) - {@link CooldownContract} maps null to unknown.
+     */
+    @Nullable
+    public static NativeProjection projectionFor(ResourceLocation abilityId) {
+        Entry entry = abilityId == null ? null : ENTRIES.get(abilityId);
+        return entry == null || entry.owner() != Owner.NATIVE ? null : entry.projection();
     }
 
     /** Declared EXTERNAL duration in ticks, or 0 for NATIVE/undeclared. */
