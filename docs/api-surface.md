@@ -128,22 +128,46 @@ Breaking changes require:
 
 ## Dependency coordinates
 
+The reference pattern, verified verbatim against every current consumer's
+`build.gradle` (2026-11-05):
+
 ```groovy
 repositories {
+    mavenLocal()
     maven {
-        name = 'GitHubPackages'
+        name = 'AbilityCorePackages'
         url = uri('https://maven.pkg.github.com/HexaHexes/ability-core')
         credentials {
             username = System.getenv('GITHUB_ACTOR') ?: project.findProperty('gpr.user')
             password = System.getenv('GITHUB_TOKEN') ?: project.findProperty('gpr.key')
         }
     }
+    mavenCentral()
 }
 
-dependencies {
-    implementation 'org.bitwisemadness:ability_core:<version>'
-}
+def abilityCore = 'org.bitwisemadness.abilitycore:ability_core:<version>'
+compileOnly abilityCore
+testImplementation abilityCore
 ```
+
+`compileOnly`, not `implementation`: core ships as its own mod at runtime, so
+consumers compile against the artifact but never shade it — `testImplementation`
+covers fixtures that reference contract types. `mavenLocal()` first is the
+template idiom for local-publish testing (`gpr.user`/`gpr.key` in
+`~/.gradle/gradle.properties`).
+
+### The four consumers (verified 2026-11-05)
+
+| Repo | Repository block | Exact pin | Status |
+|---|---|---|---|
+| `ability-hotbar` | `AbilityCorePackages`, as above | `org.bitwisemadness.abilitycore:ability_core:1.0.0-alpha.15` | live |
+| `tensura-iss-integration` | `AbilityCorePackages`, as above | `org.bitwisemadness.abilitycore:ability_core:1.0.0-alpha.9` | live |
+| `ability-battlewills` | `AbilityCorePackages`, as above | `org.bitwisemadness.abilitycore:ability_core:1.0.0-alpha.9` | live |
+| `tensura-better-spellcasting-bridge` | *none yet* | *none yet* | not a build-level consumer: `build.gradle` has no repository block, dependency or source import today (the template already grants `packages: read` and `agents/REPO.md` declares core required) — bridge adopts the pattern above verbatim when its core-dependent implementation starts |
+
+The group is `org.bitwisemadness.abilitycore` (core's `mod_group_id`) while
+the artifact id stays `ability_core`; the repository path is
+`HexaHexes/ability-core`.
 
 **Secret scoping:** `GITHUB_TOKEN` must be injected scoped to the Gradle
 step only (never at job level — it silently changes what `actions/checkout`
@@ -156,11 +180,24 @@ like a mistyped coordinate.
 verified against (e.g. `1.0.0-alpha.9`). Bumps are deliberate, never
 implicit (see AGENTS.md "Pin the exact version").
 
-## Leak gate
+## Leak gates (mechanism)
 
-The `ApiLeakGateTest` (in `src/test/`) scans the compiled class files of all
-supported packages for byte-level references to upstream mod types
-(`io/redspace/ironsspellbooks/`, `io/github/manasmods/`, `net/bettercombat/`,
-`net/kayn/better_spellcasting/`, `net/neoforged/fml/ModList`). Any hit fails
-the build. This gate runs in CI and is the mechanical enforcement of the
-"core is provider-independent" invariant (ADR-001, REQ-XREF-03).
+Two CI gates enforce the bounded surface above (both in `src/test/`, both run
+in every `junit` job, both fail the build on any hit):
+
+- **`ApiLeakGateTest`** — the *upstream* boundary (REQ-XREF-03, ADR-001/005):
+  scans the compiled class files of all supported packages for byte-level
+  references to upstream mod types (`io/redspace/ironsspellbooks/`,
+  `io/github/manasmods/`, `net/bettercombat/`, `net/kayn/better_spellcasting/`,
+  `net/neoforged/fml/ModList`). Upstream knowledge belongs exclusively in
+  consumer-side provider adapters.
+- **`ApiSurfaceSignatureGateTest`** — the *internal* boundary (REQ-CORE-09):
+  loads every compiled class in a supported package (without initialization)
+  and walks its consumer-facing **signatures** — declared public/protected
+  methods, fields, constructors and supertypes, including generic type
+  arguments, type-variable bounds, and array/wildcard components. A signature
+  naming a type outside the supported set (today: core's root package —
+  `AbilityCore` — or any future internal package) fails with the exact member
+  that leaks it. **Signatures only, deliberately**: internal types in method
+  *bodies* (`AbilityCore.MOD_ID`, `AbilityCore.PIPELINE`) are implementation,
+  not surface, and never reach a consumer's compile.
