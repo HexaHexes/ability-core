@@ -46,6 +46,8 @@ class ConsumptionStrategyTest {
             ResourceLocation.fromNamespaceAndPath("tensura", "strat_random");
     private static final ResourceLocation ORDER_ABILITY =
             ResourceLocation.fromNamespaceAndPath("tensura", "strat_in_order");
+    private static final ResourceLocation SOLO_ORDER_ABILITY =
+            ResourceLocation.fromNamespaceAndPath("tensura", "strat_solo_in_order");
     private static final ResourceLocation CUSTOM_ABILITY =
             ResourceLocation.fromNamespaceAndPath("tensura", "strat_custom");
     private static final ResourceLocation SCOPE_ABILITY =
@@ -87,6 +89,10 @@ class ConsumptionStrategyTest {
         register(fixture, ALL_ABILITY, ConsumptionStrategies.ALL);
         register(fixture, RANDOM_ABILITY, ConsumptionStrategies.RANDOM);
         register(fixture, ORDER_ABILITY, ConsumptionStrategies.IN_ORDER);
+        Registry.register(fixture, SOLO_ORDER_ABILITY, new AbilityDefinition(
+                "tensura.skill.strat", null, SKILL_CATEGORY,
+                ActivationType.INSTANT, List.of(COST_ONE), ConsumptionStrategies.IN_ORDER,
+                Set.of(), Map.of()));
         register(fixture, CUSTOM_ABILITY, "test:slot_selector");
         register(fixture, SCOPE_ABILITY, "test:only_second");
         register(fixture, FABRICATE_ABILITY, "test:fabricate");
@@ -115,6 +121,7 @@ class ConsumptionStrategyTest {
         handlers.register(ALL_ABILITY, acting(), ChargingModel.EXTERNAL);
         handlers.register(RANDOM_ABILITY, acting(), ChargingModel.EXTERNAL);
         handlers.register(ORDER_ABILITY, acting(), ChargingModel.EXTERNAL);
+        handlers.register(SOLO_ORDER_ABILITY, acting(), ChargingModel.EXTERNAL);
         handlers.register(CUSTOM_ABILITY, acting(), ChargingModel.EXTERNAL);
         handlers.register(SCOPE_ABILITY, acting(), ChargingModel.EXTERNAL);
         handlers.register(FABRICATE_ABILITY, acting(), ChargingModel.EXTERNAL);
@@ -276,6 +283,23 @@ class ConsumptionStrategyTest {
         swapVerdict(TWO, null);
         assertEquals(ActivationOutcome.REFUSED_UNAFFORDABLE, run(ORDER_ABILITY).outcome());
         assertEquals(List.of("check:" + ONE, "check:" + TWO), events);
+    }
+
+    @Test
+    void inOrderCoversTheFullCostWithOneResourceWhenTheDeclarationSaysSo() {
+        // owner confirmation (2026-11-05): "either the full cost can be covered
+        // by one of the resources" - a one-entry declaration pays with that one
+        // resource; its brokered counterpart is the matrix full-pass case
+        declareVerdict(ONE, sufficient(ONE));
+        assertEquals(ActivationOutcome.ACTED, run(SOLO_ORDER_ABILITY).outcome());
+        assertEquals(List.of("check:" + ONE, "check:" + ONE, "activate", "charge:" + ONE), events,
+                "one consult (selection) + one validation, then the single part pays");
+
+        // and the single part uncovered -> fail before consuming
+        events.clear();
+        swapVerdict(ONE, Affordability.insufficient(ONE, 10.0));
+        assertEquals(ActivationOutcome.REFUSED_UNAFFORDABLE, run(SOLO_ORDER_ABILITY).outcome());
+        assertEquals(List.of("check:" + ONE), events, "abort at the only part - nothing charged");
     }
 
     @Test
