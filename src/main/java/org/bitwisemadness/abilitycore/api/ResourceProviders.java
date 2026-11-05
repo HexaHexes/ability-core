@@ -1,8 +1,12 @@
 package org.bitwisemadness.abilitycore.api;
 
+import com.mojang.logging.LogUtils;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import net.neoforged.fml.ModList;
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
 
 /**
  * Declared resource providers, one per resource id (REQ-CORE-04, issue #88).
@@ -21,6 +25,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * are order-safe.</p>
  */
 public final class ResourceProviders {
+
+    private static final Logger LOGGER = LogUtils.getLogger();
 
     private static final Map<String, ResourceProvider> PROVIDERS = new ConcurrentHashMap<>();
 
@@ -46,6 +52,42 @@ public final class ResourceProviders {
             throw new IllegalStateException(
                     "Duplicate resource provider for '" + resourceId + "' - two owners for one currency");
         }
+    }
+
+    /**
+     * Mod-gated declaration (issue #92): when {@code requiredModId} is not
+     * loaded the declaration is <b>skipped with a debug line</b> - absence is
+     * expected, not misuse - and {@link #has} reads false downstream, so
+     * abilities costing this resource fail closed with
+     * {@code ability.refused.unaffordable.no_provider}: the auto-disable
+     * chain. Null {@code requiredModId} is ungated (core's built-ins).
+     * Call at mod construction - ModList is populated before construction.
+     *
+     * @param resourceId    the resource id
+     * @param provider      the read half
+     * @param requiredModId the mod this resource's state comes from, or null for none
+     */
+    public static void declare(String resourceId, ResourceProvider provider,
+            @Nullable String requiredModId) {
+        declare(resourceId, provider, requiredModId == null || isModLoaded(requiredModId));
+    }
+
+    /**
+     * Presence-resolved seam (package-private, tests): the gate without
+     * touching ModList - fixtures pass the resolved boolean directly, so no
+     * test ever boots FML.
+     */
+    static void declare(String resourceId, ResourceProvider provider, boolean requiredModPresent) {
+        if (!requiredModPresent) {
+            LOGGER.debug("Resource provider for '{}' skipped: required mod is not loaded", resourceId);
+            return;
+        }
+        declare(resourceId, provider);
+    }
+
+    private static boolean isModLoaded(String modId) {
+        ModList modList = ModList.get();
+        return modList != null && modList.isLoaded(modId);
     }
 
     public static Optional<ResourceProvider> get(String resourceId) {

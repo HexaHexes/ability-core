@@ -15,25 +15,38 @@ import org.junit.jupiter.api.Test;
  * never reference upstream mod types. Upstream knowledge belongs exclusively in
  * the consumer repos' provider adapters (ADR-005).
  *
- * <p>Mechanism: scan the compiled class files of the {@code api} and
- * {@code registry} packages for the forbidden internal name prefixes in their
- * constant pools. Upstream classes would appear there if any signature,
- * field, or instruction referenced them.</p>
+ * <p>Mechanism: scan the compiled class files of the {@code api},
+ * {@code registry} and {@code discovery} packages for the forbidden internal
+ * name prefixes in their constant pools. Upstream classes would appear there
+ * if any signature, field, or instruction referenced them.</p>
+ *
+ * <p>{@code ModList} is scoped separately (core#92): the core#14 AC - "discovery
+ * must never branch on ModList presence; provider presence IS registration
+ * presence" - binds {@code discovery} (and {@code registry}, which has no use
+ * case), while {@code api} may use it for <b>declaration-time</b> optional
+ * gates ({@code declare(..., requiredModId)}) - a setup-time loader check,
+ * never a runtime presence inference about registration.</p>
  */
 class ApiLeakGateTest {
 
-    private static final String[] FORBIDDEN = {
+    /** Upstream mod internals - forbidden in every contract package. */
+    private static final String[] UPSTREAM_FORBIDDEN = {
             "io/redspace/ironsspellbooks/",
             "io/github/manasmods/",
             "net/bettercombat/",
             "net/kayn/better_spellcasting/",
-            // issue #14 AC: discovery must never branch on ModList presence -
-            // provider presence IS registration presence
-            "net/neoforged/fml/ModList",
     };
+
+    /** ModList - forbidden where the core#14 AC applies (see class javadoc). */
+    private static final String[] MODLIST_NEEDLE = {"net/neoforged/fml/ModList"};
 
     private static final String[] SCANNED_PACKAGES = {
             "org/bitwisemadness/abilitycore/api/",
+            "org/bitwisemadness/abilitycore/registry/",
+            "org/bitwisemadness/abilitycore/discovery/",
+    };
+
+    private static final String[] MODLIST_FORBIDDEN_PACKAGES = {
             "org/bitwisemadness/abilitycore/registry/",
             "org/bitwisemadness/abilitycore/discovery/",
     };
@@ -46,21 +59,19 @@ class ApiLeakGateTest {
         try (Stream<Path> walk = Files.walk(mainClasses)) {
             for (Path classFile : walk.filter(p -> p.toString().endsWith(".class")).toList()) {
                 String relative = mainClasses.relativize(classFile).toString().replace('\\', '/');
-                boolean inContractPackages = false;
-                for (String prefix : SCANNED_PACKAGES) {
-                    if (relative.startsWith(prefix)) {
-                        inContractPackages = true;
-                        break;
-                    }
-                }
-                if (!inContractPackages) {
+                String contractPackage = contractPackageOf(relative);
+                if (contractPackage == null) {
                     continue;
                 }
                 byte[] bytes = Files.readAllBytes(classFile);
-                for (String needle : FORBIDDEN) {
+                for (String needle : UPSTREAM_FORBIDDEN) {
                     if (containsAscii(bytes, needle)) {
                         violations.add(relative + " references " + needle);
                     }
+                }
+                if (isModListForbidden(contractPackage) && containsAscii(bytes, MODLIST_NEEDLE[0])) {
+                    violations.add(relative + " references ModList - the core#14 AC forbids presence"
+                            + " inference in " + contractPackage + " (api may gate declarations, see core#92)");
                 }
             }
         }
@@ -69,6 +80,25 @@ class ApiLeakGateTest {
                     + String.join("\n", violations)
                     + "\nUpstream knowledge belongs in consumer-side provider adapters (ADR-005).");
         }
+    }
+
+    /** The contract package this class file belongs to, or null if not scanned. */
+    private static String contractPackageOf(String relative) {
+        for (String prefix : SCANNED_PACKAGES) {
+            if (relative.startsWith(prefix)) {
+                return prefix;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isModListForbidden(String contractPackage) {
+        for (String prefix : MODLIST_FORBIDDEN_PACKAGES) {
+            if (contractPackage.equals(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean containsAscii(byte[] haystack, String needle) {

@@ -1,8 +1,12 @@
 package org.bitwisemadness.abilitycore.api;
 
+import com.mojang.logging.LogUtils;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import net.neoforged.fml.ModList;
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
 
 /**
  * Declared resource consumers, one per resource id (REQ-CORE-04).
@@ -13,6 +17,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * produces double-charging.</p>
  */
 public final class ResourceConsumers {
+
+    private static final Logger LOGGER = LogUtils.getLogger();
 
     private static final Map<String, ResourceConsumer> CONSUMERS = new ConcurrentHashMap<>();
 
@@ -45,6 +51,46 @@ public final class ResourceConsumers {
             throw new IllegalStateException(
                     "Duplicate resource consumer for '" + resourceId + "' - two owners for one currency");
         }
+    }
+
+    /**
+     * Mod-gated declaration (issue #92): when {@code requiredModId} is not
+     * loaded the declaration is <b>skipped with a debug line</b> - and the
+     * pairing IAE does <b>not</b> fire (that rule targets genuine misuse, not
+     * dependency absence: if the provider was gated by the same absent mod,
+     * both halves are simply absent and downstream costs fail closed). Null
+     * {@code requiredModId} is ungated.
+     *
+     * @param resourceId    the resource id
+     * @param consumer      the write half
+     * @param requiredModId the mod this resource's state comes from, or null for none
+     */
+    public static void declare(String resourceId, ResourceConsumer consumer,
+            @Nullable String requiredModId) {
+        if (requiredModId != null && !isModLoaded(requiredModId)) {
+            LOGGER.debug("Resource consumer for '{}' skipped: required mod '{}' is not loaded",
+                    resourceId, requiredModId);
+            return;
+        }
+        declare(resourceId, consumer);
+    }
+
+    /**
+     * Presence-resolved seam (package-private, tests): the gate without
+     * touching ModList - fixtures pass the resolved boolean directly, so no
+     * test ever boots FML.
+     */
+    static void declare(String resourceId, ResourceConsumer consumer, boolean requiredModPresent) {
+        if (!requiredModPresent) {
+            LOGGER.debug("Resource consumer for '{}' skipped: required mod is not loaded", resourceId);
+            return;
+        }
+        declare(resourceId, consumer);
+    }
+
+    private static boolean isModLoaded(String modId) {
+        ModList modList = ModList.get();
+        return modList != null && modList.isLoaded(modId);
     }
 
     public static Optional<ResourceConsumer> get(String resourceId) {
