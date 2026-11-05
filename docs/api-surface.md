@@ -8,7 +8,7 @@ for the four consumer repositories.
 
 | Package | Stability | Purpose |
 |---|---|---|
-| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker` |
+| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders` |
 | `org.bitwisemadness.abilitycore.registry` | **Stable** — public API | `AbilityRegistries` (registry key + `registry()` + `isReady()`) |
 | `org.bitwisemadness.abilitycore.discovery` | **Stable** — public API | `AbilityDiscovery` (presence, enumeration, filtering) |
 | `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler`, `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
@@ -19,7 +19,7 @@ for the four consumer repositories.
 
 ## Extension points
 
-Consumers extend core through exactly six mechanisms:
+Consumers extend core through exactly seven mechanisms:
 
 1. **Registry registration** — providers register `AbilityDefinition` entries
    on their own mod bus via `RegisterEvent` for `AbilityRegistries.ABILITY_REGISTRY_KEY`.
@@ -40,6 +40,10 @@ Consumers extend core through exactly six mechanisms:
    once via `CooldownOwners.declareNative(id)` (optionally with a read-through
    `NativeProjection`) or `declareExternal(id, ticks[, tracker])`; exactly one
    declaration per id (see the cooldown contract below).
+7. **Icon projection** — providers declare an `IconProvider` per ability via
+   `IconProviders.declare(...)` for per-player dynamic icons; the resolution
+   order (provider → definition `icon` → consumer placeholder) is the
+   consumer contract (see the icon projection contract below).
 
 ## Overlay data contract (REQ-HOT-08)
 
@@ -73,6 +77,51 @@ distinct. `AbilityAvailability.allUnknown()` is the synthetic no-metric tuple.
 - **Side discipline:** the tuple is client-*renderable* but server-authoritative
   in origin; providers must not mutate state or derive authority the client was
   not given.
+
+## Icon projection contract (core#62)
+
+`AbilityDefinition.iconId` is static per definition - one texture for every
+player. A provider whose icon varies with *player* state (the tier of core
+actually carried, an enchanted stack) projects it through **`IconProviders`**,
+the exact mirror of the overlay registry: `declare(id, provider)` /
+`iconFor(player, id)` / `has` / `remove`, one provider per id (duplicates
+fail loudly), `Optional.empty()` = no provider - so a consumer never branches
+on `ModList.isLoaded` for *icon data*.
+
+**Resolution order (the consumer contract - deterministic, never null, never
+throws):**
+
+1. a provider is present and returns a value → that value;
+2. else the definition's static `icon`;
+3. else the consumer's own placeholder.
+
+```java
+ResourceLocation icon = IconProviders.iconFor(player, id).orElse(null);
+if (icon == null) {
+    icon = AbilityDiscovery.get(id).map(AbilityDefinition::iconId).orElse(null);
+}
+if (icon == null) {
+    icon = PLACEHOLDER; // the consumer's fallback texture
+}
+```
+
+- **Client render-time, client-state only**: `iconFor` runs where the bar
+  renders and reads only client-known state (synced stacks/attachments). The
+  reference consumer shape reads exactly that - the example above takes the
+  already-synced `player`; declaring a provider never triggers or requires a
+  server sync. Icons are display-only, resolved by the texture lookup at
+  draw time: no payload, no server trust.
+- **Failure falls down the order**: a provider that throws or returns null
+  is caught, logged **once per ability** (render time calls it every frame),
+  and resolution continues at step 2 - a broken provider can never crash or
+  blank a slot.
+- **Optional surface**: a consumer that declares nothing behaves exactly as
+  the static `iconId` path - nothing in core registers a provider
+  (grep-gated by `IconProvidersTest`).
+
+Links: hotbar#26 (the render consumer), pseudocore-curios#69 (first
+per-player consumer: press = the carried core's texture), core#62
+(originating contract).
 
 ## Cooldown contract (REQ-CORE-05)
 

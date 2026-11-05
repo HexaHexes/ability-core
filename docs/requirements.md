@@ -65,7 +65,7 @@ written into the implementation issues; this table records that they exist.
 | ID | Requirement | Type | Pri | Status | Depends | Milestone |
 |---|---|---|---|---|---|---|
 | REQ-HOT-01 | Default nine-slot ability bar | F | P0 | designed | core#12/#14 -> hotbar#26 (bar rendering issue) | Phase 3 |
-| REQ-HOT-02 | Vanilla hotbar textures plus compatible dynamic ability icons | F | P1 | designed | folded into hotbar#26 | Phase 3 |
+| REQ-HOT-02 | Vanilla hotbar textures plus compatible dynamic ability icons | F | P1 | designed | folded into hotbar#26; icon projection contract core#62 | Phase 3 |
 | REQ-HOT-03 | ISS spell support in the bar | F | P1 | designed | SPIKE-hot-1 (closed) -> hotbar#18 | Phase 3 |
 | REQ-HOT-04 | Tensura skill and magic support in the bar | F | P1 | awaiting-design | SPIKE-hot-2 (closed) -> hotbar#16 (dependency model open) | Phase 3 |
 | REQ-HOT-05 | Battlewill support in the bar | F | P1 | awaiting-spike | REQ-BW-07 | Phase 3 |
@@ -261,6 +261,7 @@ Tracked independently of REQ-HOT-22 (different problem, different issues).
 | REQ-ISS-12 | iss-integration#15 |
 | REQ-ISS-13 | iss-integration#16 |
 | REQ-ISS-14 | iss-integration#12 |
+| REQ-HOT-02 | hotbar#26 + core#62 |
 | REQ-HOT-03 | hotbar#18 |
 | REQ-HOT-04 | hotbar#16 |
 | REQ-HOT-08 | hotbar#19 |
