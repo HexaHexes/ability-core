@@ -20,19 +20,21 @@ class BuiltinResourcesTest {
     void clean() {
         for (String id : new String[] {
                 BuiltinResources.HEALTH, BuiltinResources.HUNGER,
-                BuiltinResources.EXPERIENCE_POINTS, BuiltinResources.EXPERIENCE_LEVELS }) {
+                BuiltinResources.EXPERIENCE_POINTS, BuiltinResources.EXPERIENCE_LEVELS,
+                BuiltinResources.FREE }) {
             ResourceConsumers.remove(id);
             ResourceProviders.remove(id);
         }
     }
 
     @Test
-    void registerAllDeclaresAllFourPairs() {
+    void registerAllDeclaresAllFivePairs() {
         BuiltinResources.registerAll();
 
         for (String id : new String[] {
                 BuiltinResources.HEALTH, BuiltinResources.HUNGER,
-                BuiltinResources.EXPERIENCE_POINTS, BuiltinResources.EXPERIENCE_LEVELS }) {
+                BuiltinResources.EXPERIENCE_POINTS, BuiltinResources.EXPERIENCE_LEVELS,
+                BuiltinResources.FREE }) {
             assertTrue(ResourceProviders.has(id), "provider missing: " + id);
             assertTrue(ResourceConsumers.has(id), "consumer missing: " + id);
         }
@@ -70,5 +72,29 @@ class BuiltinResourcesTest {
         org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
                 BuiltinResources::registerAll,
                 "construction runs once; a double call fails loudly, never silently overwrites");
+    }
+
+    @Test
+    void freeAlwaysAnswersZeroAndChargesNothing() {
+        // issue #93 AC1/AC2: the check ignores the requested amount (the truth
+        // is always "nothing to consume") and the consumer is a verified no-op
+        BuiltinResources.registerAll();
+
+        var verdict = ResourceProviders.get(BuiltinResources.FREE).orElseThrow()
+                .check(null, null, 999.0);
+        assertEquals(org.bitwisemadness.abilitycore.api.Affordability.State.SUFFICIENT,
+                verdict.state(), "free is always affordable");
+        assertEquals(0.0, verdict.amount(),
+                "the amount parameter is ignored - a free cost never claims consumption");
+
+        try (var logs = org.bitwisemadness.abilitycore.LogCapture.forLogger(
+                BuiltinResources.class, org.apache.logging.log4j.Level.DEBUG)) {
+            ResourceConsumers.get(BuiltinResources.FREE).orElseThrow()
+                    .charge(null, null, verdict);
+            assertEquals(1, logs.messages().size(),
+                    "the no-op charge is visible once in the debug log: " + logs.messages());
+            assertTrue(logs.messages().get(0).contains("charged nothing"),
+                    "the log states what it did: " + logs.messages().get(0));
+        }
     }
 }
