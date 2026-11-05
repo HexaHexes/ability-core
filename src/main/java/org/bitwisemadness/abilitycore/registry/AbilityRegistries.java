@@ -55,6 +55,27 @@ public final class AbilityRegistries {
         return registry;
     }
 
+    /**
+     * The definition for this id <b>with any datapack overlay merged at
+     * lookup</b> (issue #12), or null when the id is absent or the registry
+     * does not exist yet. Every definition read in core goes through here so
+     * display, validation and charging all see the same overlaid values;
+     * lookups are live, so a datapack {@code /reload} applies immediately.
+     */
+    @Nullable
+    public static AbilityDefinition definition(ResourceLocation abilityId) {
+        Registry<AbilityDefinition> current = registry;
+        if (current == null) {
+            return null;
+        }
+        AbilityDefinition base = current.get(abilityId);
+        if (base == null) {
+            return null;
+        }
+        DefinitionOverlay overlay = DefinitionOverlays.get(abilityId);
+        return overlay != null ? overlay.mergeInto(base) : base;
+    }
+
     /** False until {@link #onNewRegistry} ran (login-window placeholder rule). */
     public static boolean isReady() {
         return registry != null;

@@ -54,13 +54,10 @@ public final class ResourceChargeStep implements ActivationPipeline.Step {
     @Override
     public Optional<ActivationResult> evaluate(ActivationRequest request, ServerPlayer player,
             ActivationContext context) {
-        var definitions = AbilityRegistries.registry();
-        if (definitions == null) {
-            // RESOLVE already gated this in a full pipeline run; defensive for direct use
-            return Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_UNAVAILABLE));
-        }
-        AbilityDefinition definition = definitions.get(request.abilityId());
+        // overlay-merged lookup: a datapack-adjusted cost is what gets validated
+        AbilityDefinition definition = AbilityRegistries.definition(request.abilityId());
         if (definition == null) {
+            // RESOLVE already gated this in a full pipeline run; defensive for direct use
             return Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_UNAVAILABLE));
         }
         var cost = definition.cost();
