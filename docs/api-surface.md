@@ -8,7 +8,7 @@ for the four consumer repositories.
 
 | Package | Stability | Purpose |
 |---|---|---|
-| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders` |
+| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers` |
 | `org.bitwisemadness.abilitycore.registry` | **Stable** — public API | `AbilityRegistries` (registry key + `registry()` + `isReady()`) |
 | `org.bitwisemadness.abilitycore.discovery` | **Stable** — public API | `AbilityDiscovery` (presence, enumeration, filtering) |
 | `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler`, `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
@@ -19,7 +19,7 @@ for the four consumer repositories.
 
 ## Extension points
 
-Consumers extend core through exactly seven mechanisms:
+Consumers extend core through exactly eight mechanisms:
 
 1. **Registry registration** — providers register `AbilityDefinition` entries
    on their own mod bus via `RegisterEvent` for `AbilityRegistries.ABILITY_REGISTRY_KEY`.
@@ -44,6 +44,12 @@ Consumers extend core through exactly seven mechanisms:
    `IconProviders.declare(...)` for per-player dynamic icons; the resolution
    order (provider → definition `icon` → consumer placeholder) is the
    consumer contract (see the icon projection contract below).
+8. **Resource access & consumption** — addons declare a pair per currency:
+   `ResourceProviders.declare(id, check)` **first**, then
+   `ResourceConsumers.declare(id, charge)` (the pairing rule enforces the
+   order), so their own resource can validate and charge an ability's cost;
+   core ships four built-in pairs (see the resource-pairs section below), and
+   the `has`/`get` queries support registration-time cost selection.
 
 ## Overlay data contract (REQ-HOT-08)
 
@@ -228,6 +234,35 @@ like a mistyped coordinate.
 **Version pinning:** consumers pin the exact alpha version they were
 verified against (e.g. `1.0.0-alpha.9`). Bumps are deliberate, never
 implicit (see AGENTS.md "Pin the exact version").
+
+## Resource pairs (REQ-CORE-04, issue #88)
+
+A currency's payment has two halves, declared as a pair:
+
+| Half | Interface | Role |
+|---|---|---|
+| read | `ResourceProvider.check(abilityId, player, amount)` | affordability verdict for one cost entry — a pure server-side read; the snapshot carries the entry's amount (no re-derivation) |
+| write | `ResourceConsumer.charge(abilityId, player, snapshot)` | deducts the validated snapshot after ACTED (EXTERNAL chargingModel only — ADR-002) |
+
+- **Pairing rule**: `ResourceConsumers.declare` requires `ResourceProviders.has(id)`
+  and fails with the resource id otherwise — validation and deduction can
+  never drift apart. Exactly one provider and one consumer per resource id;
+  duplicates fail loudly on both sides.
+- **Timing contract**: declare both halves at mod construction; ability
+  definitions register at `RegisterEvent`, which fires after all mods are
+  constructed — so registration-time cost decisions are order-safe.
+- **Built-ins** (registered by core at construction): `ability_core:health`,
+  `ability_core:hunger`, `ability_core:experience_points`,
+  `ability_core:experience_levels` — thin player adapters over pure,
+  fixture-tested helpers (no player fixture exists in core).
+- **Fail-closed pipeline** (`ResourceChargeStep`, in order): cost without a
+  provider → `ability.refused.unaffordable.no_provider`; without a consumer →
+  `...no_consumer`; a null or UNKNOWN check refuses — nothing charged.
+- **Conditional selection**: `ResourceProviders.has` /
+  `ResourceConsumers.has` let an addon pick its costs at registration time
+  (pseudocore#174: experience points unless aura *and* magicule exist).
+
+Links: core#88 (this contract), core#89 (multi-cost), core#90 (strategies).
 
 ## Leak gates (mechanism)
 

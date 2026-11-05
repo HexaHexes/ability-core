@@ -25,16 +25,18 @@ import org.bitwisemadness.abilitycore.api.ChargingModel;
 import org.bitwisemadness.abilitycore.api.ResourceConsumer;
 import org.bitwisemadness.abilitycore.api.ResourceConsumers;
 import org.bitwisemadness.abilitycore.api.ResourceCost;
+import org.bitwisemadness.abilitycore.api.ResourceProviders;
 import org.bitwisemadness.abilitycore.registry.AbilityRegistries;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * RESOURCE-phase and consumer-contract tests (REQ-CORE-04 acceptance:
- * validate-then-charge atomicity with THE single core charge site,
- * fail-closed unknown, affordability round-trip including UNKNOWN,
- * chargingModel routing exclusivity - ADR-002).
+ * RESOURCE-phase and provider/consumer-contract tests (REQ-CORE-04
+ * acceptance, provider/consumer split per issue #88: validate-then-charge
+ * atomicity with THE single core charge site, fail-closed unknown,
+ * affordability round-trip including UNKNOWN, chargingModel routing
+ * exclusivity - ADR-002).
  */
 class ResourceChargeStepTest {
 
@@ -45,6 +47,7 @@ class ResourceChargeStepTest {
     private static final ResourceLocation EXTERNAL_COSTLESS =
             ResourceLocation.fromNamespaceAndPath("tensura", "external_costless");
     private static final String RESOURCE = "test:pool";
+    private static final String ORPHAN = "test:orphan";
 
     private ActivationHandlerRegistry handlers;
     private ActivationPipeline pipeline;
@@ -62,7 +65,7 @@ class ResourceChargeStepTest {
                 AbilityRegistries.ABILITY_REGISTRY_KEY, Lifecycle.stable(), false);
         Registry.register(fixture, PAID, definition(new ResourceCost(RESOURCE, 10.0)));
         Registry.register(fixture, FREE, definition(null));
-        Registry.register(fixture, NO_CONSUMER, definition(new ResourceCost("test:orphan", 1.0)));
+        Registry.register(fixture, NO_CONSUMER, definition(new ResourceCost(ORPHAN, 1.0)));
         Registry.register(fixture, EXTERNAL_COSTLESS, definition(null));
         AbilityRegistries.installRegistryForTests(fixture);
     }
@@ -71,6 +74,9 @@ class ResourceChargeStepTest {
     void tearDown() {
         AbilityRegistries.installRegistryForTests(previousRegistry);
         ResourceConsumers.remove(RESOURCE);
+        ResourceProviders.remove(RESOURCE);
+        ResourceConsumers.remove(ORPHAN);
+        ResourceProviders.remove(ORPHAN);
     }
 
     private static AbilityDefinition definition(ResourceCost cost) {
@@ -80,20 +86,22 @@ class ResourceChargeStepTest {
                 ActivationType.INSTANT, cost, Set.of(), Map.of());
     }
 
-    /** A consumer whose validate and charge both record into {@link #consumerSeen}. */
-    private ResourceConsumer answering(Affordability answer) {
-        return new ResourceConsumer() {
-            @Override
-            public Affordability validate(ResourceLocation abilityId, ServerPlayer player) {
-                consumerSeen.add(answer);
-                return answer;
-            }
-
+    /**
+     * Declares the answering pair: the provider's check records the answer,
+     * the consumer's charge records the snapshot it received - both into
+     * {@link #consumerSeen}, so the fixtures count halves independently.
+     */
+    private void declareAnswering(Affordability answer) {
+        ResourceProviders.declare(RESOURCE, (abilityId, player, amount) -> {
+            consumerSeen.add(answer);
+            return answer;
+        });
+        ResourceConsumers.declare(RESOURCE, new ResourceConsumer() {
             @Override
             public void charge(ResourceLocation abilityId, ServerPlayer player, Affordability snapshot) {
                 consumerSeen.add(snapshot);
             }
-        };
+        });
     }
 
     private ActivationRequest request(ResourceLocation id) {
@@ -102,7 +110,7 @@ class ResourceChargeStepTest {
 
     @Test
     void externalAbilityChargesOnceWithTheValidatedSnapshotAfterActivation() {
-        ResourceConsumers.declare(RESOURCE, answering(Affordability.sufficient(RESOURCE, 10.0)));
+        declareAnswering(Affordability.sufficient(RESOURCE, 10.0));
         handlers.register(PAID, (req, player) -> {
             trace.add("activate");
             return ActivationResult.ACTED;
@@ -110,7 +118,7 @@ class ResourceChargeStepTest {
 
         var result = pipeline.run(request(PAID), null);
         assertEquals(ActivationOutcome.ACTED, result.outcome());
-        // validate once + charge once, and charge received THE SAME snapshot (validate-then-charge)
+        // check once + charge once, and charge received THE SAME snapshot (validate-then-charge)
         assertEquals(2, consumerSeen.size());
         assertEquals(consumerSeen.get(0), consumerSeen.get(1),
                 "charge must consume the validated snapshot verbatim");
@@ -119,7 +127,7 @@ class ResourceChargeStepTest {
 
     @Test
     void insufficientNeverReachesProviderOrCharge() {
-        ResourceConsumers.declare(RESOURCE, answering(Affordability.insufficient(RESOURCE, 10.0)));
+        declareAnswering(Affordability.insufficient(RESOURCE, 10.0));
         handlers.register(PAID, (req, player) -> {
             trace.add("activate");
             return ActivationResult.ACTED;
@@ -127,13 +135,13 @@ class ResourceChargeStepTest {
 
         var result = pipeline.run(request(PAID), null);
         assertEquals(ActivationOutcome.REFUSED_UNAFFORDABLE, result.outcome());
-        assertTrue(trace.isEmpty(), "provider must not run");
-        assertEquals(1, consumerSeen.size(), "only validate ran - charge never invoked");
+        assertTrue(trace.isEmpty(), "activation must not run");
+        assertEquals(1, consumerSeen.size(), "only the check ran - charge never invoked");
     }
 
     @Test
     void unknownAffordabilityFailsClosed() {
-        ResourceConsumers.declare(RESOURCE, answering(Affordability.unknown(RESOURCE)));
+        declareAnswering(Affordability.unknown(RESOURCE));
         handlers.register(PAID, (req, player) -> ActivationResult.ACTED, ChargingModel.EXTERNAL);
 
         var result = pipeline.run(request(PAID), null);
@@ -142,12 +150,25 @@ class ResourceChargeStepTest {
     }
 
     @Test
+    void declaredCostWithoutProviderFailsClosed() {
+        // neither half declared: the read half is checked first (issue #88)
+        handlers.register(NO_CONSUMER, (req, player) -> ActivationResult.ACTED, ChargingModel.EXTERNAL);
+        var result = pipeline.run(request(NO_CONSUMER), null);
+        assertEquals(ActivationOutcome.REFUSED_UNAFFORDABLE, result.outcome());
+        assertEquals("ability.refused.unaffordable.no_provider", result.effectiveMessageKey());
+        assertTrue(trace.isEmpty(), "payment that cannot be validated must not activate");
+    }
+
+    @Test
     void declaredCostWithoutConsumerFailsClosed() {
+        // provider present (validation possible) but no write half to charge
+        ResourceProviders.declare(ORPHAN, (abilityId, player, amount) ->
+                Affordability.sufficient(ORPHAN, amount));
         handlers.register(NO_CONSUMER, (req, player) -> ActivationResult.ACTED, ChargingModel.EXTERNAL);
         var result = pipeline.run(request(NO_CONSUMER), null);
         assertEquals(ActivationOutcome.REFUSED_UNAFFORDABLE, result.outcome());
         assertEquals("ability.refused.unaffordable.no_consumer", result.effectiveMessageKey());
-        assertTrue(trace.isEmpty(), "payment that cannot be validated must not activate");
+        assertTrue(trace.isEmpty(), "payment that cannot be charged must not activate");
     }
 
     @Test
@@ -160,13 +181,9 @@ class ResourceChargeStepTest {
     }
 
     @Test
-    void consumerReturningNullFailsClosedWithLoggedContractViolation() {
+    void providerReturningNullFailsClosedWithLoggedContractViolation() {
+        ResourceProviders.declare(RESOURCE, (abilityId, player, amount) -> null);
         ResourceConsumers.declare(RESOURCE, new ResourceConsumer() {
-            @Override
-            public Affordability validate(ResourceLocation abilityId, ServerPlayer player) {
-                return null;
-            }
-
             @Override
             public void charge(ResourceLocation abilityId, ServerPlayer player, Affordability snapshot) {
                 // never reached
@@ -180,7 +197,7 @@ class ResourceChargeStepTest {
 
     @Test
     void nativeAbilityWithCostValidatesButNeverChargesViaCore() {
-        ResourceConsumers.declare(RESOURCE, answering(Affordability.sufficient(RESOURCE, 10.0)));
+        declareAnswering(Affordability.sufficient(RESOURCE, 10.0));
         handlers.register(PAID, (req, player) -> {
             trace.add("activate");
             return ActivationResult.ACTED;
@@ -188,7 +205,7 @@ class ResourceChargeStepTest {
 
         var result = pipeline.run(request(PAID), null);
         assertEquals(ActivationOutcome.ACTED, result.outcome());
-        assertEquals(1, consumerSeen.size(), "validate ran (pre-check), core charge did NOT (NATIVE owns charging)");
+        assertEquals(1, consumerSeen.size(), "check ran (pre-check), core charge did NOT (NATIVE owns charging)");
         assertEquals(List.of("activate"), trace);
     }
 
@@ -197,7 +214,7 @@ class ResourceChargeStepTest {
         // REQ-CORE-04 AC2 (mock half): one NATIVE activation = exactly one
         // provider-side deduction, core's consumer sees only the pre-check.
         // The ISS-backed observation is a release-time dev-run check (#30).
-        ResourceConsumers.declare(RESOURCE, answering(Affordability.sufficient(RESOURCE, 10.0)));
+        declareAnswering(Affordability.sufficient(RESOURCE, 10.0));
         AtomicInteger deductions = new AtomicInteger();
         handlers.register(PAID, (req, player) -> {
             deductions.incrementAndGet(); // the provider's own charge site
@@ -216,7 +233,7 @@ class ResourceChargeStepTest {
         // REQ-CORE-04 AC3: the handler refuses AFTER validation, so the
         // charge site (post-ACTED) must not fire. externalAbilityChargesOnce...
         // is the paired control proving this charge arm fires on success.
-        ResourceConsumers.declare(RESOURCE, answering(Affordability.sufficient(RESOURCE, 10.0)));
+        declareAnswering(Affordability.sufficient(RESOURCE, 10.0));
         handlers.register(PAID, (req, player) -> {
             trace.add("activate");
             return ActivationResult.refused(ActivationOutcome.REFUSED_RESTRICTED);
@@ -226,7 +243,7 @@ class ResourceChargeStepTest {
         assertEquals(ActivationOutcome.REFUSED_RESTRICTED, result.outcome());
         assertEquals(List.of("activate"), trace, "the handler ran and refused");
         assertEquals(1, consumerSeen.size(),
-                "validate ran, charge never did: a failed activation consumes nothing");
+                "check ran, charge never did: a failed activation consumes nothing");
     }
 
     @Test
@@ -243,12 +260,9 @@ class ResourceChargeStepTest {
 
     @Test
     void chargeFailureAfterActivationIsLoggedNotRefused() {
+        ResourceProviders.declare(RESOURCE, (abilityId, player, amount) ->
+                Affordability.sufficient(RESOURCE, amount));
         ResourceConsumers.declare(RESOURCE, new ResourceConsumer() {
-            @Override
-            public Affordability validate(ResourceLocation abilityId, ServerPlayer player) {
-                return Affordability.sufficient(RESOURCE, 10.0);
-            }
-
             @Override
             public void charge(ResourceLocation abilityId, ServerPlayer player, Affordability snapshot) {
                 throw new IllegalStateException("charge backend down");
@@ -262,10 +276,20 @@ class ResourceChargeStepTest {
 
     @Test
     void resourceOwnershipIsExclusivePerCurrency() {
-        ResourceConsumers.declare(RESOURCE, answering(Affordability.sufficient(RESOURCE, 1.0)));
+        declareAnswering(Affordability.sufficient(RESOURCE, 1.0));
         assertThrows(IllegalStateException.class,
-                () -> ResourceConsumers.declare(RESOURCE, answering(Affordability.sufficient(RESOURCE, 1.0))));
+                () -> ResourceConsumers.declare(RESOURCE, new ResourceConsumer() {
+                    @Override
+                    public void charge(ResourceLocation abilityId, ServerPlayer player,
+                            Affordability snapshot) {
+                        // duplicate - must be rejected before this runs
+                    }
+                }));
+        assertThrows(IllegalStateException.class,
+                () -> ResourceProviders.declare(RESOURCE, (abilityId, player, amount) ->
+                        Affordability.sufficient(RESOURCE, amount)));
         assertTrue(ResourceConsumers.has(RESOURCE));
+        assertTrue(ResourceProviders.has(RESOURCE));
         assertTrue(ResourceConsumers.remove(RESOURCE));
     }
 
