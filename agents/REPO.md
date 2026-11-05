@@ -10,6 +10,7 @@ API surface policy: `docs/api-surface.md` (stable packages, extension points, br
 Configuration contract: `docs/config.md` (precedence ladder, CLIENT-never-authoritative review rule, diagnostics, adoption checklist).
 Datapack definition overlays: `docs/datapack-overrides.md` (file path, partial-definition schema, merge rules).
 Release plan: `docs/release-plan.md` (the release train, per-repo checklists, core-before-consumers sequencing, ALPHA_RELEASES state).
+Compatibility matrix: `docs/compatibility-matrix.md` and risk register: `docs/risk-register.md` (evidence-linked; no claim without a link).
 Sync contract and payload inventory: `docs/sync.md` (channel discipline, version-bump checklist, manual checks).
 
 Architecture decision records: `docs/adr/` (index in `docs/adr/README.md`; new decisions get an ADR in the same PR that records them).
