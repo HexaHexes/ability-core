@@ -58,8 +58,14 @@ Core is the published foundation; consumers pin it **exactly**
 - [ ] If a registered codec changed: channel version bumped **and** consumer
       pins listed for step 2 of the sequence above (`docs/sync.md`).
 - [ ] After merge: version-slot commit → GitHub release → Maven publish.
-- [ ] Release-time verification: review `docs/risk-register.md` (core#29,
-      when landed) and re-check `docs/config.md`'s manual invalid-value step.
+- [ ] Release-time verification: review `docs/risk-register.md` (landed with
+      core#83) and re-check `docs/config.md`'s manual invalid-value step.
+- [ ] **First stable cut — arm-day check (core#20 AC3):** the CI `version-bump`
+      job's breaking→major/minor rule is *inert* until a stable `v*` tag exists
+      ("No stable tag exists yet" / "applies to the next clean bump" — its own
+      output while alpha-only). On the first `v1.0.0`: merge a `breaking`-labelled
+      PR, attempt a patch-only bump, and confirm CI goes red demanding major/minor,
+      then confirm the clean bump passes. Demo recorded on core#20.
 
 ### `ability-hotbar` (org.bitwisemadness.abilityhotbar:ability_hotbar)
 - [ ] CI green; no `mod_version` change in the PR.
