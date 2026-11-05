@@ -13,6 +13,7 @@ for the four consumer repositories.
 | `org.bitwisemadness.abilitycore.discovery` | **Stable** — public API | `AbilityDiscovery` (presence, enumeration, filtering) |
 | `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler`, `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
 | `org.bitwisemadness.abilitycore.sync` | **Stable** — public API | `ActivateAbilityPayload`, `NetworkRegistration`, `AbilitySyncNeededEvent`, `SyncEventWiring` |
+| `org.bitwisemadness.abilitycore.interop` | **Supported (optional integration)** | `leylines.LeyLinesResources` — declare one adopter-chosen Sky's Ley Lines currency as a resource pair (core#96); the only package allowed to reference an optional upstream mod, exclusively behind the `ModList` gate, and no public signature names an upstream type (both gates green) |
 | `org.bitwisemadness.abilitycore.config` | **Stable** — public API | `CoreConfig` (reference SERVER/CLIENT specs, `RefusalLogMode`), `ConfigDiagnostics` (loud-but-safe reads, notice hook) |
 
 **Everything not listed above is internal and subject to change without notice.**
@@ -271,6 +272,21 @@ A currency's payment has two halves, declared as a pair:
   anywhere**. With multi-cost (issue #89's composition rule): `free` is the
   payment only when *every* entry is `free`; a non-free sibling must be fully
   valid or the ability fails — `free` never masks an invalid sibling.
+- **Sky's Ley Lines (issue #96, first part)**: `LeyLinesResources.declare(currencyId)`
+  (the `interop` package) declares the pair for **one adopter-chosen** Ley
+  Lines-registered currency — core never enumerates or hardcodes which energy
+  types the mod registers (the agnosticism rule; the leak gate scans for their
+  package in the contract ones). The resource id **is** `currencyId.toString()`
+  (a costs entry reads `"resource": "technomancy:aether"`). Read half:
+  `quoteAt` at the player's position → account balance ≥ amount; outside a
+  usable nexus field or a fractional amount (their balances are whole units)
+  → INSUFFICIENT, refused pre-activation. Write half: `spendAt` post-ACTED;
+  a failed spend is logged, never re-run (their contract leaves balances
+  untouched). Absent mod → skip with a debug line **before any upstream class
+  links** (the bridge resolves only after the `ModList` gate), then the #92
+  `no_provider` chain owns downstream. Tested on `0.5.4.121012` (vendored
+  unmodified in `libs/` with its LGPL-2.1 license — `compileOnly`, never
+  shaded; see `libs/README.md`).
 - **Fail-closed pipeline** (`ResourceChargeStep`, all-or-nothing per entry,
   issue #89): a cost entry without a provider →
   `ability.refused.unaffordable.no_provider`; without a consumer →

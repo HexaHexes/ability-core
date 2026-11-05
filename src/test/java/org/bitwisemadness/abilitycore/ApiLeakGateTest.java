@@ -29,12 +29,20 @@ import org.junit.jupiter.api.Test;
  */
 class ApiLeakGateTest {
 
-    /** Upstream mod internals - forbidden in every contract package. */
+    /**
+     * Upstream mod internals - forbidden in every contract package.
+     * {@code zone/moddev/mc/skysleylines/} (core#96) is deliberately listed
+     * even though its sanctioned integration home is the {@code interop}
+     * package (not scanned here): contract packages must stay agnostic to the
+     * energy types Ley Lines registers - the adopter binds those through
+     * {@code LeyLinesResources.declare}, never through api/registry/discovery.
+     */
     private static final String[] UPSTREAM_FORBIDDEN = {
             "io/redspace/ironsspellbooks/",
             "io/github/manasmods/",
             "net/bettercombat/",
             "net/kayn/better_spellcasting/",
+            "zone/moddev/mc/skysleylines/",
     };
 
     /** ModList - forbidden where the core#14 AC applies (see class javadoc). */

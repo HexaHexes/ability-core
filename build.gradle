@@ -107,6 +107,11 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // Optional Ley Lines interop (core#96): compile against their API, never
+    // shade it - the mod ships separately at runtime and the bridge links only
+    // when ModList saw it present. Vendored per their integration guide.
+    compileOnly files('libs/SkysLeyLines-0.5.4.121012.jar')
+    testImplementation files('libs/SkysLeyLines-0.5.4.121012.jar')
 }
 
 test {

@@ -42,7 +42,7 @@ class ApiSurfaceSignatureGateTest {
 
     /** Mirrors docs/api-surface.md's supported-packages table exactly. */
     private static final Set<String> SUPPORTED_PACKAGES =
-            Set.of("api", "registry", "discovery", "activation", "sync", "config");
+            Set.of("api", "registry", "discovery", "activation", "sync", "config", "interop");
 
     @Test
     void consumerFacingSignaturesExposeOnlySupportedTypes() throws Exception {
