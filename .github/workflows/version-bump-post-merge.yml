@@ -26,6 +26,12 @@ name: Version bump (post-merge)
 # (x.y.z) starts x.y.(z+1)-alpha.01 - semver advances the patch (#100), and -alpha.N / -beta.N each
 # increment. Only manual bumps via the version-bump dispatch ever produce
 # a stable version.
+#
+# Owner ruling (amendment to #96, 2026-11-05): the stable cut itself is
+# exempt. The dispatch PR's squash commit ("Bump mod_version to ...") leaves
+# main on the clean version it just published - no train opens and no alpha
+# is cut beside a fresh stable. The NEXT real change starts
+# x.y.(z+1)-alpha.01 through the clean-stable case below, unchanged.
 
 on:
   push:
@@ -51,7 +57,7 @@ jobs:
     timeout-minutes: 10
     # The bump's own push cascades back into this workflow (PAT pushes trigger
     # workflows); without this guard the slot would climb forever.
-    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message || '', 'post-merge auto-bump)') }}
+    if: ${{ github.event_name != 'push' || (!contains(github.event.head_commit.message || '', 'post-merge auto-bump)') && !startsWith(github.event.head_commit.message || '', 'Bump mod_version to')) }}
     steps:
       - uses: actions/checkout@v7
         with:
