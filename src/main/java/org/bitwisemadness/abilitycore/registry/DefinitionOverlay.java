@@ -38,6 +38,7 @@ public record DefinitionOverlay(
         @Nullable ResourceLocation category,
         @Nullable ActivationType activationType,
         @Nullable List<ResourceCost> costs,
+        @Nullable String consumptionStrategy,
         @Nullable Set<String> tags,
         @Nullable Map<String, String> data) {
 
@@ -56,6 +57,8 @@ public record DefinitionOverlay(
                     .forGetter(o -> Optional.ofNullable(o.activationType())),
             ResourceCost.CODEC.listOf().optionalFieldOf("costs")
                     .forGetter(o -> Optional.ofNullable(o.costs())),
+            Codec.STRING.optionalFieldOf("consumption_strategy")
+                    .forGetter(o -> Optional.ofNullable(o.consumptionStrategy())),
             TAG_SET_CODEC.optionalFieldOf("tags")
                     .forGetter(o -> Optional.ofNullable(o.tags())),
             Codec.unboundedMap(Codec.STRING, Codec.STRING).optionalFieldOf("data")
@@ -89,17 +92,21 @@ public record DefinitionOverlay(
             Optional<ResourceLocation> category,
             Optional<ActivationType> activationType,
             Optional<List<ResourceCost>> costs,
+            Optional<String> consumptionStrategy,
             Optional<Set<String>> tags,
             Optional<Map<String, String>> data) {
         return new DefinitionOverlay(
                 displayNameKey.orElse(null), iconId.orElse(null), category.orElse(null),
-                activationType.orElse(null), costs.orElse(null), tags.orElse(null),
-                data.orElse(null));
+                activationType.orElse(null), costs.orElse(null), consumptionStrategy.orElse(null),
+                tags.orElse(null), data.orElse(null));
     }
 
     public DefinitionOverlay {
         if (displayNameKey != null && displayNameKey.isBlank()) {
             throw new IllegalArgumentException("overlay display name key must not be blank");
+        }
+        if (consumptionStrategy != null && consumptionStrategy.isBlank()) {
+            throw new IllegalArgumentException("overlay consumption strategy must not be blank");
         }
         if (costs != null) {
             costs = List.copyOf(costs);
@@ -139,6 +146,7 @@ public record DefinitionOverlay(
                 category != null ? category : base.category(),
                 activationType != null ? activationType : base.activationType(),
                 costs != null ? costs : base.costs(),
+                consumptionStrategy != null ? consumptionStrategy : base.consumptionStrategy(),
                 tags != null ? tags : base.tags(),
                 mergedData);
     }

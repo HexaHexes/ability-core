@@ -33,8 +33,10 @@ Example:
 
 Each value is a **partial definition** in exactly `AbilityDefinition`'s JSON
 shape (`display_name`, `icon`, `category`, `activation_type`, `costs`,
-`tags`, `data`) - every field optional. `costs` is an **array** of
-`{"resource": ..., "amount": ...}` entries (issue #89); the legacy single
+`consumption_strategy`, `tags`, `data`) - every field optional. `costs` is an
+**array** of `{"resource": ..., "amount": ...}` entries (issue #89);
+`consumption_strategy` is a **name** resolving to a registered strategy
+(issue #90, default `all` - see `docs/api-surface.md`); the legacy single
 `cost` object is **rejected with an error** naming the replacement key -
 silently ignoring it would turn a datapack's cost change into a no-op.
 
@@ -42,7 +44,7 @@ silently ignoring it would turn a datapack's cost change into a no-op.
 
 | Field | Rule |
 |---|---|
-| `display_name`, `icon`, `category`, `activation_type`, `costs` | present → **replaces** the base; absent → base kept |
+| `display_name`, `icon`, `category`, `activation_type`, `costs`, `consumption_strategy` | present → **replaces** the base; absent → base kept |
 | `tags` | present → **replaces** wholesale (never a union); absent → base kept |
 | `data` | **merged per-key**: base keys kept, overlay keys win conflicts |
 

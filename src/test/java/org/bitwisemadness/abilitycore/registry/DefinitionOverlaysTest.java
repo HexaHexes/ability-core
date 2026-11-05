@@ -17,6 +17,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import org.bitwisemadness.abilitycore.api.AbilityDefinition;
 import org.bitwisemadness.abilitycore.api.ActivationType;
+import org.bitwisemadness.abilitycore.api.ConsumptionStrategies;
 import org.bitwisemadness.abilitycore.api.ResourceCost;
 import org.bitwisemadness.abilitycore.discovery.AbilityDiscovery;
 import org.bitwisemadness.abilitycore.discovery.AbilityDiscovery.PresenceState;
@@ -58,11 +59,12 @@ class DefinitionOverlaysTest {
 
     private static AbilityDefinition base() {
         return new AbilityDefinition("tensura.skill.a", null, SKILL_CATEGORY,
-                ActivationType.INSTANT, List.of(), Set.of("active"), Map.of("k", "v"));
+                ActivationType.INSTANT, List.of(), ConsumptionStrategies.ALL, Set.of("active"),
+                Map.of("k", "v"));
     }
 
     private static DefinitionOverlay overlay(String displayName, Map<String, String> data) {
-        return new DefinitionOverlay(displayName, null, null, null, null, null, data);
+        return new DefinitionOverlay(displayName, null, null, null, null, null, null, data);
     }
 
     @Test
@@ -71,7 +73,7 @@ class DefinitionOverlaysTest {
                 ResourceLocation.fromNamespaceAndPath("tensura", "icon"),
                 ResourceLocation.fromNamespaceAndPath("tensura", "magic"),
                 ActivationType.INSTANT, List.of(new ResourceCost("tensura:aura", 5.0)),
-                Set.of("custom"), Map.of("extra", "1"));
+                null, Set.of("custom"), Map.of("extra", "1"));
         var json = DefinitionOverlay.CODEC.encodeStart(JsonOps.INSTANCE, full).getOrThrow();
         assertEquals(full, DefinitionOverlay.CODEC.parse(JsonOps.INSTANCE, json).getOrThrow());
 
@@ -111,10 +113,10 @@ class DefinitionOverlaysTest {
     void costsReplaceWholesaleWhenPresent() {
         var baseWithCosts = new AbilityDefinition("tensura.skill.a", null, SKILL_CATEGORY,
                 ActivationType.INSTANT, List.of(new ResourceCost("tensura:aura", 5.0)),
-                Set.of("active"), Map.of("k", "v"));
+                ConsumptionStrategies.ALL, Set.of("active"), Map.of("k", "v"));
         var replacement = List.of(new ResourceCost("tensura:health", 10.0),
                 new ResourceCost("tensura:aura", 2.0));
-        var merged = new DefinitionOverlay(null, null, null, null, replacement, null, null)
+        var merged = new DefinitionOverlay(null, null, null, null, replacement, null, null, null)
                 .mergeInto(baseWithCosts);
         assertEquals(replacement, merged.costs(),
                 "a present costs list replaces the base wholesale - no union, no per-entry merge");
@@ -136,7 +138,7 @@ class DefinitionOverlaysTest {
 
     @Test
     void tagsReplaceWholesaleWhenPresent() {
-        var merged = new DefinitionOverlay(null, null, null, null, null,
+        var merged = new DefinitionOverlay(null, null, null, null, null, null,
                 Set.of("custom"), null).mergeInto(base());
         assertEquals(Set.of("custom"), merged.tags(), "present tags replace, never union");
         assertEquals("tensura.skill.a", merged.displayNameKey());
@@ -144,7 +146,7 @@ class DefinitionOverlaysTest {
 
     @Test
     void anEmptyOverlayIsValueEqualToTheBase() {
-        var noOp = new DefinitionOverlay(null, null, null, null, null, null, null);
+        var noOp = new DefinitionOverlay(null, null, null, null, null, null, null, null);
         assertEquals(base(), noOp.mergeInto(base()), "a no-op overlay changes nothing");
     }
 

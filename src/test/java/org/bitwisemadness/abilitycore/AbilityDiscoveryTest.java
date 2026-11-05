@@ -14,6 +14,7 @@ import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
 import org.bitwisemadness.abilitycore.api.AbilityDefinition;
 import org.bitwisemadness.abilitycore.api.ActivationType;
+import org.bitwisemadness.abilitycore.api.ConsumptionStrategies;
 import org.bitwisemadness.abilitycore.discovery.AbilityDiscovery;
 import org.bitwisemadness.abilitycore.discovery.AbilityDiscovery.PresenceState;
 import org.bitwisemadness.abilitycore.registry.AbilityRegistries;
@@ -51,7 +52,8 @@ class AbilityDiscoveryTest {
     }
 
     private static AbilityDefinition def(String displayKey, ResourceLocation category, Set<String> tags) {
-        return new AbilityDefinition(displayKey, null, category, ActivationType.INSTANT, List.of(), tags, Map.of());
+        return new AbilityDefinition(displayKey, null, category, ActivationType.INSTANT, List.of(),
+                ConsumptionStrategies.ALL, tags, Map.of());
     }
 
     @Test

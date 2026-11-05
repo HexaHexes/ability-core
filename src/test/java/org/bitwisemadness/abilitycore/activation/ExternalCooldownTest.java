@@ -23,6 +23,7 @@ import org.bitwisemadness.abilitycore.api.ActivationResult;
 import org.bitwisemadness.abilitycore.api.ActivationSource;
 import org.bitwisemadness.abilitycore.api.ActivationType;
 import org.bitwisemadness.abilitycore.api.ChargingModel;
+import org.bitwisemadness.abilitycore.api.ConsumptionStrategies;
 import org.bitwisemadness.abilitycore.api.CooldownContract;
 import org.bitwisemadness.abilitycore.api.CooldownOwners;
 import org.bitwisemadness.abilitycore.api.CooldownTracker;
@@ -81,7 +82,8 @@ class ExternalCooldownTest {
         return new AbilityDefinition(
                 "tensura.skill.cd", null,
                 ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
-                ActivationType.INSTANT, cost == null ? List.of() : List.of(cost), Set.of(), Map.of());
+                ActivationType.INSTANT, cost == null ? List.of() : List.of(cost),
+                ConsumptionStrategies.ALL, Set.of(), Map.of());
     }
 
     /** Player-null-safe stub: reports a settable remaining value, records starts. */

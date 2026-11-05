@@ -25,6 +25,7 @@ import org.bitwisemadness.abilitycore.api.ActivationResult;
 import org.bitwisemadness.abilitycore.api.ActivationSource;
 import org.bitwisemadness.abilitycore.api.ActivationType;
 import org.bitwisemadness.abilitycore.api.ChargingModel;
+import org.bitwisemadness.abilitycore.api.ConsumptionStrategies;
 import org.bitwisemadness.abilitycore.api.CooldownOwners;
 import org.bitwisemadness.abilitycore.api.CooldownTracker;
 import org.bitwisemadness.abilitycore.api.ResourceCost;
@@ -83,7 +84,7 @@ class ActivationPipelineTest {
         return new AbilityDefinition(
                 "tensura.skill.known", null,
                 ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
-                ActivationType.INSTANT, costs, Set.of(), Map.of());
+                ActivationType.INSTANT, costs, ConsumptionStrategies.ALL, Set.of(), Map.of());
     }
 
     private ActivationRequest request(ResourceLocation id) {

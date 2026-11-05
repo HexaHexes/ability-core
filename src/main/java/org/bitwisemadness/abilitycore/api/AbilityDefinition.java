@@ -46,6 +46,11 @@ import org.jetbrains.annotations.Nullable;
  *                       list, validated all-or-nothing), empty when the
  *                       provider owns costs without declaring them yet;
  *                       never null
+ * @param consumptionStrategy name of the registered function deciding how the
+ *                       costs are consumed (issue #90; {@code all},
+ *                       {@code random}, {@code in_order} or an addon's
+ *                       declared strategy); resolved at registration - an
+ *                       unknown name fails loudly
  * @param tags           open flat tag vocabulary for filtering (e.g.
  *                       {@code "unarmed"}, {@code "passive"}, {@code "melee"});
  *                       delivered with issue #14's enumeration API as the
@@ -60,6 +65,7 @@ public record AbilityDefinition(
         ResourceLocation category,
         ActivationType activationType,
         List<ResourceCost> costs,
+        String consumptionStrategy,
         Set<String> tags,
         Map<String, String> data) {
 
@@ -75,6 +81,8 @@ public record AbilityDefinition(
             ActivationType.CODEC.fieldOf("activation_type").forGetter(AbilityDefinition::activationType),
             ResourceCost.CODEC.listOf().optionalFieldOf("costs", List.of())
                     .forGetter(AbilityDefinition::costs),
+            Codec.STRING.optionalFieldOf("consumption_strategy", ConsumptionStrategies.ALL)
+                    .forGetter(AbilityDefinition::consumptionStrategy),
             TAG_SET_CODEC.optionalFieldOf("tags", Set.of())
                     .forGetter(AbilityDefinition::tags),
             Codec.unboundedMap(Codec.STRING, Codec.STRING).optionalFieldOf("data", Map.of())
@@ -109,22 +117,28 @@ public record AbilityDefinition(
             ResourceLocation category,
             ActivationType activationType,
             List<ResourceCost> costs,
+            String consumptionStrategy,
             Set<String> tags,
             Map<String, String> data) {
         return new AbilityDefinition(
-                displayNameKey, iconId.orElse(null), category, activationType, costs, tags, data);
+                displayNameKey, iconId.orElse(null), category, activationType, costs,
+                consumptionStrategy, tags, data);
     }
 
     public AbilityDefinition {
         Objects.requireNonNull(displayNameKey, "displayNameKey");
         Objects.requireNonNull(category, "category");
         Objects.requireNonNull(activationType, "activationType");
+        Objects.requireNonNull(consumptionStrategy, "consumptionStrategy");
         // defensive copies: definitions are immutable value objects shared across threads
         costs = List.copyOf(Objects.requireNonNull(costs, "costs"));
         tags = Set.copyOf(Objects.requireNonNull(tags, "tags"));
         data = Map.copyOf(Objects.requireNonNull(data, "data"));
         if (displayNameKey.isBlank()) {
             throw new IllegalArgumentException("display name key must not be blank");
+        }
+        if (consumptionStrategy.isBlank()) {
+            throw new IllegalArgumentException("consumption strategy must not be blank");
         }
         for (String tag : tags) {
             if (tag == null || tag.isBlank()) {
@@ -163,6 +177,12 @@ public record AbilityDefinition(
                             "Invalid ability definition " + id + ": malformed cost " + cost);
                 }
             }
+        }
+        if (!ConsumptionStrategies.has(consumptionStrategy)) {
+            // timing contract: strategies declare at construction, definitions
+            // register at RegisterEvent - an unknown name here is a wiring bug
+            throw new IllegalStateException("Invalid ability definition " + id
+                    + ": unknown consumption strategy '" + consumptionStrategy + "'");
         }
         for (String tag : tags) {
             if (tag == null || tag.isBlank()) {
