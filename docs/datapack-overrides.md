@@ -32,14 +32,17 @@ Example:
 ```
 
 Each value is a **partial definition** in exactly `AbilityDefinition`'s JSON
-shape (`display_name`, `icon`, `category`, `activation_type`, `cost`,
-`tags`, `data`) - every field optional.
+shape (`display_name`, `icon`, `category`, `activation_type`, `costs`,
+`tags`, `data`) - every field optional. `costs` is an **array** of
+`{"resource": ..., "amount": ...}` entries (issue #89); the legacy single
+`cost` object is **rejected with an error** naming the replacement key -
+silently ignoring it would turn a datapack's cost change into a no-op.
 
 ## Merge rules (applied at lookup)
 
 | Field | Rule |
 |---|---|
-| `display_name`, `icon`, `category`, `activation_type`, `cost` | present → **replaces** the base; absent → base kept |
+| `display_name`, `icon`, `category`, `activation_type`, `costs` | present → **replaces** the base; absent → base kept |
 | `tags` | present → **replaces** wholesale (never a union); absent → base kept |
 | `data` | **merged per-key**: base keys kept, overlay keys win conflicts |
 
@@ -53,8 +56,9 @@ shape (`display_name`, `icon`, `category`, `activation_type`, `cost`,
 - The overlay **syncs to clients** (network codec, non-mandatory), so the
   management menu renders the same merged definitions the server validates
   and charges against.
-- Because the pipeline reads the merged view too, a datapack-adjusted `cost`
-  is what gets validated and charged, and a datapack-adjusted
+- Because the pipeline reads the merged view too, a datapack-adjusted `costs`
+  list is what gets validated and charged (wholesale replacement - the
+  overlay's list is the definition's list), and a datapack-adjusted
   `accepted_targets` is what gates targeting.
 
 ## Scope

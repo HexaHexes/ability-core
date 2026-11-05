@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.mojang.serialization.JsonOps;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import net.minecraft.resources.ResourceLocation;
@@ -25,7 +26,7 @@ class AbilityDefinitionTest {
                 ResourceLocation.fromNamespaceAndPath("tensura", "textures/skill/common/test.png"),
                 CATEGORY,
                 ActivationType.CHARGED,
-                new ResourceCost("tensura:magicule", 25.0),
+                List.of(new ResourceCost("tensura:magicule", 25.0)),
                 Set.of("melee", "sword"),
                 Map.of("style", "sword"));
     }
@@ -43,9 +44,40 @@ class AbilityDefinitionTest {
                 "{\"display_name\":\"a.b\",\"category\":\"mod:cat\",\"activation_type\":\"instant\"}");
         var decoded = AbilityDefinition.CODEC.parse(JsonOps.INSTANCE, encoded).getOrThrow();
         assertNull(decoded.iconId());
-        assertNull(decoded.cost());
+        assertTrue(decoded.costs().isEmpty(), "absent costs = no declared cost (never null)");
         assertTrue(decoded.tags().isEmpty());
         assertTrue(decoded.data().isEmpty());
+    }
+
+    @Test
+    void codecRoundTripsMultiEntryCosts() {
+        // issue #89: N entries survive encode -> decode as a list
+        var multi = new AbilityDefinition(
+                "tensura.skill.test",
+                ResourceLocation.fromNamespaceAndPath("tensura", "textures/skill/common/test.png"),
+                CATEGORY,
+                ActivationType.CHARGED,
+                List.of(new ResourceCost("tensura:magicule", 25.0),
+                        new ResourceCost("tensura:aura", 5.0)),
+                Set.of("melee"),
+                Map.of());
+        var encoded = AbilityDefinition.CODEC.encodeStart(JsonOps.INSTANCE, multi).getOrThrow();
+        assertEquals(multi, AbilityDefinition.CODEC.parse(JsonOps.INSTANCE, encoded).getOrThrow());
+        assertTrue(encoded.toString().contains("\"costs\""), "the wire key is the costs array");
+        assertTrue(!encoded.toString().contains("\"cost\""), "the legacy key never appears on the wire");
+    }
+
+    @Test
+    void codecRejectsTheLegacySingleCostKey() {
+        // issue #89: DFU ignores unknown keys, so without the explicit gate a
+        // datapack's old cost JSON would decode to "no cost" - fail-silent
+        var legacy = com.google.gson.JsonParser.parseString(
+                "{\"display_name\":\"a.b\",\"category\":\"mod:cat\",\"activation_type\":\"instant\","
+                        + "\"cost\":{\"resource\":\"tensura:aura\",\"amount\":5.0}}");
+        var failure = assertThrows(RuntimeException.class,
+                () -> AbilityDefinition.CODEC.parse(JsonOps.INSTANCE, legacy).getOrThrow());
+        assertTrue(failure.getMessage() != null && failure.getMessage().contains("costs"),
+                "the error names the replacement key: " + failure.getMessage());
     }
 
     @Test
@@ -74,11 +106,13 @@ class AbilityDefinitionTest {
     void constructionGuardsRejectMalformedDefinitions() {
         // compact-constructor guards fire before any value can enter the registry
         assertThrows(IllegalArgumentException.class,
-                () -> new AbilityDefinition("  ", null, CATEGORY, ActivationType.INSTANT, null, Set.of(), Map.of()));
+                () -> new AbilityDefinition("  ", null, CATEGORY, ActivationType.INSTANT, List.of(), Set.of(), Map.of()));
         assertThrows(NullPointerException.class,
-                () -> new AbilityDefinition("a.b", null, null, ActivationType.INSTANT, null, Set.of(), Map.of()));
+                () -> new AbilityDefinition("a.b", null, null, ActivationType.INSTANT, List.of(), Set.of(), Map.of()));
+        assertThrows(NullPointerException.class,
+                () -> new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, null, Set.of(), Map.of()));
         assertThrows(IllegalArgumentException.class,
-                () -> new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, null, Set.of(" "), Map.of()));
+                () -> new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(), Set.of(" "), Map.of()));
         assertThrows(IllegalArgumentException.class, () -> new ResourceCost("tensura:aura", -1.0));
         assertThrows(IllegalArgumentException.class, () -> new ResourceCost("", 1.0));
         assertThrows(IllegalArgumentException.class, () -> new ResourceCost("tensura:aura", Double.NaN));
@@ -88,7 +122,7 @@ class AbilityDefinitionTest {
     void validateAcceptsAWellFormedDefinition() {
         // validateOrThrow is the registry onAdd gate; valid constructions pass it
         sample().validateOrThrow(ID);
-        new AbilityDefinition("a.b", null, CATEGORY, ActivationType.UNKNOWN, null, Set.of(), Map.of())
+        new AbilityDefinition("a.b", null, CATEGORY, ActivationType.UNKNOWN, List.of(), Set.of(), Map.of())
                 .validateOrThrow(ID); // UNKNOWN is permitted in data (refused at activation, not at registration)
     }
 
@@ -97,6 +131,8 @@ class AbilityDefinitionTest {
         var def = sample();
         assertThrows(UnsupportedOperationException.class, () -> def.data().put("k", "v"));
         assertThrows(UnsupportedOperationException.class, () -> def.tags().add("x"));
+        assertThrows(UnsupportedOperationException.class,
+                () -> def.costs().add(new ResourceCost("tensura:aura", 1.0)));
         assertEquals(def, sample());
         assertEquals(def.hashCode(), sample().hashCode());
     }

@@ -59,7 +59,7 @@ provider-neutral tuple, `AbilityAvailability`, and never from a provider class:
 | Metric | Type | Meaning |
 |---|---|---|
 | `cooldown` | `Metric<Double>` | Cooldown progress `0..1` (0 = ready), or `Metric.unknown()` |
-| `cost` | `Metric<ResourceCost>` | Declarative resource cost, or `Metric.unknown()` |
+| `cost` | `Metric<ResourceCost>` | Declarative resource cost, or `Metric.unknown()` — for multi-cost abilities (issue #89) this is the provider's single representative entry, or unknown |
 | `availability` | `AvailabilityState` | `Available` / `Unavailable(reason)` / `Unknown` |
 
 **Option-typed, never a wrong value.** Every metric is explicit about absence:
@@ -266,14 +266,16 @@ A currency's payment has two halves, declared as a pair:
 - **Deliberate `free` (issue #93)**: the fifth built-in — `ability_core:free`
   always answers SUFFICIENT with **amount 0** (the check's requested amount is
   ignored: the truth is always "nothing") and its charge is a logged no-op.
-  An ability uses it **only by naming it** as its cost; `cost == null` +
-  EXTERNAL still refuses undeclared — there is **no implicit free anywhere**.
-  With multi-cost (issue #89's composition rule): `free` is the payment only
-  when *every* entry is `free`; a non-free sibling must be fully valid or the
-  ability fails — `free` never masks an invalid sibling.
-- **Fail-closed pipeline** (`ResourceChargeStep`, in order): cost without a
-  provider → `ability.refused.unaffordable.no_provider`; without a consumer →
-  `...no_consumer`; a null or UNKNOWN check refuses — nothing charged.
+  An ability uses it **only by naming it** as a cost entry; an empty `costs`
+  list + EXTERNAL still refuses undeclared — there is **no implicit free
+  anywhere**. With multi-cost (issue #89's composition rule): `free` is the
+  payment only when *every* entry is `free`; a non-free sibling must be fully
+  valid or the ability fails — `free` never masks an invalid sibling.
+- **Fail-closed pipeline** (`ResourceChargeStep`, all-or-nothing per entry,
+  issue #89): a cost entry without a provider →
+  `ability.refused.unaffordable.no_provider`; without a consumer →
+  `...no_consumer`; a null or UNKNOWN check refuses — **nothing charged for
+  any entry** (the full list validates before anything is stashed).
 - **Conditional selection**: `ResourceProviders.has` /
   `ResourceConsumers.has` let an addon pick its costs at registration time
   (pseudocore#174: experience points unless aura *and* magicule exist).

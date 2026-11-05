@@ -1,6 +1,11 @@
 package org.bitwisemadness.abilitycore.api;
 
+import com.mojang.datafixers.util.Pair;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
+import com.mojang.serialization.Decoder;
+import com.mojang.serialization.Dynamic;
+import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import java.util.List;
 import java.util.Map;
@@ -37,8 +42,10 @@ import org.jetbrains.annotations.Nullable;
  *                       {@code irons_spellbooks:spell}, {@code tensura:battlewill})
  * @param activationType how the ability activates; {@link ActivationType#UNKNOWN}
  *                       is permitted in data and refused at activation (fail-closed)
- * @param cost           declared resource-cost metadata, or null when the
- *                       provider owns costs without declaring them yet
+ * @param costs          declared resource-cost entries (issue #89's multi-cost
+ *                       list, validated all-or-nothing), empty when the
+ *                       provider owns costs without declaring them yet;
+ *                       never null
  * @param tags           open flat tag vocabulary for filtering (e.g.
  *                       {@code "unarmed"}, {@code "passive"}, {@code "melee"});
  *                       delivered with issue #14's enumeration API as the
@@ -52,7 +59,7 @@ public record AbilityDefinition(
         @Nullable ResourceLocation iconId,
         ResourceLocation category,
         ActivationType activationType,
-        @Nullable ResourceCost cost,
+        List<ResourceCost> costs,
         Set<String> tags,
         Map<String, String> data) {
 
@@ -60,19 +67,40 @@ public record AbilityDefinition(
     private static final Codec<Set<String>> TAG_SET_CODEC =
             Codec.list(Codec.STRING).xmap(Set::copyOf, List::copyOf);
 
-    public static final Codec<AbilityDefinition> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+    private static final Codec<AbilityDefinition> RECORD_CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Codec.STRING.fieldOf("display_name").forGetter(AbilityDefinition::displayNameKey),
             ResourceLocation.CODEC.optionalFieldOf("icon")
                     .forGetter(d -> Optional.ofNullable(d.iconId())),
             ResourceLocation.CODEC.fieldOf("category").forGetter(AbilityDefinition::category),
             ActivationType.CODEC.fieldOf("activation_type").forGetter(AbilityDefinition::activationType),
-            ResourceCost.CODEC.optionalFieldOf("cost")
-                    .forGetter(d -> Optional.ofNullable(d.cost())),
+            ResourceCost.CODEC.listOf().optionalFieldOf("costs", List.of())
+                    .forGetter(AbilityDefinition::costs),
             TAG_SET_CODEC.optionalFieldOf("tags", Set.of())
                     .forGetter(AbilityDefinition::tags),
             Codec.unboundedMap(Codec.STRING, Codec.STRING).optionalFieldOf("data", Map.of())
                     .forGetter(AbilityDefinition::data)
     ).apply(instance, AbilityDefinition::create));
+
+    /**
+     * The definition codec: a {@code costs} array (issue #89). The legacy
+     * single {@code cost} object is <b>rejected</b> loudly - DFU would
+     * silently ignore the unknown key, turning a datapack author's cost
+     * change into a no-op (fail-silent, against the project's posture).
+     */
+    public static final Codec<AbilityDefinition> CODEC = rejectingLegacyCost(RECORD_CODEC);
+
+    private static Codec<AbilityDefinition> rejectingLegacyCost(Codec<AbilityDefinition> inner) {
+        return Codec.of(inner, new Decoder<AbilityDefinition>() {
+            @Override
+            public <T> DataResult<Pair<AbilityDefinition, T>> decode(DynamicOps<T> ops, T input) {
+                if (new Dynamic<>(ops, input).get("cost").result().isPresent()) {
+                    return DataResult.error(
+                            () -> "Legacy 'cost' key removed (issue #89): use a 'costs' array");
+                }
+                return inner.decode(ops, input);
+            }
+        });
+    }
 
     @SuppressWarnings("unused") // adapter for optional codec fields -> record
     private static AbilityDefinition create(
@@ -80,11 +108,11 @@ public record AbilityDefinition(
             Optional<ResourceLocation> iconId,
             ResourceLocation category,
             ActivationType activationType,
-            Optional<ResourceCost> cost,
+            List<ResourceCost> costs,
             Set<String> tags,
             Map<String, String> data) {
         return new AbilityDefinition(
-                displayNameKey, iconId.orElse(null), category, activationType, cost.orElse(null), tags, data);
+                displayNameKey, iconId.orElse(null), category, activationType, costs, tags, data);
     }
 
     public AbilityDefinition {
@@ -92,6 +120,7 @@ public record AbilityDefinition(
         Objects.requireNonNull(category, "category");
         Objects.requireNonNull(activationType, "activationType");
         // defensive copies: definitions are immutable value objects shared across threads
+        costs = List.copyOf(Objects.requireNonNull(costs, "costs"));
         tags = Set.copyOf(Objects.requireNonNull(tags, "tags"));
         data = Map.copyOf(Objects.requireNonNull(data, "data"));
         if (displayNameKey.isBlank()) {
@@ -127,9 +156,12 @@ public record AbilityDefinition(
         if (activationType == null) {
             throw new IllegalStateException("Invalid ability definition " + id + ": missing activation type");
         }
-        if (cost != null) {
-            if (cost.resourceId().isBlank() || cost.amount() < 0 || !Double.isFinite(cost.amount())) {
-                throw new IllegalStateException("Invalid ability definition " + id + ": malformed cost " + cost);
+        if (costs != null) {
+            for (ResourceCost cost : costs) {
+                if (cost.resourceId().isBlank() || cost.amount() < 0 || !Double.isFinite(cost.amount())) {
+                    throw new IllegalStateException(
+                            "Invalid ability definition " + id + ": malformed cost " + cost);
+                }
             }
         }
         for (String tag : tags) {

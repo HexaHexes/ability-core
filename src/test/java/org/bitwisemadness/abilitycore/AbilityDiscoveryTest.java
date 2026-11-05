@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.mojang.serialization.Lifecycle;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import net.minecraft.core.MappedRegistry;
@@ -50,7 +51,7 @@ class AbilityDiscoveryTest {
     }
 
     private static AbilityDefinition def(String displayKey, ResourceLocation category, Set<String> tags) {
-        return new AbilityDefinition(displayKey, null, category, ActivationType.INSTANT, null, tags, Map.of());
+        return new AbilityDefinition(displayKey, null, category, ActivationType.INSTANT, List.of(), tags, Map.of());
     }
 
     @Test

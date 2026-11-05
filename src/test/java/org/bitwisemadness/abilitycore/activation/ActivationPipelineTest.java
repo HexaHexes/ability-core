@@ -64,7 +64,7 @@ class ActivationPipelineTest {
         Registry.register(fixture, KNOWN, def());
         Registry.register(fixture, EXTERNAL_KNOWN, def());
         Registry.register(fixture, COMBO_PAID,
-                def(new ResourceCost(ResourceConsumersDeclarations.RESOURCE, 10.0)));
+                def(List.of(new ResourceCost(ResourceConsumersDeclarations.RESOURCE, 10.0))));
         AbilityRegistries.installRegistryForTests(fixture);
     }
 
@@ -76,14 +76,14 @@ class ActivationPipelineTest {
     }
 
     private static AbilityDefinition def() {
-        return def(null);
+        return def(List.of());
     }
 
-    private static AbilityDefinition def(ResourceCost cost) {
+    private static AbilityDefinition def(List<ResourceCost> costs) {
         return new AbilityDefinition(
                 "tensura.skill.known", null,
                 ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
-                ActivationType.INSTANT, cost, Set.of(), Map.of());
+                ActivationType.INSTANT, costs, Set.of(), Map.of());
     }
 
     private ActivationRequest request(ResourceLocation id) {
