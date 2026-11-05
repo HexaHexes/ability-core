@@ -84,7 +84,7 @@ class IconProvidersTest {
     private static AbilityDefinition definition(ResourceLocation iconId) {
         return new AbilityDefinition("tensura.skill.icon", iconId,
                 ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
-                ActivationType.INSTANT, null, Set.of(), Map.of());
+                ActivationType.INSTANT, List.of(), Set.of(), Map.of());
     }
 
     /**

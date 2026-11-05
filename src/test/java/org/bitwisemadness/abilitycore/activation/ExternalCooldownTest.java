@@ -81,7 +81,7 @@ class ExternalCooldownTest {
         return new AbilityDefinition(
                 "tensura.skill.cd", null,
                 ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
-                ActivationType.INSTANT, cost, Set.of(), Map.of());
+                ActivationType.INSTANT, cost == null ? List.of() : List.of(cost), Set.of(), Map.of());
     }
 
     /** Player-null-safe stub: reports a settable remaining value, records starts. */

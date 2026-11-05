@@ -102,7 +102,7 @@ class TargetValidationStepTest {
         return new AbilityDefinition(
                 "tensura.skill.targeted", null,
                 ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
-                ActivationType.INSTANT, null, Set.of(), data);
+                ActivationType.INSTANT, List.of(), Set.of(), data);
     }
 
     private ActivationRequest request(ResourceLocation id, TargetContext target) {
@@ -243,7 +243,7 @@ class TargetValidationStepTest {
         ResourceLocation paid = ResourceLocation.fromNamespaceAndPath("tensura", "paid_targeted");
         Registry.register(AbilityRegistries.registry(), paid, new AbilityDefinition(
                 "tensura.skill.paid", null, ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
-                ActivationType.INSTANT, new ResourceCost(ResourceConsumersDeclarations.RESOURCE, 10.0),
+                ActivationType.INSTANT, List.of(new ResourceCost(ResourceConsumersDeclarations.RESOURCE, 10.0)),
                 Set.of(), Map.of()));
         handlers.register(paid, (req, player) -> ActivationResult.ACTED, ChargingModel.EXTERNAL);
         pipeline.registerStep(ActivationPipeline.PipelinePhase.RESOURCE, ResourceChargeStep.INSTANCE);

@@ -1,6 +1,11 @@
 package org.bitwisemadness.abilitycore.registry;
 
+import com.mojang.datafixers.util.Pair;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
+import com.mojang.serialization.Decoder;
+import com.mojang.serialization.Dynamic;
+import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import java.util.HashMap;
 import java.util.List;
@@ -32,7 +37,7 @@ public record DefinitionOverlay(
         @Nullable ResourceLocation iconId,
         @Nullable ResourceLocation category,
         @Nullable ActivationType activationType,
-        @Nullable ResourceCost cost,
+        @Nullable List<ResourceCost> costs,
         @Nullable Set<String> tags,
         @Nullable Map<String, String> data) {
 
@@ -40,8 +45,7 @@ public record DefinitionOverlay(
     private static final Codec<Set<String>> TAG_SET_CODEC =
             Codec.list(Codec.STRING).xmap(Set::copyOf, List::copyOf);
 
-    /** Every field optional - an empty overlay is a legal no-op. */
-    public static final Codec<DefinitionOverlay> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+    private static final Codec<DefinitionOverlay> RECORD_CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Codec.STRING.optionalFieldOf("display_name")
                     .forGetter(o -> Optional.ofNullable(o.displayNameKey())),
             ResourceLocation.CODEC.optionalFieldOf("icon")
@@ -50,13 +54,33 @@ public record DefinitionOverlay(
                     .forGetter(o -> Optional.ofNullable(o.category())),
             ActivationType.CODEC.optionalFieldOf("activation_type")
                     .forGetter(o -> Optional.ofNullable(o.activationType())),
-            ResourceCost.CODEC.optionalFieldOf("cost")
-                    .forGetter(o -> Optional.ofNullable(o.cost())),
+            ResourceCost.CODEC.listOf().optionalFieldOf("costs")
+                    .forGetter(o -> Optional.ofNullable(o.costs())),
             TAG_SET_CODEC.optionalFieldOf("tags")
                     .forGetter(o -> Optional.ofNullable(o.tags())),
             Codec.unboundedMap(Codec.STRING, Codec.STRING).optionalFieldOf("data")
                     .forGetter(o -> Optional.ofNullable(o.data()))
     ).apply(instance, DefinitionOverlay::create));
+
+    /**
+     * The overlay codec (issue #89): a {@code costs} array replacing wholesale.
+     * The legacy single {@code cost} object is <b>rejected</b> loudly - DFU
+     * would silently ignore it, turning a datapack's cost change into a no-op.
+     */
+    public static final Codec<DefinitionOverlay> CODEC = rejectingLegacyCost(RECORD_CODEC);
+
+    private static Codec<DefinitionOverlay> rejectingLegacyCost(Codec<DefinitionOverlay> inner) {
+        return Codec.of(inner, new Decoder<DefinitionOverlay>() {
+            @Override
+            public <T> DataResult<Pair<DefinitionOverlay, T>> decode(DynamicOps<T> ops, T input) {
+                if (new Dynamic<>(ops, input).get("cost").result().isPresent()) {
+                    return DataResult.error(
+                            () -> "Legacy 'cost' key removed (issue #89): use a 'costs' array");
+                }
+                return inner.decode(ops, input);
+            }
+        });
+    }
 
     @SuppressWarnings("unused") // adapter for optional codec fields -> record
     private static DefinitionOverlay create(
@@ -64,18 +88,21 @@ public record DefinitionOverlay(
             Optional<ResourceLocation> iconId,
             Optional<ResourceLocation> category,
             Optional<ActivationType> activationType,
-            Optional<ResourceCost> cost,
+            Optional<List<ResourceCost>> costs,
             Optional<Set<String>> tags,
             Optional<Map<String, String>> data) {
         return new DefinitionOverlay(
                 displayNameKey.orElse(null), iconId.orElse(null), category.orElse(null),
-                activationType.orElse(null), cost.orElse(null), tags.orElse(null),
+                activationType.orElse(null), costs.orElse(null), tags.orElse(null),
                 data.orElse(null));
     }
 
     public DefinitionOverlay {
         if (displayNameKey != null && displayNameKey.isBlank()) {
             throw new IllegalArgumentException("overlay display name key must not be blank");
+        }
+        if (costs != null) {
+            costs = List.copyOf(costs);
         }
         if (tags != null) {
             tags = Set.copyOf(tags);
@@ -111,7 +138,7 @@ public record DefinitionOverlay(
                 iconId != null ? iconId : base.iconId(),
                 category != null ? category : base.category(),
                 activationType != null ? activationType : base.activationType(),
-                cost != null ? cost : base.cost(),
+                costs != null ? costs : base.costs(),
                 tags != null ? tags : base.tags(),
                 mergedData);
     }

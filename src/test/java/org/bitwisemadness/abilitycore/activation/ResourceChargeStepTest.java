@@ -51,7 +51,14 @@ class ResourceChargeStepTest {
             ResourceLocation.fromNamespaceAndPath("tensura", "external_costless");
     private static final ResourceLocation FREE_ABILITY =
             ResourceLocation.fromNamespaceAndPath("tensura", "deliberately_free");
+    private static final ResourceLocation MULTI =
+            ResourceLocation.fromNamespaceAndPath("tensura", "multi_paid");
+    private static final ResourceLocation MIXED_VALID_FREE =
+            ResourceLocation.fromNamespaceAndPath("tensura", "valid_and_free");
+    private static final ResourceLocation MIXED_INVALID_FREE =
+            ResourceLocation.fromNamespaceAndPath("tensura", "invalid_and_free");
     private static final String RESOURCE = "test:pool";
+    private static final String SECOND = "test:second";
     private static final String ORPHAN = "test:orphan";
 
     private ActivationHandlerRegistry handlers;
@@ -69,10 +76,16 @@ class ResourceChargeStepTest {
         var fixture = new MappedRegistry<AbilityDefinition>(
                 AbilityRegistries.ABILITY_REGISTRY_KEY, Lifecycle.stable(), false);
         Registry.register(fixture, PAID, definition(new ResourceCost(RESOURCE, 10.0)));
-        Registry.register(fixture, FREE, definition(null));
+        Registry.register(fixture, FREE, definition(List.of()));
         Registry.register(fixture, NO_CONSUMER, definition(new ResourceCost(ORPHAN, 1.0)));
-        Registry.register(fixture, EXTERNAL_COSTLESS, definition(null));
+        Registry.register(fixture, EXTERNAL_COSTLESS, definition(List.of()));
         Registry.register(fixture, FREE_ABILITY, definition(new ResourceCost(BuiltinResources.FREE, 0.0)));
+        Registry.register(fixture, MULTI, definition(List.of(
+                new ResourceCost(RESOURCE, 10.0), new ResourceCost(SECOND, 5.0))));
+        Registry.register(fixture, MIXED_VALID_FREE, definition(List.of(
+                new ResourceCost(RESOURCE, 10.0), new ResourceCost(BuiltinResources.FREE, 0.0))));
+        Registry.register(fixture, MIXED_INVALID_FREE, definition(List.of(
+                new ResourceCost(ORPHAN, 1.0), new ResourceCost(BuiltinResources.FREE, 0.0))));
         AbilityRegistries.installRegistryForTests(fixture);
     }
 
@@ -81,6 +94,8 @@ class ResourceChargeStepTest {
         AbilityRegistries.installRegistryForTests(previousRegistry);
         ResourceConsumers.remove(RESOURCE);
         ResourceProviders.remove(RESOURCE);
+        ResourceConsumers.remove(SECOND);
+        ResourceProviders.remove(SECOND);
         ResourceConsumers.remove(ORPHAN);
         ResourceProviders.remove(ORPHAN);
         for (String id : new String[] {
@@ -96,7 +111,15 @@ class ResourceChargeStepTest {
         return new AbilityDefinition(
                 "tensura.skill.x", null,
                 ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
-                ActivationType.INSTANT, cost, Set.of(), Map.of());
+                ActivationType.INSTANT, cost == null ? List.of() : List.of(cost), Set.of(), Map.of());
+    }
+
+    /** Multi-entry variant (issue #89): costs validated all-or-nothing. */
+    private static AbilityDefinition definition(List<ResourceCost> costs) {
+        return new AbilityDefinition(
+                "tensura.skill.x", null,
+                ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
+                ActivationType.INSTANT, costs, Set.of(), Map.of());
     }
 
     /**
@@ -119,6 +142,21 @@ class ResourceChargeStepTest {
 
     private ActivationRequest request(ResourceLocation id) {
         return ActivationRequest.of(id, ActivationSource.DIRECT_SLOT);
+    }
+
+    /** Declares a recording pair: its check answer and its charge both land in {@link #consumerSeen}. */
+    private void declareRecordingPair(String id) {
+        ResourceProviders.declare(id, (abilityId, player, amount) -> {
+            var answer = Affordability.sufficient(id, amount);
+            consumerSeen.add(answer);
+            return answer;
+        });
+        ResourceConsumers.declare(id, new ResourceConsumer() {
+            @Override
+            public void charge(ResourceLocation abilityId, ServerPlayer player, Affordability snapshot) {
+                consumerSeen.add(snapshot);
+            }
+        });
     }
 
     @Test
@@ -211,6 +249,97 @@ class ResourceChargeStepTest {
             assertEquals(List.of("activate"), trace, "activation ran; nothing else interfered");
             assertTrue(logs.messages().stream().anyMatch(m -> m.contains("charged nothing")),
                     "the no-op charge is visible in the debug log: " + logs.messages());
+        }
+    }
+
+    @Test
+    void multiEntryCostValidatesAllThenChargesEachSnapshotOnceInListOrder() {
+        // issue #89: checks run in list order pre-activation; charges run
+        // post-ACTED in the same list order, each exactly once
+        declareRecordingPair(RESOURCE);
+        declareRecordingPair(SECOND);
+        handlers.register(MULTI, (req, player) -> {
+            trace.add("activate");
+            return ActivationResult.ACTED;
+        }, ChargingModel.EXTERNAL);
+
+        var result = pipeline.run(request(MULTI), null);
+        assertEquals(ActivationOutcome.ACTED, result.outcome());
+        assertEquals(List.of("activate"), trace, "validation precedes activation");
+        assertEquals(4, consumerSeen.size(), "2 checks + 2 charges");
+        assertEquals(List.of(RESOURCE, SECOND, RESOURCE, SECOND),
+                consumerSeen.stream().map(Affordability::resourceId).toList(),
+                "checks then charges, each in declaration order");
+        assertEquals(List.of(10.0, 5.0, 10.0, 5.0),
+                consumerSeen.stream().map(Affordability::amount).toList());
+        assertEquals(consumerSeen.get(0), consumerSeen.get(2),
+                "RESOURCE charged its own validated snapshot verbatim");
+        assertEquals(consumerSeen.get(1), consumerSeen.get(3),
+                "SECOND charged its own validated snapshot verbatim");
+    }
+
+    @Test
+    void invalidLaterEntryRefusesWithoutChargingAnyEntry() {
+        // issue #89 all-or-nothing: entry 1's successful check must not
+        // survive entry 2's failure (SECOND has no provider here)
+        declareRecordingPair(RESOURCE);
+        handlers.register(MULTI, (req, player) -> {
+            trace.add("activate");
+            return ActivationResult.ACTED;
+        }, ChargingModel.EXTERNAL);
+
+        var result = pipeline.run(request(MULTI), null);
+        assertEquals(ActivationOutcome.REFUSED_UNAFFORDABLE, result.outcome());
+        assertEquals("ability.refused.unaffordable.no_provider", result.effectiveMessageKey());
+        assertTrue(trace.isEmpty(), "nothing activates");
+        assertEquals(1, consumerSeen.size(),
+                "only entry 1's check ran - no charges, nothing stashed");
+        assertEquals(RESOURCE, consumerSeen.get(0).resourceId());
+    }
+
+    @Test
+    void validEntryPaysWhileFreeSiblingRunsItsNoOp() {
+        // composition rule (#93/#89): [valid, free] - the valid entry is the
+        // payment and gets charged; the free sibling validates and no-ops
+        BuiltinResources.registerAll();
+        declareRecordingPair(RESOURCE);
+        handlers.register(MIXED_VALID_FREE, (req, player) -> {
+            trace.add("activate");
+            return ActivationResult.ACTED;
+        }, ChargingModel.EXTERNAL);
+
+        try (LogCapture logs = LogCapture.forLogger(BuiltinResources.class, Level.DEBUG)) {
+            var result = pipeline.run(request(MIXED_VALID_FREE), null);
+            assertEquals(ActivationOutcome.ACTED, result.outcome());
+            assertEquals(List.of("activate"), trace);
+            assertEquals(2, consumerSeen.size(),
+                    "RESOURCE check + RESOURCE charge (the free pair records nothing here)");
+            assertEquals(RESOURCE, consumerSeen.get(0).resourceId());
+            assertEquals(RESOURCE, consumerSeen.get(1).resourceId());
+            assertEquals(consumerSeen.get(0), consumerSeen.get(1),
+                    "the validated snapshot is what got charged");
+            assertTrue(logs.messages().stream().anyMatch(m -> m.contains("charged nothing")),
+                    "the free sibling charged its no-op: " + logs.messages());
+        }
+    }
+
+    @Test
+    void freeSiblingNeverMasksAnInvalidEntry() {
+        // composition rule: [invalid, free] refuses - never a free-success
+        BuiltinResources.registerAll();
+        handlers.register(MIXED_INVALID_FREE, (req, player) -> {
+            trace.add("activate");
+            return ActivationResult.ACTED;
+        }, ChargingModel.EXTERNAL);
+
+        try (LogCapture logs = LogCapture.forLogger(BuiltinResources.class, Level.DEBUG)) {
+            var result = pipeline.run(request(MIXED_INVALID_FREE), null);
+            assertEquals(ActivationOutcome.REFUSED_UNAFFORDABLE, result.outcome());
+            assertEquals("ability.refused.unaffordable.no_provider", result.effectiveMessageKey());
+            assertTrue(trace.isEmpty(), "free must never turn an invalid sibling into a success");
+            assertTrue(consumerSeen.isEmpty(), "nothing validated past the refusal, nothing charged");
+            assertTrue(logs.messages().stream().noneMatch(m -> m.contains("charged nothing")),
+                    "the free consumer never ran: " + logs.messages());
         }
     }
 

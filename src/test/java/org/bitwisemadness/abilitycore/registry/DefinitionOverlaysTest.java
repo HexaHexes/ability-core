@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import com.mojang.serialization.Lifecycle;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import net.minecraft.core.MappedRegistry;
@@ -57,7 +58,7 @@ class DefinitionOverlaysTest {
 
     private static AbilityDefinition base() {
         return new AbilityDefinition("tensura.skill.a", null, SKILL_CATEGORY,
-                ActivationType.INSTANT, null, Set.of("active"), Map.of("k", "v"));
+                ActivationType.INSTANT, List.of(), Set.of("active"), Map.of("k", "v"));
     }
 
     private static DefinitionOverlay overlay(String displayName, Map<String, String> data) {
@@ -69,7 +70,7 @@ class DefinitionOverlaysTest {
         var full = new DefinitionOverlay("tensura.skill.b",
                 ResourceLocation.fromNamespaceAndPath("tensura", "icon"),
                 ResourceLocation.fromNamespaceAndPath("tensura", "magic"),
-                ActivationType.INSTANT, new ResourceCost("tensura:aura", 5.0),
+                ActivationType.INSTANT, List.of(new ResourceCost("tensura:aura", 5.0)),
                 Set.of("custom"), Map.of("extra", "1"));
         var json = DefinitionOverlay.CODEC.encodeStart(JsonOps.INSTANCE, full).getOrThrow();
         assertEquals(full, DefinitionOverlay.CODEC.parse(JsonOps.INSTANCE, json).getOrThrow());
@@ -79,6 +80,7 @@ class DefinitionOverlaysTest {
                 .getOrThrow();
         assertEquals("tensura.skill.c", partial.displayNameKey());
         assertNull(partial.category(), "absent fields stay absent - they keep the base at merge");
+        assertNull(partial.costs());
         assertNull(partial.tags());
         assertNull(partial.data());
 
@@ -93,6 +95,31 @@ class DefinitionOverlaysTest {
                 JsonParser.parseString("{\"display_name\":\"  \"}")).getOrThrow());
         assertThrows(Exception.class, () -> DefinitionOverlay.CODEC.parse(JsonOps.INSTANCE,
                 JsonParser.parseString("{\"category\":\"not a resource location\"}")).getOrThrow());
+    }
+
+    @Test
+    void overlayCodecRejectsTheLegacySingleCostKey() {
+        // issue #89: DFU ignores unknown keys - a datapack's old cost JSON
+        // would silently stop applying (fail-silent), so it is rejected loudly
+        var failure = assertThrows(RuntimeException.class, () -> DefinitionOverlay.CODEC.parse(JsonOps.INSTANCE,
+                JsonParser.parseString("{\"cost\":{\"resource\":\"tensura:aura\",\"amount\":5.0}}")).getOrThrow());
+        assertTrue(failure.getMessage() != null && failure.getMessage().contains("costs"),
+                "the error names the replacement key: " + failure.getMessage());
+    }
+
+    @Test
+    void costsReplaceWholesaleWhenPresent() {
+        var baseWithCosts = new AbilityDefinition("tensura.skill.a", null, SKILL_CATEGORY,
+                ActivationType.INSTANT, List.of(new ResourceCost("tensura:aura", 5.0)),
+                Set.of("active"), Map.of("k", "v"));
+        var replacement = List.of(new ResourceCost("tensura:health", 10.0),
+                new ResourceCost("tensura:aura", 2.0));
+        var merged = new DefinitionOverlay(null, null, null, null, replacement, null, null)
+                .mergeInto(baseWithCosts);
+        assertEquals(replacement, merged.costs(),
+                "a present costs list replaces the base wholesale - no union, no per-entry merge");
+        assertEquals(baseWithCosts.costs(), overlay("tensura.skill.x", Map.of()).mergeInto(baseWithCosts).costs(),
+                "absent costs keep the base");
     }
 
     @Test

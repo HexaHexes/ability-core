@@ -7,7 +7,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import net.minecraft.server.level.ServerPlayer;
-import org.bitwisemadness.abilitycore.api.AbilityDefinition;
 import org.bitwisemadness.abilitycore.api.ActivationOutcome;
 import org.bitwisemadness.abilitycore.api.ActivationRequest;
 import org.bitwisemadness.abilitycore.api.ActivationResult;
@@ -41,7 +40,7 @@ import org.slf4j.Logger;
  *       runs the provider's native pipeline.</li>
  *   <li>{@link PipelinePhase#CHARGE} - built-in, the single core charge site
  *       (REQ-CORE-04): for {@link ChargingModel#EXTERNAL} abilities only,
- *       calls the declared-cost resource's {@link ResourceConsumer#charge}
+ *       calls each declared-cost resource's {@link ResourceConsumer#charge}
  *       with the validated {@link Affordability} snapshot from the context,
  *       after ACTED/PENDING. NATIVE abilities are skipped by construction.
  *       Charge failures are logged, never re-attempted, never reported as
@@ -149,34 +148,37 @@ public final class ActivationPipeline {
 
     private void chargeExternally(ActivationRequest request, ServerPlayer player,
             ActivationContext context) {
-        // overlay-merged lookup: a datapack-adjusted cost is what gets charged
-        AbilityDefinition definition = AbilityRegistries.definition(request.abilityId());
-        var cost = definition == null ? null : definition.cost();
-        if (cost == null) {
+        // snapshots come from ResourceChargeStep's overlay-merged lookup: one
+        // per cost entry, in declaration order (issue #89)
+        List<?> snapshots = context
+                .get(ResourceChargeStep.AFFORDABILITY_SNAPSHOT, List.class)
+                .orElse(null);
+        if (snapshots == null || snapshots.isEmpty()) {
             // unreachable via ResourceChargeStep (it refuses EXTERNAL-without-cost
             // before activation); defence in depth
-            LOGGER.error("EXTERNAL ability {} has no declared cost - cannot charge", request.abilityId());
-            return;
-        }
-        Affordability snapshot = context
-                .get(ResourceChargeStep.AFFORDABILITY_SNAPSHOT, Affordability.class)
-                .orElse(null);
-        if (snapshot == null) {
-            // unreachable (RESOURCE stashes it when a cost exists); defence in depth
-            LOGGER.error("EXTERNAL ability {} reached charging without an affordability snapshot",
+            LOGGER.error("EXTERNAL ability {} reached charging without affordability snapshots",
                     request.abilityId());
             return;
         }
-        ResourceConsumer consumer = ResourceConsumers.get(cost.resourceId()).orElse(null);
-        if (consumer == null) {
-            LOGGER.error("EXTERNAL ability {} - no consumer for '{}'", request.abilityId(), cost.resourceId());
-            return;
-        }
-        try {
-            consumer.charge(request.abilityId(), player, snapshot);
-        } catch (RuntimeException e) {
-            // post-activation: cannot un-act; log loudly, report success truthfully
-            LOGGER.error("Charging failed for {} after successful activation", request.abilityId(), e);
+        for (Object entry : snapshots) {
+            if (!(entry instanceof Affordability snapshot)) {
+                LOGGER.error("EXTERNAL ability {} - snapshot entry is not an Affordability: {}",
+                        request.abilityId(), entry);
+                return;
+            }
+            ResourceConsumer consumer = ResourceConsumers.get(snapshot.resourceId()).orElse(null);
+            if (consumer == null) {
+                // unreachable (each entry validated pre-activation); defence in depth
+                LOGGER.error("EXTERNAL ability {} - no consumer for '{}'",
+                        request.abilityId(), snapshot.resourceId());
+                continue;
+            }
+            try {
+                consumer.charge(request.abilityId(), player, snapshot);
+            } catch (RuntimeException e) {
+                // post-activation: cannot un-act; log loudly, report success truthfully
+                LOGGER.error("Charging failed for {} after successful activation", request.abilityId(), e);
+            }
         }
     }
 }
