@@ -8,7 +8,7 @@ for the four consumer repositories.
 
 | Package | Stability | Purpose |
 |---|---|---|
-| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders` |
+| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker` |
 | `org.bitwisemadness.abilitycore.registry` | **Stable** — public API | `AbilityRegistries` (registry key + `registry()` + `isReady()`) |
 | `org.bitwisemadness.abilitycore.discovery` | **Stable** — public API | `AbilityDiscovery` (presence, enumeration, filtering) |
 | `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler`, `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
@@ -19,7 +19,7 @@ for the four consumer repositories.
 
 ## Extension points
 
-Consumers extend core through exactly four mechanisms:
+Consumers extend core through exactly six mechanisms:
 
 1. **Registry registration** — providers register `AbilityDefinition` entries
    on their own mod bus via `RegisterEvent` for `AbilityRegistries.ABILITY_REGISTRY_KEY`.
@@ -36,6 +36,10 @@ Consumers extend core through exactly four mechanisms:
 5. **Overlay providers** — providers declare an `AvailabilityProvider` per
    ability via `AvailabilityProviders.declare(...)` to feed the bar's
    cooldown/cost/availability overlay (REQ-HOT-08).
+6. **Cooldown ownership** — providers declare per-ability cooldown ownership
+   once via `CooldownOwners.declareNative(id)` (optionally with a read-through
+   `NativeProjection`) or `declareExternal(id, ticks[, tracker])`; exactly one
+   declaration per id (see the cooldown contract below).
 
 ## Overlay data contract (REQ-HOT-08)
 
@@ -69,6 +73,45 @@ distinct. `AbilityAvailability.allUnknown()` is the synthetic no-metric tuple.
 - **Side discipline:** the tuple is client-*renderable* but server-authoritative
   in origin; providers must not mutate state or derive authority the client was
   not given.
+
+## Cooldown contract (REQ-CORE-05)
+
+Exactly one cooldown owner per ability, declared once (`CooldownOwners`);
+dual or malformed declarations fail loudly at declaration time:
+
+| Owner | Declared by | Checked by | Reaching the client |
+|---|---|---|---|
+| `NATIVE` (default) | `declareNative(id)` (+ optional `NativeProjection`) | the provider's own pipeline (ISS `PlayerCooldowns`, Tensura per-skill) | the provider's **own** sync (ISS already syncs cooldowns — hotbar#2 §3); core sends nothing |
+| `EXTERNAL` | `declareExternal(id, ticks[, tracker])` | `ExternalCooldownStep`, pre-activation (`REFUSED_COOLDOWN`), start post-activation | a **consumer snapshot** payload (ADR-003) or the overlay tuple — still no core packet |
+
+**Reads** go through `CooldownContract.remaining(...)` / `isOnCooldown(...)`:
+
+- `EXTERNAL` answers from the declared tracker — the same store the pipeline
+  gate reads, so gate and query can never disagree.
+- `NATIVE` **with** a projection answers with the provider's own remaining
+  *exactly* — core stores the function, never the state (parity by
+  construction; nothing to re-sync).
+- `NATIVE` **without** a projection answers *unknown* (`Optional.empty()`) —
+  never a guessed "ready" and never a claimed cooldown; the provider's
+  pipeline is the gate.
+- **Start has exactly one site**: the pipeline's post-activation
+  `ExternalCooldownStep.startExternalCooldown` (never at initiation — ISS
+  starts cooldowns inside `castSpell`). The contract has no public `start`;
+  a second start site would break native start timing (AC2/AC4).
+
+**No duplicate packets**: core's compiled payload inventory is serverbound
+intent only, pinned mechanically by `SyncContractTest`
+(`corePayloadInventoryIsServerboundIntentOnly`) and inventoried in
+[`docs/sync.md`](sync.md).
+
+**Persistence decision** (core#16): core-owned `EXTERNAL` cooldowns are **not
+persisted** — the built-in store recomputes from runtime state and clears on
+restart (recorded in `CooldownTracker`'s javadoc). Tying them to persisted
+resource state, if ever required, is filed as its own issue.
+
+Links: core#16 (originating contract), ADR-002 (exclusivity pattern),
+`docs/sync.md` (no-resync inventory); rendering reads the overlay contract
+section above, never this facade.
 
 ## Breaking change definition
 

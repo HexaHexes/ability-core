@@ -1,5 +1,10 @@
 package org.bitwisemadness.abilitycore.sync;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -124,6 +129,39 @@ class SyncContractTest {
     }
 
     @Test
+    void corePayloadInventoryIsServerboundIntentOnly() throws Exception {
+        // core#16 AC1 (no duplicate packet): NATIVE cooldown state is the
+        // provider's to sync (ISS syncs its own - hotbar#2 section 3). A new
+        // core payload must fail this list and be reviewed in docs/sync.md.
+        Path mainClasses = Path.of(NetworkRegistration.class
+                .getProtectionDomain().getCodeSource().getLocation().toURI());
+        String payloadInterface =
+                "net/minecraft/network/protocol/common/custom/CustomPacketPayload";
+        List<String> referencing = new ArrayList<>();
+        try (Stream<Path> walk = Files.walk(mainClasses)) {
+            for (Path classFile : walk.filter(p -> p.toString().endsWith(".class")).toList()) {
+                String relative = mainClasses.relativize(classFile).toString().replace('\\', '/');
+                if (relative.startsWith("org/bitwisemadness/abilitycore/")
+                        && containsAscii(Files.readAllBytes(classFile), payloadInterface)) {
+                    referencing.add(relative);
+                }
+            }
+        }
+        referencing.sort(null);
+        assertEquals(List.of(
+                "org/bitwisemadness/abilitycore/sync/ActivateAbilityPayload.class",
+                "org/bitwisemadness/abilitycore/sync/NetworkRegistration.class"), referencing);
+        // playToClient on the registrar would be a clientbound core channel -
+        // native cooldown state must never ride one (core#16's no-resync rule)
+        byte[] registrar = Files.readAllBytes(
+                mainClasses.resolve("org/bitwisemadness/abilitycore/sync/NetworkRegistration.class"));
+        assertTrue(containsAscii(registrar, "playToServer"),
+                "the only core payload registers serverbound (intent)");
+        assertFalse(containsAscii(registrar, "playToClient"),
+                "core registers no clientbound payload - native cooldowns are never re-synced");
+    }
+
+    @Test
     void networkRegistrationClassExists() {
         // the registrar wiring is mod-bus; this test just proves the class loads
         // without a dedicated-server crash (client-only classes are elsewhere)
@@ -147,5 +185,24 @@ class SyncContractTest {
 
     private static void assertTrue(boolean condition, String message) {
         org.junit.jupiter.api.Assertions.assertTrue(condition, message);
+    }
+
+    private static void assertFalse(boolean condition, String message) {
+        org.junit.jupiter.api.Assertions.assertFalse(condition, message);
+    }
+
+    /** Constant-pool needle search (same idiom as ApiLeakGateTest). */
+    private static boolean containsAscii(byte[] haystack, String needle) {
+        byte[] need = needle.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        outer:
+        for (int i = 0; i <= haystack.length - need.length; i++) {
+            for (int j = 0; j < need.length; j++) {
+                if (haystack[i + j] != need[j]) {
+                    continue outer;
+                }
+            }
+            return true;
+        }
+        return false;
     }
 }

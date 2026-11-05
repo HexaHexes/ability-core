@@ -6,9 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.mojang.serialization.Lifecycle;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import net.minecraft.core.MappedRegistry;
 import net.minecraft.core.Registry;
@@ -21,6 +23,7 @@ import org.bitwisemadness.abilitycore.api.ActivationResult;
 import org.bitwisemadness.abilitycore.api.ActivationSource;
 import org.bitwisemadness.abilitycore.api.ActivationType;
 import org.bitwisemadness.abilitycore.api.ChargingModel;
+import org.bitwisemadness.abilitycore.api.CooldownContract;
 import org.bitwisemadness.abilitycore.api.CooldownOwners;
 import org.bitwisemadness.abilitycore.api.CooldownTracker;
 import org.bitwisemadness.abilitycore.api.ResourceCost;
@@ -114,6 +117,9 @@ class ExternalCooldownTest {
         var first = pipeline.run(request(COOLED), null);
         assertEquals(ActivationOutcome.ACTED, first.outcome());
         assertEquals(List.of(100L), startedDurations, "start happens post-activation with the declared duration");
+        // core#16: the contract reads the same tracker the gate reads
+        assertEquals(Optional.of(Duration.ofMillis(100L * 50L)),
+                CooldownContract.remaining(COOLED, null));
     }
 
     @Test
