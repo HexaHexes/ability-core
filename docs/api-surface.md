@@ -8,7 +8,7 @@ for the four consumer repositories.
 
 | Package | Stability | Purpose |
 |---|---|---|
-| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers` |
+| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies` |
 | `org.bitwisemadness.abilitycore.registry` | **Stable** — public API | `AbilityRegistries` (registry key + `registry()` + `isReady()`) |
 | `org.bitwisemadness.abilitycore.discovery` | **Stable** — public API | `AbilityDiscovery` (presence, enumeration, filtering) |
 | `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler`, `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
@@ -281,6 +281,54 @@ A currency's payment has two halves, declared as a pair:
   (pseudocore#174: experience points unless aura *and* magicule exist).
 
 Links: core#88 (this contract), core#89 (multi-cost), core#90 (strategies).
+
+## Consumption strategies (REQ-CORE-04, issue #90)
+
+An ability's `consumption_strategy` field names **how** its `costs` entries
+are consumed. The name resolves through `ConsumptionStrategies` at
+definition registration — an unknown name fails loudly there (definitions
+register at `RegisterEvent`, strategies declare at construction, so
+resolution is order-safe).
+
+**Selection vs validation.** A strategy only *selects*: it returns the
+ordered subset of entries to charge (empty = the pipeline refuses
+unaffordable — nothing charged). Core then validates **exactly the selected
+entries** fail-closed and charges them exactly once, in returned order.
+Validation scope belongs to the strategy — a selector that skips an entry is
+never refused for it — but a selected entry must be one of the definition's
+declared costs (an undeclared selection is a contract violation → refusal).
+
+| Name | Semantics |
+|---|---|
+| `all` (default) | select every entry → validate all → charge in list order. Existing JSON resolves here. |
+| `random` | re-roll among affordable: consult each entry, uniform pick among SUFFICIENT ones; none affordable → empty selection → refusal. |
+| `in_order` | recorded verbatim: *"Consume from each in order, till the cost is satisfied; if cost can not be satisfied, fail before consuming."* Operational reading (open for review): consult in list order, **early-abort at the first uncovered entry** (empty selection → refusal, later entries never consulted); full pass → all entries in list order. |
+
+**Custom strategies are registerable code** — same timing contract as
+providers/consumers:
+
+```java
+ConsumptionStrategies.declare("mymod:enchantment_pick",
+        (request, player, entries, check) -> {
+            // request-aware: the request carries slot/source/target context
+            boolean hasAuraEnchant = /* inspect the item at request.slotContext() */ false;
+            if (hasAuraEnchant) {
+                return List.of(entries.get(0)); // only the aura entry pays
+            }
+            return entries; // otherwise both halves
+        });
+```
+
+The planning example (pseudocore#174): a datapack names
+`mymod:enchantment_pick`, the strategy reads the item at
+`request.slotContext()`, checks its enchantments, and returns only the aura
+entry (or only magicule, or both). `check` is a read-only affordability
+consult (missing provider / null verdict read as UNKNOWN — not affordable);
+strategies never charge — charging stays at core's single EXTERNAL site.
+
+**Overlay**: `consumption_strategy` mirrors the definition shape — present
+replaces wholesale, absent keeps the base; an overlay naming a strategy
+nobody declared refuses fail-closed at runtime (`REFUSED_UNAVAILABLE`).
 
 ## Leak gates (mechanism)
 

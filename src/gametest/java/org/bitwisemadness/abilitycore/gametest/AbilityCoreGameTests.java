@@ -94,7 +94,8 @@ public final class AbilityCoreGameTests {
         Registry.register(fixture, cooldownId, new org.bitwisemadness.abilitycore.api.AbilityDefinition(
                 "tensura.skill.gametest_cooled", null,
                 net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
-                org.bitwisemadness.abilitycore.api.ActivationType.INSTANT, List.of(), Set.of(), Map.of()));
+                org.bitwisemadness.abilitycore.api.ActivationType.INSTANT, List.of(),
+                org.bitwisemadness.abilitycore.api.ConsumptionStrategies.ALL, Set.of(), Map.of()));
         AbilityRegistries.installRegistryForTests(fixture);
         // ADAPTER runs before COOLDOWN: register a native-charging handler (an
         // EXTERNAL-cooldown ability can be natively charged - the axes are orthogonal)
