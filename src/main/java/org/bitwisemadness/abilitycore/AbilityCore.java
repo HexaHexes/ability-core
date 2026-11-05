@@ -44,6 +44,9 @@ public final class AbilityCore {
         PIPELINE.registerStep(ActivationPipeline.PipelinePhase.ELIGIBILITY, ELIGIBILITY.asStep());
         PIPELINE.registerStep(ActivationPipeline.PipelinePhase.COOLDOWN, ExternalCooldownStep.INSTANCE);
         PIPELINE.registerStep(ActivationPipeline.PipelinePhase.RESOURCE, ResourceChargeStep.INSTANCE);
+        // Built-in resource pairs (issue #88): providers first, then their
+        // consumers - construction-time registration per the timing contract
+        BuiltinResources.registerAll();
         LOGGER.info("Ability Core initialized");
     }
 }

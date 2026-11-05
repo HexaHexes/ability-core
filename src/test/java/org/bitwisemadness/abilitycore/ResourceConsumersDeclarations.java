@@ -5,11 +5,13 @@ import java.util.List;
 import org.bitwisemadness.abilitycore.api.Affordability;
 import org.bitwisemadness.abilitycore.api.ResourceConsumer;
 import org.bitwisemadness.abilitycore.api.ResourceConsumers;
+import org.bitwisemadness.abilitycore.api.ResourceProviders;
 
 /**
  * Test-support declarations for the shared test resource pool. Centralised so
- * cooldown/charge suites can swap consumer behaviour (sufficient / throwing)
- * without duplicating declaration cleanup logic.
+ * cooldown/charge suites can swap provider behaviour (sufficient / throwing
+ * check) without duplicating declaration cleanup logic. Declares the provider
+ * first, exactly as the pairing rule (issue #88) requires.
  */
 public final class ResourceConsumersDeclarations {
 
@@ -23,17 +25,14 @@ public final class ResourceConsumersDeclarations {
         return EVENTS;
     }
 
-    /** Sufficient validate, no-op charge. */
+    /** Sufficient check, no-op charge. */
     public static void sufficient() {
         reset();
+        ResourceProviders.declare(RESOURCE, (abilityId, player, amount) -> {
+            EVENTS.add("check");
+            return Affordability.sufficient(RESOURCE, amount);
+        });
         ResourceConsumers.declare(RESOURCE, new ResourceConsumer() {
-            @Override
-            public Affordability validate(net.minecraft.resources.ResourceLocation abilityId,
-                    net.minecraft.server.level.ServerPlayer player) {
-                EVENTS.add("validate");
-                return Affordability.sufficient(RESOURCE, 10.0);
-            }
-
             @Override
             public void charge(net.minecraft.resources.ResourceLocation abilityId,
                     net.minecraft.server.level.ServerPlayer player, Affordability snapshot) {
@@ -42,17 +41,14 @@ public final class ResourceConsumersDeclarations {
         });
     }
 
-    /** Sufficient validate, throwing charge (post-activation failure). */
+    /** Sufficient check, throwing charge (post-activation failure). */
     public static void throwing() {
         reset();
+        ResourceProviders.declare(RESOURCE, (abilityId, player, amount) -> {
+            EVENTS.add("check");
+            return Affordability.sufficient(RESOURCE, amount);
+        });
         ResourceConsumers.declare(RESOURCE, new ResourceConsumer() {
-            @Override
-            public Affordability validate(net.minecraft.resources.ResourceLocation abilityId,
-                    net.minecraft.server.level.ServerPlayer player) {
-                EVENTS.add("validate");
-                return Affordability.sufficient(RESOURCE, 10.0);
-            }
-
             @Override
             public void charge(net.minecraft.resources.ResourceLocation abilityId,
                     net.minecraft.server.level.ServerPlayer player, Affordability snapshot) {
@@ -64,6 +60,7 @@ public final class ResourceConsumersDeclarations {
 
     public static void reset() {
         ResourceConsumers.remove(RESOURCE);
+        ResourceProviders.remove(RESOURCE);
         EVENTS.clear();
     }
 }

@@ -22,6 +22,9 @@ public final class ResourceConsumers {
     /**
      * Declares the consumer for one resource id.
      *
+     * @throws IllegalArgumentException if the resource id is null/blank, the
+     *         consumer is null, or the resource's <b>provider is not yet
+     *         declared</b> (a consumer always requires its provider - issue #88)
      * @throws IllegalStateException if the resource id already has a consumer
      *         (loud ownership conflict, never silent overwrite)
      */
@@ -31,6 +34,11 @@ public final class ResourceConsumers {
         }
         if (consumer == null) {
             throw new IllegalArgumentException("consumer must not be null for " + resourceId);
+        }
+        if (!ResourceProviders.has(resourceId)) {
+            throw new IllegalArgumentException(
+                    "resource provider not declared for '" + resourceId
+                            + "' - declare the provider first (a consumer always requires its provider)");
         }
         ResourceConsumer previous = CONSUMERS.putIfAbsent(resourceId, consumer);
         if (previous != null) {

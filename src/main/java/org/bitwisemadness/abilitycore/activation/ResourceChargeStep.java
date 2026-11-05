@@ -11,12 +11,15 @@ import org.bitwisemadness.abilitycore.api.Affordability;
 import org.bitwisemadness.abilitycore.api.ChargingModel;
 import org.bitwisemadness.abilitycore.api.ResourceConsumer;
 import org.bitwisemadness.abilitycore.api.ResourceConsumers;
+import org.bitwisemadness.abilitycore.api.ResourceProvider;
+import org.bitwisemadness.abilitycore.api.ResourceProviders;
 import org.bitwisemadness.abilitycore.registry.AbilityRegistries;
 import org.slf4j.Logger;
 
 /**
  * The RESOURCE-phase affordability pre-check (REQ-CORE-04, wired onto
- * {@code AbilityCore.PIPELINE} at mod construction).
+ * {@code AbilityCore.PIPELINE} at mod construction; provider/consumer split
+ * per issue #88).
  *
  * <p>Rules, in order:</p>
  * <ol>
@@ -24,20 +27,24 @@ import org.slf4j.Logger;
  *       natively); EXTERNAL -> REFUSED_UNAFFORDABLE with
  *       {@code ability.refused.unaffordable.undeclared} (the single core charge
  *       site must have a cost to route through - fail closed pre-activation).</li>
- *   <li>Cost declared but no consumer for that resource ->
- *       {@link ActivationOutcome#REFUSED_UNAFFORDABLE} (fail closed: an
- *       ability whose payment cannot reliably be validated must not activate -
- *       the brief's REQ-BR-08 precondition; providers declaring a cost own
- *       declaring the consumer for it).</li>
- *   <li>Consumer answers INSUFFICIENT or UNKNOWN (or violates its contract by
- *       returning null) -> REFUSED_UNAFFORDABLE, nothing invoked downstream.</li>
+ *   <li>Cost declared but no <b>provider</b> for that resource ->
+ *       {@link ActivationOutcome#REFUSED_UNAFFORDABLE}
+ *       ({@code ability.refused.unaffordable.no_provider}): the read half owns
+ *       validation, so payment cannot be reliably validated without it.</li>
+ *   <li>Provider present but no <b>consumer</b> -> same outcome with
+ *       {@code ability.refused.unaffordable.no_consumer} (the write half is
+ *       required to charge; providers declaring a cost own declaring both).</li>
+ *   <li>The provider's {@link ResourceProvider#check} answers INSUFFICIENT or
+ *       UNKNOWN (or violates its contract by returning null) ->
+ *       REFUSED_UNAFFORDABLE, nothing invoked downstream.</li>
  *   <li>SUFFICIENT -> stash the {@link Affordability} snapshot in the
  *       {@link ActivationContext} under {@link #AFFORDABILITY_SNAPSHOT} for
  *       the post-success charge action to consume.</li>
  * </ol>
  *
- * <p>Validate is contractually read-only; the snapshot handed downstream is
- * exactly what was validated (validate-then-charge, no re-derivation).</p>
+ * <p>The snapshot's amount is the cost entry's amount (the check receives it
+ * - no re-derivation); the consumer's charge receives that snapshot verbatim
+ * (validate-then-charge).</p>
  */
 public final class ResourceChargeStep implements ActivationPipeline.Step {
 
@@ -74,20 +81,29 @@ public final class ResourceChargeStep implements ActivationPipeline.Step {
             return Optional.empty();
         }
 
+        ResourceProvider provider = ResourceProviders.get(cost.resourceId()).orElse(null);
+        if (provider == null) {
+            // the read half owns validation: no provider, no reliable verdict
+            LOGGER.debug("Refusing {}: declared resource '{}' has no provider - payment cannot be validated",
+                    request.abilityId(), cost.resourceId());
+            return Optional.of(ActivationResult.refused(
+                    ActivationOutcome.REFUSED_UNAFFORDABLE, "ability.refused.unaffordable.no_provider"));
+        }
+
         ResourceConsumer consumer = ResourceConsumers.get(cost.resourceId()).orElse(null);
         if (consumer == null) {
-            LOGGER.debug("Refusing {}: declared resource '{}' has no consumer - payment cannot be validated",
+            LOGGER.debug("Refusing {}: declared resource '{}' has no consumer - it cannot be charged",
                     request.abilityId(), cost.resourceId());
             return Optional.of(ActivationResult.refused(
                     ActivationOutcome.REFUSED_UNAFFORDABLE, "ability.refused.unaffordable.no_consumer"));
         }
 
-        Affordability snapshot = consumer.validate(request.abilityId(), player);
+        Affordability snapshot = provider.check(request.abilityId(), player, cost.amount());
         if (snapshot == null) {
             // contract violation: null is not "sufficient" - fail closed
-            LOGGER.error("Resource consumer '{}' returned null for {}", cost.resourceId(), request.abilityId());
+            LOGGER.error("Resource provider '{}' returned null for {}", cost.resourceId(), request.abilityId());
             return Optional.of(ActivationResult.refused(
-                    ActivationOutcome.REFUSED_UNAFFORDABLE, "ability.refused.unaffordable.no_consumer"));
+                    ActivationOutcome.REFUSED_UNAFFORDABLE, "ability.refused.unaffordable.no_provider"));
         }
         context.put(AFFORDABILITY_SNAPSHOT, snapshot);
         return switch (snapshot.state()) {

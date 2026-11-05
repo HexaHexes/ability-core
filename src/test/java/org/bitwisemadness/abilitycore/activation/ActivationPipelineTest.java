@@ -151,7 +151,7 @@ class ActivationPipelineTest {
         assertFalse(refused.isSuccess(), "a refusal must never read as pending or success");
         assertEquals(List.of("combo-rule"), trace, "only the combo-scoped rule ran");
         assertEquals(List.of(), ResourceConsumersDeclarations.events(),
-                "no validate, no charge: a refusal reserves nothing");
+                "no check, no charge: a refusal reserves nothing");
         assertEquals(List.of(), startedDurations, "a refusal starts no cooldown");
 
         // Control: the same arms fire for a permitted request, proving the
@@ -159,7 +159,7 @@ class ActivationPipelineTest {
         var acted = pipeline.run(ActivationRequest.of(COMBO_PAID, ActivationSource.DIRECT_SLOT), null);
         assertEquals(ActivationOutcome.ACTED, acted.outcome());
         assertEquals(List.of("combo-rule", "activate"), trace);
-        assertEquals(List.of("validate", "charge"), ResourceConsumersDeclarations.events());
+        assertEquals(List.of("check", "charge"), ResourceConsumersDeclarations.events());
         assertEquals(List.of(100L), startedDurations, "the permitted run starts its cooldown");
     }
 

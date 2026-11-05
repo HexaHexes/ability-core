@@ -238,7 +238,7 @@ class TargetValidationStepTest {
     @Test
     void invalidTargetRefusalConsumesNothing() {
         // AC2 unit half: REFUSED_INVALID_TARGET precedes RESOURCE, so an armed
-        // consumer sees no validate and no charge; the control run below proves
+        // provider check and consumer charge both stay silent; the control run below proves
         // the arm was live rather than vacuous.
         ResourceLocation paid = ResourceLocation.fromNamespaceAndPath("tensura", "paid_targeted");
         Registry.register(AbilityRegistries.registry(), paid, new AbilityDefinition(
@@ -253,12 +253,12 @@ class TargetValidationStepTest {
         var refused = pipeline.run(request(paid, new TargetContext.EntityHint(entityId)), null);
         assertEquals(ActivationOutcome.REFUSED_INVALID_TARGET, refused.outcome());
         assertTrue(ResourceConsumersDeclarations.events().isEmpty(),
-                "no validate, no charge: " + ResourceConsumersDeclarations.events());
+                "no check, no charge: " + ResourceConsumersDeclarations.events());
 
         resolved = true;
         var allowed = pipeline.run(request(paid, new TargetContext.EntityHint(entityId)), null);
         assertEquals(ActivationOutcome.ACTED, allowed.outcome());
-        assertEquals(List.of("validate", "charge"), ResourceConsumersDeclarations.events(),
+        assertEquals(List.of("check", "charge"), ResourceConsumersDeclarations.events(),
                 "the control run must charge, proving the arm was live");
     }
 
