@@ -14,6 +14,9 @@ import net.minecraft.core.MappedRegistry;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import org.apache.logging.log4j.Level;
+import org.bitwisemadness.abilitycore.BuiltinResources;
+import org.bitwisemadness.abilitycore.LogCapture;
 import org.bitwisemadness.abilitycore.api.AbilityDefinition;
 import org.bitwisemadness.abilitycore.api.ActivationOutcome;
 import org.bitwisemadness.abilitycore.api.ActivationRequest;
@@ -46,6 +49,8 @@ class ResourceChargeStepTest {
             ResourceLocation.fromNamespaceAndPath("tensura", "orphan_cost");
     private static final ResourceLocation EXTERNAL_COSTLESS =
             ResourceLocation.fromNamespaceAndPath("tensura", "external_costless");
+    private static final ResourceLocation FREE_ABILITY =
+            ResourceLocation.fromNamespaceAndPath("tensura", "deliberately_free");
     private static final String RESOURCE = "test:pool";
     private static final String ORPHAN = "test:orphan";
 
@@ -67,6 +72,7 @@ class ResourceChargeStepTest {
         Registry.register(fixture, FREE, definition(null));
         Registry.register(fixture, NO_CONSUMER, definition(new ResourceCost(ORPHAN, 1.0)));
         Registry.register(fixture, EXTERNAL_COSTLESS, definition(null));
+        Registry.register(fixture, FREE_ABILITY, definition(new ResourceCost(BuiltinResources.FREE, 0.0)));
         AbilityRegistries.installRegistryForTests(fixture);
     }
 
@@ -77,6 +83,13 @@ class ResourceChargeStepTest {
         ResourceProviders.remove(RESOURCE);
         ResourceConsumers.remove(ORPHAN);
         ResourceProviders.remove(ORPHAN);
+        for (String id : new String[] {
+                BuiltinResources.HEALTH, BuiltinResources.HUNGER,
+                BuiltinResources.EXPERIENCE_POINTS, BuiltinResources.EXPERIENCE_LEVELS,
+                BuiltinResources.FREE }) {
+            ResourceConsumers.remove(id);
+            ResourceProviders.remove(id);
+        }
     }
 
     private static AbilityDefinition definition(ResourceCost cost) {
@@ -178,6 +191,27 @@ class ResourceChargeStepTest {
         assertEquals(ActivationOutcome.REFUSED_UNAFFORDABLE, result.outcome());
         assertEquals("ability.refused.unaffordable.undeclared", result.effectiveMessageKey());
         assertTrue(trace.isEmpty(), "the single charge site needs a declared cost - refused before activation");
+    }
+
+    @Test
+    void deliberateFreeCostActsAtNoCost() {
+        // issue #93: naming ability_core:free IS the explicit act - the pair
+        // validates at 0, the no-op charge runs, the ability ACTs (the
+        // cost == null control just above still refuses undeclared).
+        BuiltinResources.registerAll();
+        handlers.register(FREE_ABILITY, (req, player) -> {
+            trace.add("activate");
+            return ActivationResult.ACTED;
+        }, ChargingModel.EXTERNAL);
+
+        try (LogCapture logs = LogCapture.forLogger(BuiltinResources.class, Level.DEBUG)) {
+            var result = pipeline.run(request(FREE_ABILITY), null);
+            assertEquals(ActivationOutcome.ACTED, result.outcome(),
+                    "a declared free cost routes through the charge site and passes");
+            assertEquals(List.of("activate"), trace, "activation ran; nothing else interfered");
+            assertTrue(logs.messages().stream().anyMatch(m -> m.contains("charged nothing")),
+                    "the no-op charge is visible in the debug log: " + logs.messages());
+        }
     }
 
     @Test

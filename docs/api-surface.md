@@ -263,6 +263,14 @@ A currency's payment has two halves, declared as a pair:
   `ability_core:hunger`, `ability_core:experience_points`,
   `ability_core:experience_levels` — thin player adapters over pure,
   fixture-tested helpers (no player fixture exists in core).
+- **Deliberate `free` (issue #93)**: the fifth built-in — `ability_core:free`
+  always answers SUFFICIENT with **amount 0** (the check's requested amount is
+  ignored: the truth is always "nothing") and its charge is a logged no-op.
+  An ability uses it **only by naming it** as its cost; `cost == null` +
+  EXTERNAL still refuses undeclared — there is **no implicit free anywhere**.
+  With multi-cost (issue #89's composition rule): `free` is the payment only
+  when *every* entry is `free`; a non-free sibling must be fully valid or the
+  ability fails — `free` never masks an invalid sibling.
 - **Fail-closed pipeline** (`ResourceChargeStep`, in order): cost without a
   provider → `ability.refused.unaffordable.no_provider`; without a consumer →
   `...no_consumer`; a null or UNKNOWN check refuses — nothing charged.
