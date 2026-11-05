@@ -63,11 +63,8 @@ public final class TargetValidationStep implements ActivationPipeline.Step {
     @Override
     public Optional<ActivationResult> evaluate(ActivationRequest request, ServerPlayer player,
             ActivationContext context) {
-        var definitions = AbilityRegistries.registry();
-        if (definitions == null) {
-            return Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_UNAVAILABLE));
-        }
-        AbilityDefinition definition = definitions.get(request.abilityId());
+        // overlay-merged lookup: a datapack-adjusted accepted_targets gate applies
+        AbilityDefinition definition = AbilityRegistries.definition(request.abilityId());
         if (definition == null) {
             return Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_UNAVAILABLE));
         }

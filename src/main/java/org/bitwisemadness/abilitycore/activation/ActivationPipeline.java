@@ -139,7 +139,7 @@ public final class ActivationPipeline {
 
         // CHARGE - built-in: the single core charge site (EXTERNAL only)
         if (declaration.model() == ChargingModel.EXTERNAL) {
-            chargeExternally(request, player, context, definitions);
+            chargeExternally(request, player, context);
         }
         // COOLDOWN start - built-in: EXTERNAL-owned cooldowns start post-activation
         // (REQ-CORE-05; NATIVE cooldowns are started by the provider's own pipeline)
@@ -148,8 +148,9 @@ public final class ActivationPipeline {
     }
 
     private void chargeExternally(ActivationRequest request, ServerPlayer player,
-            ActivationContext context, net.minecraft.core.Registry<AbilityDefinition> definitions) {
-        AbilityDefinition definition = definitions.get(request.abilityId());
+            ActivationContext context) {
+        // overlay-merged lookup: a datapack-adjusted cost is what gets charged
+        AbilityDefinition definition = AbilityRegistries.definition(request.abilityId());
         var cost = definition == null ? null : definition.cost();
         if (cost == null) {
             // unreachable via ResourceChargeStep (it refuses EXTERNAL-without-cost

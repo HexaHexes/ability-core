@@ -73,11 +73,7 @@ public final class AbilityDiscovery {
     }
 
     public static Optional<AbilityDefinition> get(ResourceLocation abilityId) {
-        var definitions = AbilityRegistries.registry();
-        if (definitions == null || !definitions.containsKey(abilityId)) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(definitions.get(abilityId));
+        return Optional.ofNullable(AbilityRegistries.definition(abilityId));
     }
 
     /** Every definition currently registered (empty pre-ready; never null). */
@@ -87,7 +83,12 @@ public final class AbilityDiscovery {
             return List.of();
         }
         List<AbilityDefinition> out = new ArrayList<>();
-        definitions.forEach(out::add);
+        for (ResourceLocation id : definitions.keySet()) {
+            AbilityDefinition definition = AbilityRegistries.definition(id);
+            if (definition != null) {
+                out.add(definition);
+            }
+        }
         return List.copyOf(out);
     }
 
@@ -109,7 +110,7 @@ public final class AbilityDiscovery {
         }
         Map<ResourceLocation, AbilityDefinition> out = new LinkedHashMap<>();
         for (ResourceLocation id : definitions.keySet()) {
-            AbilityDefinition definition = definitions.get(id);
+            AbilityDefinition definition = AbilityRegistries.definition(id);
             if (definition != null) {
                 out.put(id, definition);
             }
