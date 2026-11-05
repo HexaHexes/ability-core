@@ -217,7 +217,7 @@ template idiom for local-publish testing (`gpr.user`/`gpr.key` in
 |---|---|---|---|
 | `ability-hotbar` | `AbilityCorePackages`, as above | `org.bitwisemadness.abilitycore:ability_core:1.0.0-alpha.15` | live |
 | `tensura-iss-integration` | `AbilityCorePackages`, as above | `org.bitwisemadness.abilitycore:ability_core:1.0.0-alpha.9` | live |
-| `ability-battlewills` | `AbilityCorePackages`, as above | `org.bitwisemadness.abilitycore:ability_core:1.0.0-alpha.9` | live |
+| `ability-tensura` (formerly `ability-battlewills`) | `AbilityCorePackages`, as above | `org.bitwisemadness.abilitycore:ability_core:1.0.0-alpha.9` | live |
 | `tensura-better-spellcasting-bridge` | *none yet* | *none yet* | not a build-level consumer: `build.gradle` has no repository block, dependency or source import today (the template already grants `packages: read` and `agents/REPO.md` declares core required) — bridge adopts the pattern above verbatim when its core-dependent implementation starts |
 
 The group is `org.bitwisemadness.abilitycore` (core's `mod_group_id`) while
@@ -248,6 +248,14 @@ A currency's payment has two halves, declared as a pair:
   and fails with the resource id otherwise — validation and deduction can
   never drift apart. Exactly one provider and one consumer per resource id;
   duplicates fail loudly on both sides.
+- **Mod-gated declarations (auto-disable, issue #92)**:
+  `declare(id, half, requiredModId)` — when the mod backing the resource's
+  state is not loaded, the half is **skipped with a debug line** (absence is
+  expected, not misuse: no throw, and the pairing IAE does not fire), `has()`
+  reads false, and abilities costing it fail closed with `no_provider` — that
+  chain *is* the auto-disable. Null `requiredModId` is ungated (core's
+  built-ins use it). Declare at mod construction: ModList is populated before
+  construction.
 - **Timing contract**: declare both halves at mod construction; ability
   definitions register at `RegisterEvent`, which fires after all mods are
   constructed — so registration-time cost decisions are order-safe.
@@ -272,9 +280,12 @@ in every `junit` job, both fail the build on any hit):
 - **`ApiLeakGateTest`** — the *upstream* boundary (REQ-XREF-03, ADR-001/005):
   scans the compiled class files of all supported packages for byte-level
   references to upstream mod types (`io/redspace/ironsspellbooks/`,
-  `io/github/manasmods/`, `net/bettercombat/`, `net/kayn/better_spellcasting/`,
-  `net/neoforged/fml/ModList`). Upstream knowledge belongs exclusively in
-  consumer-side provider adapters.
+  `io/github/manasmods/`, `net/bettercombat/`, `net/kayn/better_spellcasting/`).
+  Upstream knowledge belongs exclusively in consumer-side provider adapters.
+  `net/neoforged/fml/ModList` is scoped separately (issue #92): forbidden in
+  `discovery` and `registry` (the core#14 AC — presence is never inferred for
+  registration), allowed in `api` solely for **declaration-time** optional
+  gates (`declare(..., requiredModId)`).
 - **`ApiSurfaceSignatureGateTest`** — the *internal* boundary (REQ-CORE-09):
   loads every compiled class in a supported package (without initialization)
   and walks its consumer-facing **signatures** — declared public/protected
