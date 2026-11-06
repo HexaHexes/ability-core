@@ -8,7 +8,7 @@ for the four consumer repositories.
 
 | Package | Stability | Purpose |
 |---|---|---|
-| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `ActivationRequests` (slot gate), `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, `RefundableConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies`, pricing: `AmountResolvers`, modes contract: `AbilityModes`, `ModeOwners`, `ModeContract`, `ModeChangeRequest`, `ModeChangeHandler`, `ModeChangeHandlers` |
+| `org.bitwisemadness.abilitycore.api` | **Stable** - public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `ActivationRequests` (slot gate), `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, `RefundableConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies`, pricing: `AmountResolvers`, modes contract: `AbilityModes`, `ModeOwners`, `ModeContract`, `ModeChangeRequest`, `ModeChangeHandler`, `ModeChangeHandlers`, unlock contract: `AbilityUnlocks`, `AbilityUnlocks.UnlockProvider` |
 | `org.bitwisemadness.abilitycore.registry` | **Stable** — public API | `AbilityRegistries` (registry key + `registry()` + `isReady()`) |
 | `org.bitwisemadness.abilitycore.discovery` | **Stable** — public API | `AbilityDiscovery` (presence, enumeration, filtering) |
 | `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler`, `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
@@ -20,7 +20,7 @@ for the four consumer repositories.
 
 ## Extension points
 
-Consumers extend core through exactly eleven mechanisms:
+Consumers extend core through exactly twelve mechanisms:
 
 1. **Registry registration** — providers register `AbilityDefinition` entries
    on their own mod bus via `RegisterEvent` for `AbilityRegistries.ABILITY_REGISTRY_KEY`.
@@ -62,6 +62,11 @@ Consumers extend core through exactly eleven mechanisms:
     `ModeOwners.declareNative(id[, projection])` (readable through
     `ModeContract.currentMode`), and register a `ModeChangeHandler` for the
     server-side mode-change intent (see the modes section below).
+12. **Unlock providers** — providers declare a per-player unlock answer via
+    `AbilityUnlocks.declare(id, provider)` so consumers read "does the player
+    have this ability?" through `AbilityUnlocks.isLearned(...)` without
+    upstream types; the provider answers live and owns its upstream event
+    side effects (see the unlock contract below).
 
 ## Overlay data contract (REQ-HOT-08)
 
@@ -480,6 +485,40 @@ returns either the validated index or the refusal to return:
 Usable from `ChargingModel.NATIVE` handlers; carries no upstream-mod types.
 The consumers (curios' `press`, the forthcoming iss-hotbar `cast`) adopt it
 in their own repos with their behaviour unchanged.
+
+## Unlock contract (issues #116/#117)
+
+"Does this player have this ability?" is a provider-declared, option-typed
+query — the `AvailabilityProviders` mirror with a boolean answer:
+
+| Piece | Shape |
+|---|---|
+| Declaration | `AbilityUnlocks.declare(abilityId, provider)` at mod setup — exactly one provider per id, duplicates fail loudly |
+| Query | `AbilityUnlocks.isLearned(player, abilityId)` → `Optional<Boolean>`: `true` = learned, `false` = not, **empty = unknown** (undeclared id, abstaining provider, or a null-returning violation — logged once) |
+| Provider | `UnlockProvider.learnedFor(player, id)` — upstream types live *inside* implementations only; no signature here names another mod (leak-gate rule) |
+
+**Discipline: unknown stays unknown.** Consumers render and validate
+`empty` as unknown — never a guessed boolean (REQ-HOT-08).
+
+**The provider event-subscription invariant.** Providers answer *live* —
+the query never caches, so it cannot disagree with the world. Providers act
+on their upstream's own learn/unlock events as the **side-effect** half
+(clearing stale assignments, refreshing dependent state), and **reconcile at
+login** so any event-less mutation path (commands, datapack resets) is
+corrected. Reference upstream: ManasCore's `UNLOCK_SKILL` / `REMOVE_SKILL`
+events are both cancelable pre-state notifications carrying the skill
+instance and entity. Core stores the provider function, never learned
+state: no per-player duplication of upstream truth, and no payload in v1 —
+upstream learned state is client-readable today (evidenced), so a provider
+that cannot answer client-side abstains to unknown rather than core
+syncing a second copy.
+
+**Scope:** learned/unlearned only. The locked-list read (a separate
+upstream concept) is deferred until its semantics are pinned — use-gate vs
+acquisition-gate (findings #116, unverified item 1).
+
+**Consumers:** the hotbar menu and assignment validation (ability-hotbar#135) —
+the first reader; providers are the first writer (ability-tensura's gate).
 
 ## Leak gates (mechanism)
 
