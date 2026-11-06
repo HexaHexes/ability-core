@@ -8,7 +8,7 @@ for the four consumer repositories.
 
 | Package | Stability | Purpose |
 |---|---|---|
-| `org.bitwisemadness.abilitycore.api` | **Stable** - public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `ActivationRequests` (slot gate), `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, `RefundableConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies`, pricing: `AmountResolvers`, modes contract: `AbilityModes`, `ModeOwners`, `ModeContract`, `ModeChangeRequest`, `ModeChangeHandler`, `ModeChangeHandlers`, unlock contract: `AbilityUnlocks`, `AbilityUnlocks.UnlockProvider` |
+| `org.bitwisemadness.abilitycore.api` | **Stable** - public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `ActivationRequests` (slot gate), `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, `RefundableConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownHandler`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies`, pricing: `AmountResolvers`, modes contract: `AbilityModes`, `ModeOwners`, `ModeContract`, `ModeChangeRequest`, `ModeChangeHandler`, `ModeChangeHandlers`, unlock contract: `AbilityUnlocks`, `AbilityUnlocks.UnlockProvider` |
 | `org.bitwisemadness.abilitycore.registry` | **Stable** — public API | `AbilityRegistries` (registry key + `registry()` + `isReady()`) |
 | `org.bitwisemadness.abilitycore.discovery` | **Stable** — public API | `AbilityDiscovery` (presence, enumeration, filtering) |
 | `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler`, `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
@@ -39,8 +39,9 @@ Consumers extend core through exactly twelve mechanisms:
    cooldown/cost/availability overlay (REQ-HOT-08).
 6. **Cooldown ownership** — providers declare per-ability cooldown ownership
    once via `CooldownOwners.declareNative(id)` (optionally with a read-through
-   `NativeProjection`) or `declareExternal(id, ticks[, tracker])`; exactly one
-   declaration per id (see the cooldown contract below).
+   `NativeProjection`), `declareExternal(id, ticks[, tracker])`, or the
+   request-aware `declareHandler(id, handler)` (per-spell/per-mode gates);
+   exactly one declaration per id (see the cooldown contract below).
 7. **Icon projection** — providers declare an `IconProvider` per ability via
    `IconProviders.declare(...)` for per-player dynamic icons; the resolution
    order (provider → definition `icon` → consumer placeholder) is the
@@ -154,7 +155,8 @@ dual or malformed declarations fail loudly at declaration time:
 | Owner | Declared by | Checked by | Reaching the client |
 |---|---|---|---|
 | `NATIVE` (default) | `declareNative(id)` (+ optional `NativeProjection`) | the provider's own pipeline (ISS `PlayerCooldowns`, Tensura per-skill) | the provider's **own** sync (ISS already syncs cooldowns — hotbar#2 §3); core sends nothing |
-| `EXTERNAL` | `declareExternal(id, ticks[, tracker])` | `ExternalCooldownStep`, pre-activation (`REFUSED_COOLDOWN`), start post-activation | a **consumer snapshot** payload (ADR-003) or the overlay tuple — still no core packet |
+| `EXTERNAL` (the **default fixed-cooldown handler** for a whole ability) | `declareExternal(id, ticks[, tracker])` | `ExternalCooldownStep`, pre-activation (`REFUSED_COOLDOWN`), start post-activation | a **consumer snapshot** payload (ADR-003) or the overlay tuple — still no core packet |
+| `HANDLER` | `declareHandler(id, handler)` | `ExternalCooldownStep` through the `CooldownHandler`, asked with the whole request (slot/mode context), pre-activation (`REFUSED_COOLDOWN`); **core never starts it** — the domain starts at its native moment | the provider's own sync, like `NATIVE` (core sends nothing) |
 
 **Reads** go through `CooldownContract.remaining(...)` / `isOnCooldown(...)`:
 
@@ -166,10 +168,16 @@ dual or malformed declarations fail loudly at declaration time:
 - `NATIVE` **without** a projection answers *unknown* (`Optional.empty()`) —
   never a guessed "ready" and never a claimed cooldown; the provider's
   pipeline is the gate.
-- **Start has exactly one site**: the pipeline's post-activation
+- `HANDLER` answers *unknown* here too: the handler's answer depends on the
+  request (per-spell/per-mode), which this id-level facade does not carry —
+  guessing which spell or mode to report would be a lie. Consumers asking
+  about one activation read `CooldownOwners.handlerFor(id)` with the request.
+- **Start has exactly one core site**: the pipeline's post-activation
   `ExternalCooldownStep.startExternalCooldown` (never at initiation — ISS
-  starts cooldowns inside `castSpell`). The contract has no public `start`;
-  a second start site would break native start timing (AC2/AC4).
+  starts cooldowns inside `castSpell`). `HANDLER` cooldowns never start in
+  core at all — the domain starts them (the single-start rule extends to the
+  handler). The contract has no public `start`; a second start site would
+  break native start timing (AC2/AC4).
 
 **No duplicate packets**: core's compiled payload inventory is serverbound
 intent only, pinned mechanically by `SyncContractTest`

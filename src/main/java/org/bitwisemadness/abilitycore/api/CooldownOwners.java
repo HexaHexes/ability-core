@@ -14,9 +14,12 @@ import org.jetbrains.annotations.Nullable;
  * <p>Exactly one owner per ability, declared once: {@link Owner#NATIVE} means
  * the provider checks and starts cooldowns itself (the default - core does
  * nothing), {@link Owner#EXTERNAL} means core's {@link CooldownTracker} does,
- * with a mandatory positive duration. One declaration per id, duplicate or
- * malformed declarations fail loudly - the dual-owner state is unconstructible
- * just like chargingModel exclusivity.</p>
+ * with a mandatory positive duration (the <b>default fixed-cooldown handler</b>
+ * for a whole ability), and {@link Owner#HANDLER} means core checks
+ * pre-activation through a {@link CooldownHandler} while the domain starts
+ * the cooldown itself (the per-spell/per-mode seam). One declaration per id,
+ * duplicate or malformed declarations fail loudly - the dual-owner state is
+ * unconstructible just like chargingModel exclusivity.</p>
  */
 public final class CooldownOwners {
 
@@ -24,7 +27,9 @@ public final class CooldownOwners {
         /** Provider's pipeline checks/starts cooldowns; core stays out. */
         NATIVE,
         /** Core checks pre-activation and starts post-activation via a tracker. */
-        EXTERNAL
+        EXTERNAL,
+        /** Core checks pre-activation through the handler; the domain starts. */
+        HANDLER
     }
 
     /**
@@ -41,7 +46,7 @@ public final class CooldownOwners {
     }
 
     private record Entry(Owner owner, long durationTicks, @Nullable CooldownTracker tracker,
-            @Nullable NativeProjection projection) {
+            @Nullable NativeProjection projection, @Nullable CooldownHandler handler) {
         private Entry {
             if (owner == null) {
                 throw new IllegalArgumentException("owner must not be null");
@@ -58,6 +63,19 @@ public final class CooldownOwners {
                 throw new IllegalArgumentException(
                         "EXTERNAL cooldown forbids a projection - core's tracker is the answer source");
             }
+            if (owner == Owner.HANDLER) {
+                if (handler == null) {
+                    throw new IllegalArgumentException(
+                            "HANDLER cooldown requires a handler - it is the gate and the answer source");
+                }
+                if (tracker != null || projection != null || durationTicks != 0L) {
+                    throw new IllegalArgumentException(
+                            "HANDLER cooldown forbids a tracker, projection, or duration - the handler answers alone");
+                }
+            } else if (handler != null) {
+                throw new IllegalArgumentException(
+                        owner + " cooldown forbids a handler - declareHandler owns that state");
+            }
         }
     }
 
@@ -68,7 +86,7 @@ public final class CooldownOwners {
 
     /** Default semantics: providers own their cooldowns (most common case). */
     public static void declareNative(ResourceLocation abilityId) {
-        declare(abilityId, new Entry(Owner.NATIVE, 0L, null, null));
+        declare(abilityId, new Entry(Owner.NATIVE, 0L, null, null, null));
     }
 
     /**
@@ -81,17 +99,34 @@ public final class CooldownOwners {
         if (projection == null) {
             throw new IllegalArgumentException("projection must not be null - use declareNative(id) without one");
         }
-        declare(abilityId, new Entry(Owner.NATIVE, 0L, null, projection));
+        declare(abilityId, new Entry(Owner.NATIVE, 0L, null, projection, null));
     }
 
     /** Core-tracked cooldown with the built-in non-persistent store. */
     public static void declareExternal(ResourceLocation abilityId, long durationTicks) {
-        declare(abilityId, new Entry(Owner.EXTERNAL, durationTicks, CoreCooldownTracker.INSTANCE, null));
+        declare(abilityId, new Entry(Owner.EXTERNAL, durationTicks, CoreCooldownTracker.INSTANCE, null, null));
     }
 
     /** Core-tracked cooldown with a provider-supplied tracker (e.g. for persisted state). */
     public static void declareExternal(ResourceLocation abilityId, long durationTicks, CooldownTracker tracker) {
-        declare(abilityId, new Entry(Owner.EXTERNAL, durationTicks, tracker, null));
+        declare(abilityId, new Entry(Owner.EXTERNAL, durationTicks, tracker, null, null));
+    }
+
+    /**
+     * Request-aware cooldown gate (REQ-CORE-05): core refuses while the
+     * handler reports remaining &gt; 0 - asked with the whole
+     * {@link ActivationRequest}, so per-spell and per-mode cooldowns are
+     * answerable - and never starts the cooldown: the domain starts it at
+     * its native moment (the single-start rule). The handler IS the answer
+     * source, so no duration, tracker, or projection can be declared
+     * beside it.
+     */
+    public static void declareHandler(ResourceLocation abilityId, CooldownHandler handler) {
+        if (handler == null) {
+            throw new IllegalArgumentException(
+                    "handler must not be null - declareHandler(id) without one gates nothing");
+        }
+        declare(abilityId, new Entry(Owner.HANDLER, 0L, null, null, handler));
     }
 
     private static void declare(ResourceLocation abilityId, Entry entry) {
@@ -119,8 +154,9 @@ public final class CooldownOwners {
     }
 
     /**
-     * The registered native projection, or null (NATIVE without one, EXTERNAL,
-     * or undeclared) - {@link CooldownContract} maps null to unknown.
+     * The registered native projection, or null (NATIVE without one,
+     * EXTERNAL, HANDLER, or undeclared) - {@link CooldownContract} maps null
+     * to unknown.
      */
     @Nullable
     public static NativeProjection projectionFor(ResourceLocation abilityId) {
@@ -128,7 +164,19 @@ public final class CooldownOwners {
         return entry == null || entry.owner() != Owner.NATIVE ? null : entry.projection();
     }
 
-    /** Declared EXTERNAL duration in ticks, or 0 for NATIVE/undeclared. */
+    /**
+     * The registered request-aware handler, or null (any non-HANDLER owner,
+     * or undeclared). The COOLDOWN step consults it only for HANDLER-owned
+     * ids; a null there (unconstructible via declarations, defence in depth)
+     * refuses fail-closed.
+     */
+    @Nullable
+    public static CooldownHandler handlerFor(ResourceLocation abilityId) {
+        Entry entry = abilityId == null ? null : ENTRIES.get(abilityId);
+        return entry == null || entry.owner() != Owner.HANDLER ? null : entry.handler();
+    }
+
+    /** Declared EXTERNAL duration in ticks, or 0 for NATIVE/HANDLER/undeclared. */
     public static long declaredDurationTicks(ResourceLocation abilityId) {
         Entry entry = abilityId == null ? null : ENTRIES.get(abilityId);
         return entry == null ? 0L : entry.durationTicks();
