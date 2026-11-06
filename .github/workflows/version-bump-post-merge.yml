@@ -45,6 +45,8 @@ on:
 
 permissions:
   contents: read # the bump authenticates with BUMP_TOKEN, not this token
+  # The semver floor reads breaking-labelled PRs since the last stable tag.
+  pull-requests: read
 
 concurrency:
   group: version-bump-post-merge
@@ -61,11 +63,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          # The semver floor below reads the last stable tag - checkout's
+          # default single-commit fetch carries no tags.
+          fetch-depth: 0
           token: ${{ secrets.BUMP_TOKEN || github.token }}
 
       - name: Bump the alpha slot
         env:
           BUMP_TOKEN: ${{ secrets.BUMP_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -106,6 +112,36 @@ jobs:
               fi
               ;;
           esac
+
+          # Semver floor (owner ruling, issue #104): while breaking PRs have
+          # landed since the last stable tag, the train base may never sit
+          # below the minor raise - ci's affirmed rule ("raise major or
+          # minor") forbids the patch line the case above would otherwise
+          # open, whose stable cut could then never pass. Same query as
+          # ci.yml's magnitude rule, so train and check read one thing. The
+          # raised base starts a fresh counter (current channel kept for
+          # beta trains).
+          BASELINE=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+          BREAKING=""
+          FLOOR=""
+          if [ -n "$BASELINE" ]; then
+            BREAKING=$(gh pr list --state merged --label breaking --search "merged:>=$(git log -1 --format=%cI "$BASELINE")" --json number --jq '.[].number' || true)
+          fi
+          if [ -n "$BREAKING" ]; then
+            echo "breaking PRs since $BASELINE: $BREAKING"
+            OLD_BASE="${BASELINE#v}"
+            MAJOR_OLD=$(echo "$OLD_BASE" | cut -d. -f1)
+            MINOR_OLD=$(echo "$OLD_BASE" | cut -d. -f2)
+            FLOOR="$MAJOR_OLD.$((MINOR_OLD + 1)).0"
+            echo "semver floor (minor raise of $OLD_BASE): $FLOOR"
+            CURRENT_BASE="${VERSION%%-*}"
+            if [ "$CURRENT_BASE" != "$FLOOR" ] && [ "$(printf '%s\n%s\n' "$CURRENT_BASE" "$FLOOR" | sort -V | tail -1)" = "$FLOOR" ]; then
+              SLOT_CHANNEL=alpha
+              case "$VERSION" in *-beta.*) SLOT_CHANNEL=beta ;; esac
+              NEXT="$FLOOR-$SLOT_CHANNEL.01"
+              echo "breaking outstanding: raising base $CURRENT_BASE -> $FLOOR (new train $NEXT)"
+            fi
+          fi
           echo "next slot: $NEXT"
 
           git config user.name "github-actions[bot]"
