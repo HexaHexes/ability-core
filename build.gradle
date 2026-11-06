@@ -124,7 +124,7 @@ test {
 // "All N required tests passed :)" when every required test succeeds. Keep
 // expectedTests in sync with the @GameTest methods in src/gametest.
 tasks.matching { it.name == 'runGameTestServer' }.configureEach {
-    def expectedTests = 4
+    def expectedTests = 5
     doLast {
         def log = file('run/logs/latest.log')
         if (!log.exists()) {

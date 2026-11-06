@@ -30,7 +30,7 @@ the consuming adapters.
 - Optional: none, and none should appear - keep this repo free of upstream-mod
   dependencies so every consumer can share it. Adapters live in the consumer repos.
 
-**Test:** `./gradlew runGameTestServer` - `AbilityCoreGameTests` (1 test). `expectedTests = 1`
+**Test:** `./gradlew runGameTestServer` - `AbilityCoreGameTests` (5 tests). `expectedTests = 5`
 in `build.gradle` must match the `@GameTest` count.
 
 **Gotchas**

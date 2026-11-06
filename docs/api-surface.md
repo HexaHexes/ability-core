@@ -8,7 +8,7 @@ for the four consumer repositories.
 
 | Package | Stability | Purpose |
 |---|---|---|
-| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `ActivationRequests` (slot gate), `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, `RefundableConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies`, pricing: `AmountResolvers` |
+| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `ActivationRequests` (slot gate), `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, `RefundableConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies`, pricing: `AmountResolvers`, modes contract: `AbilityModes`, `ModeOwners`, `ModeContract`, `ModeChangeRequest`, `ModeChangeHandler`, `ModeChangeHandlers` |
 | `org.bitwisemadness.abilitycore.registry` | **Stable** — public API | `AbilityRegistries` (registry key + `registry()` + `isReady()`) |
 | `org.bitwisemadness.abilitycore.discovery` | **Stable** — public API | `AbilityDiscovery` (presence, enumeration, filtering) |
 | `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler`, `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
@@ -20,7 +20,7 @@ for the four consumer repositories.
 
 ## Extension points
 
-Consumers extend core through exactly ten mechanisms:
+Consumers extend core through exactly eleven mechanisms:
 
 1. **Registry registration** — providers register `AbilityDefinition` entries
    on their own mod bus via `RegisterEvent` for `AbilityRegistries.ABILITY_REGISTRY_KEY`.
@@ -57,6 +57,11 @@ Consumers extend core through exactly ten mechanisms:
 10. **Cost amount resolution** — addons declare a named per-request pricer
     via `AmountResolvers.declare(name, resolver)` for an ability's
     `amount_resolver` field (see the amount-resolution section below).
+11. **Ability-mode contract** — providers declare an ability's mode cycle via
+    `AbilityModes.declare(id, modes)`, own its live state via
+    `ModeOwners.declareNative(id[, projection])` (readable through
+    `ModeContract.currentMode`), and register a `ModeChangeHandler` for the
+    server-side mode-change intent (see the modes section below).
 
 ## Overlay data contract (REQ-HOT-08)
 
@@ -410,6 +415,50 @@ AmountResolvers.declare("mymod:ep_share",
 **Overlay**: `amount_resolver` mirrors the definition shape — present
 replaces wholesale, absent keeps the base; an overlay naming a resolver
 nobody declared refuses fail-closed at runtime (`REFUSED_UNAVAILABLE`).
+
+## Ability modes (issue #113)
+
+Three layers own three different mode facts (the design's spine, from
+core#112's findings):
+
+| Layer | Owns |
+|---|---|
+| the provider (ARR/ManasCore for Tensura) | authoritative live mode: transitions, learned sets, effects |
+| the consumer (hotbar) | the per-slot mode **setting** and the keybind UX |
+| core | the provider-neutral contract: declaration, projection, request/intent shapes |
+
+- **Declaration**: `AbilityModes.declare(abilityId, List<Mode>)` at setup -
+  `Mode(id, nameKey)`, ordered, first = default, one declaration per id
+  (loud ownership; blank and duplicate ids rejected). The registry shape
+  was chosen over a definition component (core#111's rejected alternative):
+  modes are provider setup-time knowledge, not datapack metadata, and a
+  per-mode `nameKey` carries display text a plain string field cannot.
+- **Live state**: `ModeOwners.declareNative(id[, projection])` read through
+  `ModeContract.currentMode(player, id)` - core stores the function, never
+  the state; undeclared or projection-less abilities answer empty
+  (unknown, never a guessed mode, REQ-HOT-08). This is deliberately
+  distinct from the hotbar slot's stored *setting* - two questions, two
+  owners.
+- **Activation context**: `ActivationRequest.modeContext()` - advisory, like
+  the target hint - travels with the intent, on the wire as
+  `ActivateAbilityPayload`'s mode field (channel version 3). Two slots of
+  one ability can activate with different modes while the provider keeps a
+  single live state; providers validate the value against their own
+  declared modes, and a blank mode builds no context.
+- **Mode-change intent**: `ModeChangeRequest(abilityId, slotContext)` routed
+  through `ModeChangeHandlers.run(...)` - the handler shape minus charging:
+  a mode change never charges, cools down or casts, and an unclaimed id
+  refuses `REFUSED_NO_ADAPTER`. Transport is the consumer's own
+  serverbound payload (the per-consumer inventory in `docs/sync.md`) -
+  core routes, consumers send, and the sender applies its state update
+  only on ACTED.
+- **Client sync**: declarations run at mod construction on both sides
+  (ADR-003's same-construction doctrine), so client reads need no payload.
+  Should a provider's mode set turn out to be server-config-derived (the
+  carried core#112 unverified item 1), its content rides the future
+  REQ-CORE-08 catalog payload that carries definition content (recorded on
+  core#19) - core sends no game data today, and no dedicated modes payload
+  exists by design.
 
 ## Slot gate (issue #87)
 

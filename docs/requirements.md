@@ -38,6 +38,7 @@ written into the implementation issues; this table records that they exist.
 | REQ-CORE-07 | Eligibility and restriction interfaces + server-authoritative validation contracts | F | P0 | designed | SPIKE-core-1 (closed) -> core#18 | Phase 2 |
 | REQ-CORE-08 | Client/server synchronisation contracts for ability state | F | P0 | designed | SPIKE-core-1+cfg-2 (closed) -> core#19 | Phase 2 |
 | REQ-CORE-09 | Extension points and versioned stability policy for future providers (published artifact) | F | P1 | designed | SPIKE-core-1 (closed) -> core#20 (closes Phase 2 last) | Phase 2 |
+| REQ-CORE-10 | Ability-mode contracts: declaration (per-ability cycles), live-state projection, activation mode context, mode-change intent | F | P1 | designed | core#112 (findings, closed) -> core#113 | Phase 2 |
 
 ## B. Tensura x ISS integration - `tensura-iss-integration`
 
@@ -245,7 +246,7 @@ Tracked independently of REQ-HOT-22 (different problem, different issues).
 
 | Requirement | Issue |
 |---|---|
-| REQ-CORE-01..09 | core#12, #13, #14, #15, #16, #17, #18, #19, #20 (one per REQ) |
+| REQ-CORE-01..10 | core#12, #13, #14, #15, #16, #17, #18, #19, #20, #113 (one per REQ) |
 | REQ-CFG-01/02 | core#9 |
 | REQ-CFG-03 | core#10 |
 | REQ-ISS-01 | iss-integration#8 |

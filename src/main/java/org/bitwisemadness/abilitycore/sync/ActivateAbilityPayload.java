@@ -15,7 +15,8 @@ import org.bitwisemadness.abilitycore.api.TargetContext;
 
 /**
  * Serverbound activation request payload (REQ-CORE-02, REQ-CORE-08,
- * extended by core#69 to carry a target hint).
+ * extended by core#69 to carry a target hint and by issue #113 to carry
+ * the mode context).
  *
  * <p>Carries the client's <em>intent</em> to activate an ability, plus an
  * optional <b>target hint</b> in {@link TargetContext}'s wire vocabulary:
@@ -28,12 +29,19 @@ import org.bitwisemadness.abilitycore.api.TargetContext;
  * default). The server resolves the hint in {@code TargetValidationStep}
  * before any provider sees it - clients never carry authority.</p>
  *
+ * <p>The {@code mode} string (issue #113) is the mode the activating slot
+ * is set to - blank means none, and a non-blank value becomes the
+ * request's {@link ActivationRequest#modeContext()} advisory context
+ * (providers validate it against their own declared modes, exactly like
+ * the target hint). It rides the wire because the client owns the slot's
+ * stored setting and core never reads consumer state.</p>
+ *
  * <p>Registered on the core's network channel with
- * {@code versioned("2").optional()} - version skew disconnects (verified:
+ * {@code versioned("3").optional()} - version skew disconnects (verified:
  * {@code NetworkComponentNegotiator}), so codec changes require a version
  * bump shipped to both sides together (ADR-003). This record's growth from
- * four to six fields <em>is</em> that bump: {@code 1 -> 2}, hotbar#94
- * ships the populated side.</p>
+ * four to seven fields spans those bumps: {@code 1 -> 2} (target hint,
+ * hotbar#94) and {@code 2 -> 3} (mode context, issue #113).</p>
  *
  * @param abilityId    registry id of the ability to activate
  * @param source       activation source wire name (e.g. {@code direct_slot})
@@ -41,6 +49,7 @@ import org.bitwisemadness.abilitycore.api.TargetContext;
  * @param clientStamp  advisory client timestamp (diagnostics only)
  * @param targetKind   {@link TargetContext} kind, or blank for no hint
  * @param targetParams flat {@code key=value} params for the kind, or blank
+ * @param mode         the slot's mode setting (issue #113), or blank for none
  */
 public record ActivateAbilityPayload(
         String abilityId,
@@ -48,20 +57,44 @@ public record ActivateAbilityPayload(
         int slotContext,
         long clientStamp,
         String targetKind,
-        String targetParams) implements CustomPacketPayload {
+        String targetParams,
+        String mode) implements CustomPacketPayload {
 
     public static final Type<ActivateAbilityPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(AbilityCore.MOD_ID, "activate_ability"));
 
-    public static final StreamCodec<ByteBuf, ActivateAbilityPayload> STREAM_CODEC = StreamCodec.composite(
-            net.minecraft.network.codec.ByteBufCodecs.STRING_UTF8, ActivateAbilityPayload::abilityId,
-            net.minecraft.network.codec.ByteBufCodecs.STRING_UTF8, ActivateAbilityPayload::source,
-            net.minecraft.network.codec.ByteBufCodecs.VAR_INT, ActivateAbilityPayload::slotContext,
-            net.minecraft.network.codec.ByteBufCodecs.VAR_LONG, ActivateAbilityPayload::clientStamp,
-            net.minecraft.network.codec.ByteBufCodecs.STRING_UTF8, ActivateAbilityPayload::targetKind,
-            net.minecraft.network.codec.ByteBufCodecs.STRING_UTF8, ActivateAbilityPayload::targetParams,
-            ActivateAbilityPayload::new
-    );
+    // 7 fields exceeds StreamCodec.composite's six-pair overloads (issue #113),
+    // so the wire order is written out: record order, field for field.
+    public static final StreamCodec<ByteBuf, ActivateAbilityPayload> STREAM_CODEC = new StreamCodec<>() {
+        @Override
+        public void encode(ByteBuf buf, ActivateAbilityPayload value) {
+            net.minecraft.network.codec.ByteBufCodecs.STRING_UTF8.encode(buf, value.abilityId());
+            net.minecraft.network.codec.ByteBufCodecs.STRING_UTF8.encode(buf, value.source());
+            net.minecraft.network.codec.ByteBufCodecs.VAR_INT.encode(buf, value.slotContext());
+            net.minecraft.network.codec.ByteBufCodecs.VAR_LONG.encode(buf, value.clientStamp());
+            net.minecraft.network.codec.ByteBufCodecs.STRING_UTF8.encode(buf, value.targetKind());
+            net.minecraft.network.codec.ByteBufCodecs.STRING_UTF8.encode(buf, value.targetParams());
+            net.minecraft.network.codec.ByteBufCodecs.STRING_UTF8.encode(buf, value.mode());
+        }
+
+        @Override
+        public ActivateAbilityPayload decode(ByteBuf buf) {
+            return new ActivateAbilityPayload(
+                    net.minecraft.network.codec.ByteBufCodecs.STRING_UTF8.decode(buf),
+                    net.minecraft.network.codec.ByteBufCodecs.STRING_UTF8.decode(buf),
+                    net.minecraft.network.codec.ByteBufCodecs.VAR_INT.decode(buf),
+                    net.minecraft.network.codec.ByteBufCodecs.VAR_LONG.decode(buf),
+                    net.minecraft.network.codec.ByteBufCodecs.STRING_UTF8.decode(buf),
+                    net.minecraft.network.codec.ByteBufCodecs.STRING_UTF8.decode(buf),
+                    net.minecraft.network.codec.ByteBufCodecs.STRING_UTF8.decode(buf));
+        }
+    };
+
+    /** Pre-mode construction (issue #113): blank mode = no mode context. */
+    public ActivateAbilityPayload(String abilityId, String source, int slotContext,
+            long clientStamp, String targetKind, String targetParams) {
+        this(abilityId, source, slotContext, clientStamp, targetKind, targetParams, "");
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {
@@ -79,21 +112,27 @@ public record ActivateAbilityPayload(
      *         (no activation, no state change, no error sent)
      */
     public static ActivationRequest toRequest(ActivateAbilityPayload payload) {
+        ActivationRequest request;
         if (payload.targetKind() == null || payload.targetKind().isBlank()) {
             // Absent hint: byte-for-byte the behaviour before core#69.
-            return ActivationRequest.fromWire(payload.abilityId(), payload.source(),
+            request = ActivationRequest.fromWire(payload.abilityId(), payload.source(),
                     payload.slotContext(), payload.clientStamp());
+        } else {
+            Map<String, String> params = parseParams(payload.targetParams());
+            if (params == null) {
+                return null; // structurally malformed params: declared but unparseable
+            }
+            Optional<TargetContext> target = TargetContext.fromWire(payload.targetKind(), params);
+            if (target.isEmpty()) {
+                return null; // declared-but-unparseable target never becomes a default
+            }
+            request = ActivationRequest.fromWire(payload.abilityId(), payload.source(),
+                    payload.slotContext(), payload.clientStamp(), target.get());
         }
-        Map<String, String> params = parseParams(payload.targetParams());
-        if (params == null) {
-            return null; // structurally malformed params: declared but unparseable
+        if (request != null && payload.mode() != null && !payload.mode().isBlank()) {
+            request = request.withMode(payload.mode());
         }
-        Optional<TargetContext> target = TargetContext.fromWire(payload.targetKind(), params);
-        if (target.isEmpty()) {
-            return null; // declared-but-unparseable target never becomes a default
-        }
-        return ActivationRequest.fromWire(payload.abilityId(), payload.source(),
-                payload.slotContext(), payload.clientStamp(), target.get());
+        return request;
     }
 
     /**
