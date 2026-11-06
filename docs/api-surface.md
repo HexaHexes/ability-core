@@ -8,7 +8,7 @@ for the four consumer repositories.
 
 | Package | Stability | Purpose |
 |---|---|---|
-| `org.bitwisemadness.abilitycore.api` | **Stable** - public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `ActivationRequests` (slot gate), `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, `RefundableConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownHandler`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies`, pricing: `AmountResolvers`, modes contract: `AbilityModes`, `ModeOwners`, `ModeContract`, `ModeChangeRequest`, `ModeChangeHandler`, `ModeChangeHandlers`, unlock contract: `AbilityUnlocks`, `AbilityUnlocks.UnlockProvider` |
+| `org.bitwisemadness.abilitycore.api` | **Stable** - public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `ActivationRequests` (slot gate), `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, `RefundableConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownHandler`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies`, pricing: `AmountResolvers`, modes contract: `AbilityModes`, `ModeOwners`, `ModeContract`, `ModeChangeRequest`, `ModeChangeHandler`, `ModeChangeHandlers`, unlock contract: `AbilityUnlocks`, `AbilityUnlocks.UnlockProvider`, presentation contract: `PresentationProviders`, `PresentationProvider`, `AbilityPresentation`, `PresentationField`, `Toggle` |
 | `org.bitwisemadness.abilitycore.registry` | **Stable** — public API | `AbilityRegistries` (registry key + `registry()` + `isReady()`) |
 | `org.bitwisemadness.abilitycore.discovery` | **Stable** — public API | `AbilityDiscovery` (presence, enumeration, filtering) |
 | `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler`, `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
@@ -20,7 +20,7 @@ for the four consumer repositories.
 
 ## Extension points
 
-Consumers extend core through exactly twelve mechanisms:
+Consumers extend core through exactly thirteen mechanisms:
 
 1. **Registry registration** — providers register `AbilityDefinition` entries
    on their own mod bus via `RegisterEvent` for `AbilityRegistries.ABILITY_REGISTRY_KEY`.
@@ -63,11 +63,15 @@ Consumers extend core through exactly twelve mechanisms:
     `ModeOwners.declareNative(id[, projection])` (readable through
     `ModeContract.currentMode`), and register a `ModeChangeHandler` for the
     server-side mode-change intent (see the modes section below).
-12. **Unlock providers** — providers declare a per-player unlock answer via
+12. **Unlock providers** - providers declare a per-player unlock answer via
     `AbilityUnlocks.declare(id, provider)` so consumers read "does the player
     have this ability?" through `AbilityUnlocks.isLearned(...)` without
     upstream types; the provider answers live and owns its upstream event
     side effects (see the unlock contract below).
+13. **Menu presentation** - providers declare what their ability shows in
+    the menu via `PresentationProviders.declare(id, provider)`: ordered live
+    fields (`PresentationField`) plus an optional `Toggle` state (see the
+    presentation contract below).
 
 ## Overlay data contract (REQ-HOT-08)
 
@@ -491,6 +495,30 @@ core#112's findings):
 - Consumers render stats then the description in the ability menu's
   inline tooltip; stat-label localisation there follows the consumer's own
   label convention (ability-hotbar#139).
+
+## Menu presentation (core#122)
+
+- **Declaration**: `PresentationProviders.declare(id, provider)` - exactly
+  one provider per ability, loud ownership; `present(player, id)` answers
+  an `AbilityPresentation` or **empty** ("render the base row unchanged") -
+  undeclared ids and null-degrading providers never guess and never crash
+  (the availability contract's discipline).
+- **Fields**: ordered `PresentationField(labelKey, Kind, value, progress)`
+  with `Kind { TEXT, PROGRESS }` - provider-owned label keys (the
+  `displayNameKey` rule), display-only values, progress validated to 0..1;
+  declaration order is presentation order. The `PROGRESS` shape is the
+  experience/meter bar.
+- **Toggle**: `Toggle(enabled)` present = the ability is togglable; the
+  consumer's Enable/Disable control executes through the **existing
+  activation pipeline** (`ActivateAbilityPayload`, `source = menu`,
+  `NO_SLOT`) - no new intent type, every gate stays the authority, and
+  TOGGLE-typed abilities flip in their provider's handler.
+- **Client posture** (the unlock contract's record): declarations reach
+  clients by both-sides construction and providers read already-readable
+  upstream state - no core payload in v1.
+- Consumers: the hotbar renders the fields and drives the toggle control
+  (its issue); ability-tensura declares Tensura's progress and toggle
+  presentations (its companion issue).
 
 ## Slot gate (issue #87)
 
