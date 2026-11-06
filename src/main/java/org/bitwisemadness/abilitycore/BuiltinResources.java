@@ -9,7 +9,8 @@ import org.bitwisemadness.abilitycore.api.ResourceProviders;
 import org.slf4j.Logger;
 
 /**
- * Core's four built-in resource pairs (REQ-CORE-04, issue #88): health,
+ * Core's built-in resource pairs (REQ-CORE-04, issue #88; five since the
+ * deliberate {@code free} pair, #93): health,
  * hunger, experience points and experience levels - the vanilla pools every
  * pack can price abilities against without an addon. Registered once at mod
  * construction ({@link AbilityCore}'s constructor), which the pairing rule
@@ -73,7 +74,7 @@ public final class BuiltinResources {
             @Override
             public void charge(net.minecraft.resources.ResourceLocation abilityId,
                     ServerPlayer player, Affordability snapshot) {
-                player.giveExperiencePoints(-deductIntegral(player.totalExperience, snapshot.amount()));
+                player.giveExperiencePoints(-deductedIntegral(player.totalExperience, snapshot.amount()));
             }
         });
 
@@ -83,7 +84,7 @@ public final class BuiltinResources {
             @Override
             public void charge(net.minecraft.resources.ResourceLocation abilityId,
                     ServerPlayer player, Affordability snapshot) {
-                player.giveExperienceLevels(-deductIntegral(player.experienceLevel, snapshot.amount()));
+                player.giveExperienceLevels(-deductedIntegral(player.experienceLevel, snapshot.amount()));
             }
         });
 
@@ -111,11 +112,24 @@ public final class BuiltinResources {
     }
 
     /**
-     * The pure deduction for integral pools (food, XP): the amount rounds
-     * <b>up</b> so a fractional cost never under-charges what the check
-     * approved, clamped at zero so a pool never goes negative.
+     * The post-deduction <b>level</b> for integral pools (food's
+     * {@code setFoodLevel}): the amount rounds <b>up</b> so a fractional cost
+     * never under-charges what the check approved, clamped at zero so a pool
+     * never goes negative. For a <i>taken-amount</i> delta - what a
+     * {@code giveExperience*} call needs - use {@link #deductedIntegral}.
      */
     static int deductIntegral(double balance, double amount) {
         return Math.max(0, (int) balance - (int) Math.ceil(amount));
+    }
+
+    /**
+     * The amount <b>actually taken</b> from an integral pool (XP's
+     * {@code giveExperience*}): {@code ceil(amount)} clamped to the balance.
+     * {@code balance - deductedIntegral(...) == deductIntegral(...)} holds
+     * for any non-negative balance - the two helpers are the subtraction
+     * split into its two halves (issue #108).
+     */
+    static int deductedIntegral(double balance, double amount) {
+        return (int) Math.max(0L, Math.min((long) balance, (long) Math.ceil(amount)));
     }
 }

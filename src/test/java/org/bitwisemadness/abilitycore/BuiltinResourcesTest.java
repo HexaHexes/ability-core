@@ -58,12 +58,36 @@ class BuiltinResourcesTest {
     }
 
     @Test
-    void deductIntegralRoundsUpAndNeverGoesNegative() {
-        assertEquals(3, BuiltinResources.deductIntegral(5, 2), "plain deduction");
+    void deductIntegralReturnsThePostDeductionLevel() {
+        assertEquals(3, BuiltinResources.deductIntegral(5, 2), "5 - 2 = 3 (the level, not a delta)");
         assertEquals(0, BuiltinResources.deductIntegral(3, 2.5),
                 "a fractional cost rounds up - the check approved balance >= 2.5");
         assertEquals(0, BuiltinResources.deductIntegral(1, 5),
                 "clamped at zero - a pool never goes negative (defensive)");
+    }
+
+    @Test
+    void deductedIntegralTakesTheRoundedAmountClampedToTheBalance() {
+        // issue #108: the XP wiring needs the TAKEN delta, not the level
+        assertEquals(2, BuiltinResources.deductedIntegral(5, 2), "plain take");
+        assertEquals(3, BuiltinResources.deductedIntegral(3, 2.5),
+                "fractional costs round up, but never past the balance");
+        assertEquals(1, BuiltinResources.deductedIntegral(1, 5),
+                "clamped at the balance - nothing negative is handed to giveExperience*");
+        assertEquals(0, BuiltinResources.deductedIntegral(0, 2), "an empty pool takes nothing");
+        assertEquals(0, BuiltinResources.deductedIntegral(5, 0), "a zero cost takes nothing");
+    }
+
+    @Test
+    void theTwoHelpersSplitTheSubtractionIntoHalves() {
+        // the property food's setFoodLevel already relies on, and the reason
+        // the XP lines must use the delta helper: level == balance - taken
+        double[][] cases = {{5, 2}, {15, 3}, {15, 2.5}, {1, 5}, {0, 2}};
+        for (double[] c : cases) {
+            assertEquals(BuiltinResources.deductIntegral(c[0], c[1]),
+                    c[0] - BuiltinResources.deductedIntegral(c[0], c[1]),
+                    "balance " + c[0] + " cost " + c[1] + ": post level == balance - taken");
+        }
     }
 
     @Test
