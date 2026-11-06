@@ -24,6 +24,7 @@ import org.bitwisemadness.abilitycore.api.ActivationRequest;
 import org.bitwisemadness.abilitycore.api.ActivationResult;
 import org.bitwisemadness.abilitycore.api.ActivationSource;
 import org.bitwisemadness.abilitycore.api.ActivationType;
+import org.bitwisemadness.abilitycore.api.AmountResolvers;
 import org.bitwisemadness.abilitycore.api.ChargingModel;
 import org.bitwisemadness.abilitycore.api.ConsumptionStrategies;
 import org.bitwisemadness.abilitycore.api.ResourceCost;
@@ -103,7 +104,8 @@ class TargetValidationStepTest {
         return new AbilityDefinition(
                 "tensura.skill.targeted", null,
                 ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
-                ActivationType.INSTANT, List.of(), ConsumptionStrategies.ALL, Set.of(), data);
+                ActivationType.INSTANT, List.of(), ConsumptionStrategies.ALL,
+                AmountResolvers.STATIC, Set.of(), data);
     }
 
     private ActivationRequest request(ResourceLocation id, TargetContext target) {
@@ -245,7 +247,7 @@ class TargetValidationStepTest {
         Registry.register(AbilityRegistries.registry(), paid, new AbilityDefinition(
                 "tensura.skill.paid", null, ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
                 ActivationType.INSTANT, List.of(new ResourceCost(ResourceConsumersDeclarations.RESOURCE, 10.0)),
-                ConsumptionStrategies.ALL, Set.of(), Map.of()));
+                ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of()));
         handlers.register(paid, (req, player) -> ActivationResult.ACTED, ChargingModel.EXTERNAL);
         pipeline.registerStep(ActivationPipeline.PipelinePhase.RESOURCE, ResourceChargeStep.INSTANCE);
         ResourceConsumersDeclarations.sufficient();

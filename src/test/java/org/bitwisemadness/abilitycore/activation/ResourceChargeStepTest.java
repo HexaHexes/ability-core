@@ -24,6 +24,7 @@ import org.bitwisemadness.abilitycore.api.ActivationResult;
 import org.bitwisemadness.abilitycore.api.ActivationSource;
 import org.bitwisemadness.abilitycore.api.ActivationType;
 import org.bitwisemadness.abilitycore.api.Affordability;
+import org.bitwisemadness.abilitycore.api.AmountResolvers;
 import org.bitwisemadness.abilitycore.api.ChargingModel;
 import org.bitwisemadness.abilitycore.api.ConsumptionStrategies;
 import org.bitwisemadness.abilitycore.api.ResourceConsumer;
@@ -113,7 +114,7 @@ class ResourceChargeStepTest {
                 "tensura.skill.x", null,
                 ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
                 ActivationType.INSTANT, cost == null ? List.of() : List.of(cost),
-                ConsumptionStrategies.ALL, Set.of(), Map.of());
+                ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of());
     }
 
     /** Multi-entry variant (issue #89): costs validated all-or-nothing. */
@@ -121,7 +122,8 @@ class ResourceChargeStepTest {
         return new AbilityDefinition(
                 "tensura.skill.x", null,
                 ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
-                ActivationType.INSTANT, costs, ConsumptionStrategies.ALL, Set.of(), Map.of());
+                ActivationType.INSTANT, costs, ConsumptionStrategies.ALL,
+                AmountResolvers.STATIC, Set.of(), Map.of());
     }
 
     /**

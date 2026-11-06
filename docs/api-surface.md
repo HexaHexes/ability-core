@@ -20,7 +20,7 @@ for the four consumer repositories.
 
 ## Extension points
 
-Consumers extend core through exactly eight mechanisms:
+Consumers extend core through exactly ten mechanisms:
 
 1. **Registry registration** — providers register `AbilityDefinition` entries
    on their own mod bus via `RegisterEvent` for `AbilityRegistries.ABILITY_REGISTRY_KEY`.
@@ -51,6 +51,12 @@ Consumers extend core through exactly eight mechanisms:
    order), so their own resource can validate and charge an ability's cost;
    core ships four built-in pairs (see the resource-pairs section below), and
    the `has`/`get` queries support registration-time cost selection.
+9. **Consumption strategy declaration** — addons declare a named selection
+   function via `ConsumptionStrategies.declare(name, strategy)` for an
+   ability's `consumption_strategy` field (see the strategies section below).
+10. **Cost amount resolution** — addons declare a named per-request pricer
+    via `AmountResolvers.declare(name, resolver)` for an ability's
+    `amount_resolver` field (see the amount-resolution section below).
 
 ## Overlay data contract (REQ-HOT-08)
 
@@ -344,6 +350,54 @@ strategies never charge — charging stays at core's single EXTERNAL site.
 
 **Overlay**: `consumption_strategy` mirrors the definition shape — present
 replaces wholesale, absent keeps the base; an overlay naming a strategy
+nobody declared refuses fail-closed at runtime (`REFUSED_UNAVAILABLE`).
+
+## Cost amount resolution (REQ-CORE-04 p4, issue #103)
+
+An ability's `amount_resolver` field names **how much** each declared
+`costs` entry costs *for one activation*. The declared amounts stay the
+wire contract and the nominal display value; a resolver re-prices the list
+per request — the capture case (pseudocore#174: the aimed mob's EP, split
+by payment enchantments), whose price does not exist before the request.
+
+```java
+AmountResolvers.declare("mymod:ep_share",
+        (declared, request, player, resolvedTarget) -> /* price for this request */ declared);
+```
+
+- **Timing contract** (identical to providers/consumers/strategies):
+  declare at mod construction; definitions register at `RegisterEvent`, so
+  a name nobody declared fails loudly at registration
+  (`AbilityDefinition.validateOrThrow`).
+- **Resolution runs before selection** in `ResourceChargeStep` (after the
+  empty-costs gate): the strategy receives the *priced* entries, so the
+  built-in consults (`random`, `in_order`) and custom selectors observe
+  this request's amounts. Core then validates, snapshots and charges
+  through the unchanged amount-parameterized path —
+  `provider.check(id, player, amount)` receives the priced amount, and the
+  consumer receives that `Affordability` snapshot verbatim.
+- **Mirror contract**: the resolver returns a same-size list mirroring the
+  declared resource ids in order, carrying amounts `>= 0` and finite.
+  Every violation — unknown or vanished name, null result, size/order/id
+  mismatch, an invalid amount, a throwing resolver — is logged and refuses
+  `REFUSED_UNAVAILABLE` with nothing charged. (`ResourceCost`'s own guard
+  rejects negative/non-finite amounts at construction inside the resolver,
+  so those surface on the throw row with the same fail-closed outcome.)
+- **`resolvedTarget`** is the server-stashed
+  `TargetValidationStep.RESOLVED_ENTITY` value for entity-hint targets
+  (`null` otherwise) — opaque by doctrine; the resolver owns the cast,
+  exactly as handlers and providers do, and a resolver needing the player
+  (e.g. `Self`) has `player`.
+- **Built-in `static`**: identity, pre-registered and default — existing
+  definitions and datapacks are byte-identical (the encoder omits the field
+  when it equals the default). Re-pricing `ability_core:free` is inert by
+  its contract (its check ignores the amount; its charge is a logged no-op).
+- **Display is out of contract**: `AbilityAvailability.cost` stays a
+  provider-side projection (REQ-HOT-08) — a per-request estimate is the
+  consumer's own surface, not core's.
+
+**Overlay**: `amount_resolver` mirrors the definition shape — present
+replaces wholesale, absent keeps the base; an overlay naming a resolver
 nobody declared refuses fail-closed at runtime (`REFUSED_UNAVAILABLE`).
 
 ## Leak gates (mechanism)

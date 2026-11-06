@@ -12,6 +12,7 @@ import java.util.Set;
 import net.minecraft.resources.ResourceLocation;
 import org.bitwisemadness.abilitycore.api.AbilityDefinition;
 import org.bitwisemadness.abilitycore.api.ActivationType;
+import org.bitwisemadness.abilitycore.api.AmountResolvers;
 import org.bitwisemadness.abilitycore.api.ConsumptionStrategies;
 import org.bitwisemadness.abilitycore.api.ResourceCost;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,7 @@ class AbilityDefinitionTest {
                 ActivationType.CHARGED,
                 List.of(new ResourceCost("tensura:magicule", 25.0)),
                 ConsumptionStrategies.ALL,
+                AmountResolvers.STATIC,
                 Set.of("melee", "sword"),
                 Map.of("style", "sword"));
     }
@@ -49,6 +51,8 @@ class AbilityDefinitionTest {
         assertTrue(decoded.costs().isEmpty(), "absent costs = no declared cost (never null)");
         assertEquals(ConsumptionStrategies.ALL, decoded.consumptionStrategy(),
                 "absent consumption_strategy defaults to all - existing JSON stays valid");
+        assertEquals(AmountResolvers.STATIC, decoded.amountResolver(),
+                "absent amount_resolver defaults to static - existing JSON stays valid");
         assertTrue(decoded.tags().isEmpty());
         assertTrue(decoded.data().isEmpty());
     }
@@ -67,12 +71,47 @@ class AbilityDefinitionTest {
         // registration-time gate: strategies declare at construction, definitions
         // register at RegisterEvent - a name nobody declared is a wiring bug
         var def = new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
-                "definitely_not_registered", Set.of(), Map.of());
+                "definitely_not_registered", AmountResolvers.STATIC, Set.of(), Map.of());
         var failure = assertThrows(IllegalStateException.class, () -> def.validateOrThrow(ID));
         assertTrue(failure.getMessage().contains("definitely_not_registered"),
                 "the failure names the unknown strategy: " + failure.getMessage());
         // and a known one passes (sample() uses ConsumptionStrategies.ALL)
         sample().validateOrThrow(ID);
+    }
+
+    @Test
+    void unknownAmountResolverFailsLoudlyAtRegistration() {
+        // issue #103: same timing contract as the strategy check - resolvers
+        // declare at construction, definitions register at RegisterEvent
+        var def = new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
+                ConsumptionStrategies.ALL, "definitely_not_registered", Set.of(), Map.of());
+        var failure = assertThrows(IllegalStateException.class, () -> def.validateOrThrow(ID));
+        assertTrue(failure.getMessage().contains("definitely_not_registered"),
+                "the failure names the unknown resolver: " + failure.getMessage());
+        // and the built-in static passes (sample() uses AmountResolvers.STATIC)
+        sample().validateOrThrow(ID);
+    }
+
+    @Test
+    void codecRoundTripsAnExplicitAmountResolver() {
+        // issue #103: the wire key amount_resolver survives encode -> decode
+        var encoded = com.google.gson.JsonParser.parseString(
+                "{\"display_name\":\"a.b\",\"category\":\"mod:cat\",\"activation_type\":\"instant\","
+                        + "\"amount_resolver\":\"static\"}");
+        var decoded = AbilityDefinition.CODEC.parse(JsonOps.INSTANCE, encoded).getOrThrow();
+        assertEquals(AmountResolvers.STATIC, decoded.amountResolver());
+        var full = AbilityDefinition.CODEC.encodeStart(JsonOps.INSTANCE,
+                new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
+                        ConsumptionStrategies.ALL, "test:wire_probe", Set.of(), Map.of()))
+                .getOrThrow();
+        assertTrue(full.toString().contains("\"amount_resolver\""),
+                "a non-default resolver names its wire key: " + full);
+        // the default never reaches the wire - absent decodes to static, so
+        // pre-#103 JSON and re-encoded definitions stay byte-identical
+        var withDefault = AbilityDefinition.CODEC.encodeStart(JsonOps.INSTANCE, sample()).getOrThrow();
+        assertTrue(!withDefault.toString().contains("\"amount_resolver\""),
+                "the default is omitted from the wire: " + withDefault);
+        assertEquals(sample(), AbilityDefinition.CODEC.parse(JsonOps.INSTANCE, withDefault).getOrThrow());
     }
 
     @Test
@@ -86,6 +125,7 @@ class AbilityDefinitionTest {
                 List.of(new ResourceCost("tensura:magicule", 25.0),
                         new ResourceCost("tensura:aura", 5.0)),
                 ConsumptionStrategies.ALL,
+                AmountResolvers.STATIC,
                 Set.of("melee"),
                 Map.of());
         var encoded = AbilityDefinition.CODEC.encodeStart(JsonOps.INSTANCE, multi).getOrThrow();
@@ -134,22 +174,28 @@ class AbilityDefinitionTest {
         // compact-constructor guards fire before any value can enter the registry
         assertThrows(IllegalArgumentException.class,
                 () -> new AbilityDefinition("  ", null, CATEGORY, ActivationType.INSTANT, List.of(),
-                        ConsumptionStrategies.ALL, Set.of(), Map.of()));
+                        ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of()));
         assertThrows(NullPointerException.class,
                 () -> new AbilityDefinition("a.b", null, null, ActivationType.INSTANT, List.of(),
-                        ConsumptionStrategies.ALL, Set.of(), Map.of()));
+                        ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of()));
         assertThrows(NullPointerException.class,
                 () -> new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, null,
-                        ConsumptionStrategies.ALL, Set.of(), Map.of()));
+                        ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of()));
         assertThrows(IllegalArgumentException.class,
                 () -> new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
-                        ConsumptionStrategies.ALL, Set.of(" "), Map.of()));
+                        ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(" "), Map.of()));
         assertThrows(NullPointerException.class,
                 () -> new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
-                        null, Set.of(), Map.of()));
+                        null, AmountResolvers.STATIC, Set.of(), Map.of()));
         assertThrows(IllegalArgumentException.class,
                 () -> new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
-                        " ", Set.of(), Map.of()));
+                        " ", AmountResolvers.STATIC, Set.of(), Map.of()));
+        assertThrows(NullPointerException.class,
+                () -> new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
+                        ConsumptionStrategies.ALL, null, Set.of(), Map.of()));
+        assertThrows(IllegalArgumentException.class,
+                () -> new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
+                        ConsumptionStrategies.ALL, " ", Set.of(), Map.of()));
         assertThrows(IllegalArgumentException.class, () -> new ResourceCost("tensura:aura", -1.0));
         assertThrows(IllegalArgumentException.class, () -> new ResourceCost("", 1.0));
         assertThrows(IllegalArgumentException.class, () -> new ResourceCost("tensura:aura", Double.NaN));
@@ -160,7 +206,7 @@ class AbilityDefinitionTest {
         // validateOrThrow is the registry onAdd gate; valid constructions pass it
         sample().validateOrThrow(ID);
         new AbilityDefinition("a.b", null, CATEGORY, ActivationType.UNKNOWN, List.of(),
-                ConsumptionStrategies.ALL, Set.of(), Map.of())
+                ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of())
                 .validateOrThrow(ID); // UNKNOWN is permitted in data (refused at activation, not at registration)
     }
 
