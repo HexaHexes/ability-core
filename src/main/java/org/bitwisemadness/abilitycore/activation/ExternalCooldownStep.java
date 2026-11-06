@@ -6,6 +6,7 @@ import net.minecraft.server.level.ServerPlayer;
 import org.bitwisemadness.abilitycore.api.ActivationOutcome;
 import org.bitwisemadness.abilitycore.api.ActivationRequest;
 import org.bitwisemadness.abilitycore.api.ActivationResult;
+import org.bitwisemadness.abilitycore.api.CooldownHandler;
 import org.bitwisemadness.abilitycore.api.CooldownOwners;
 import org.slf4j.Logger;
 
@@ -25,9 +26,17 @@ import org.slf4j.Logger;
  * declarations, defence in depth) also refuses - a cooldown that cannot be
  * checked must gate the activation, not wave it through.</p>
  *
+ * <p>HANDLER: remaining ticks from the declared {@link CooldownHandler}
+ * with the <em>whole request</em> (slot and mode context - the per-spell,
+ * per-mode seam); &gt; 0 -> {@link ActivationOutcome#REFUSED_COOLDOWN}.
+ * Core never starts a handler cooldown: the domain does, at its native
+ * moment (the single-start rule), so this step only gates. A missing
+ * handler refuses like a missing tracker.</p>
+ *
  * <p>Start timing: EXTERNAL cooldowns start <em>post-activation</em> in the
  * pipeline's built-in routing (never here - a refused activation must not
- * start a cooldown), mirroring native "start on successful cast" semantics.</p>
+ * start a cooldown), mirroring native "start on successful cast" semantics.
+ * HANDLER cooldowns never start in core at all.</p>
  */
 public final class ExternalCooldownStep implements ActivationPipeline.Step {
 
@@ -41,7 +50,19 @@ public final class ExternalCooldownStep implements ActivationPipeline.Step {
     @Override
     public Optional<ActivationResult> evaluate(ActivationRequest request, ServerPlayer player,
             ActivationContext context) {
-        if (CooldownOwners.ownerOf(request.abilityId()) != CooldownOwners.Owner.EXTERNAL) {
+        CooldownOwners.Owner owner = CooldownOwners.ownerOf(request.abilityId());
+        if (owner == CooldownOwners.Owner.HANDLER) {
+            CooldownHandler handler = CooldownOwners.handlerFor(request.abilityId());
+            if (handler == null) {
+                LOGGER.error("HANDLER cooldown for {} has no handler - refusing", request.abilityId());
+                return Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_COOLDOWN));
+            }
+            if (handler.remainingTicks(request, player) > 0) {
+                return Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_COOLDOWN));
+            }
+            return Optional.empty();
+        }
+        if (owner != CooldownOwners.Owner.EXTERNAL) {
             return Optional.empty();
         }
         var tracker = CooldownOwners.trackerFor(request.abilityId()).orElse(null);
@@ -59,7 +80,8 @@ public final class ExternalCooldownStep implements ActivationPipeline.Step {
     /**
      * Post-activation start for EXTERNAL cooldowns (invoked by the pipeline's
      * built-in routing alongside the charge site). Failures are logged, never
-     * reported as refusals (post-activation truthfulness rule).
+     * reported as refusals (post-activation truthfulness rule). HANDLER-owned
+     * ids return above - core never starts those (the domain does).
      */
     public static void startExternalCooldown(ActivationRequest request, ServerPlayer player) {
         if (CooldownOwners.ownerOf(request.abilityId()) != CooldownOwners.Owner.EXTERNAL) {
