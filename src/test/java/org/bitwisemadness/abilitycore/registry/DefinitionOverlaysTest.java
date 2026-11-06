@@ -20,6 +20,7 @@ import org.bitwisemadness.abilitycore.api.ActivationType;
 import org.bitwisemadness.abilitycore.api.AmountResolvers;
 import org.bitwisemadness.abilitycore.api.ConsumptionStrategies;
 import org.bitwisemadness.abilitycore.api.ResourceCost;
+import org.bitwisemadness.abilitycore.api.Stat;
 import org.bitwisemadness.abilitycore.discovery.AbilityDiscovery;
 import org.bitwisemadness.abilitycore.discovery.AbilityDiscovery.PresenceState;
 import org.junit.jupiter.api.AfterEach;
@@ -66,7 +67,8 @@ class DefinitionOverlaysTest {
     }
 
     private static DefinitionOverlay overlay(String displayName, Map<String, String> data) {
-        return new DefinitionOverlay(displayName, null, null, null, null, null, null, null, data);
+        return new DefinitionOverlay(displayName, null, null, null, null, null, null, null, data,
+                null);
     }
 
     @Test
@@ -75,7 +77,8 @@ class DefinitionOverlaysTest {
                 ResourceLocation.fromNamespaceAndPath("tensura", "icon"),
                 ResourceLocation.fromNamespaceAndPath("tensura", "magic"),
                 ActivationType.INSTANT, List.of(new ResourceCost("tensura:aura", 5.0)),
-                null, AmountResolvers.STATIC, Set.of("custom"), Map.of("extra", "1"));
+                null, AmountResolvers.STATIC, Set.of("custom"), Map.of("extra", "1"),
+                List.of(new Stat("tensura.stat.power", "200")));
         var json = DefinitionOverlay.CODEC.encodeStart(JsonOps.INSTANCE, full).getOrThrow();
         assertEquals(full, DefinitionOverlay.CODEC.parse(JsonOps.INSTANCE, json).getOrThrow());
 
@@ -121,7 +124,8 @@ class DefinitionOverlaysTest {
                 Map.of("k", "v"));
         var replacement = List.of(new ResourceCost("tensura:health", 10.0),
                 new ResourceCost("tensura:aura", 2.0));
-        var merged = new DefinitionOverlay(null, null, null, null, replacement, null, null, null, null)
+        var merged = new DefinitionOverlay(null, null, null, null, replacement, null, null, null,
+                null, null)
                 .mergeInto(baseWithCosts);
         assertEquals(replacement, merged.costs(),
                 "a present costs list replaces the base wholesale - no union, no per-entry merge");
@@ -144,14 +148,14 @@ class DefinitionOverlaysTest {
     @Test
     void tagsReplaceWholesaleWhenPresent() {
         var merged = new DefinitionOverlay(null, null, null, null, null, null, null,
-                Set.of("custom"), null).mergeInto(base());
+                Set.of("custom"), null, null).mergeInto(base());
         assertEquals(Set.of("custom"), merged.tags(), "present tags replace, never union");
         assertEquals("tensura.skill.a", merged.displayNameKey());
     }
 
     @Test
     void anEmptyOverlayIsValueEqualToTheBase() {
-        var noOp = new DefinitionOverlay(null, null, null, null, null, null, null, null, null);
+        var noOp = new DefinitionOverlay(null, null, null, null, null, null, null, null, null, null);
         assertEquals(base(), noOp.mergeInto(base()), "a no-op overlay changes nothing");
     }
 
@@ -172,9 +176,39 @@ class DefinitionOverlaysTest {
                 "absent amount_resolver keeps the base");
 
         var replaced = new DefinitionOverlay(null, null, null, null, null, null,
-                "test:custom_resolver", null, null).mergeInto(base());
+                "test:custom_resolver", null, null, null).mergeInto(base());
         assertEquals("test:custom_resolver", replaced.amountResolver(),
                 "a present amount_resolver replaces the base wholesale");
+    }
+
+    @Test
+    void statsMirrorTheOverlayReplaceRules() {
+        // issue #119: stats ride the present-replaces/absent-keeps rules
+        var present = DefinitionOverlay.CODEC.parse(JsonOps.INSTANCE,
+                        JsonParser.parseString(
+                                "{\"display_name\":\"a.b\",\"stats\":[" +
+                                        "{\"label\":\"tensura.stat.power\",\"value\":\"200\"}]}"))
+                .getOrThrow();
+        assertEquals(List.of(new Stat("tensura.stat.power", "200")), present.stats());
+
+        var absent = DefinitionOverlay.CODEC.parse(JsonOps.INSTANCE,
+                        JsonParser.parseString("{\"display_name\":\"a.b\"}")).getOrThrow();
+        assertNull(absent.stats());
+        assertEquals(base().stats(), absent.mergeInto(base()).stats(),
+                "absent stats keep the base's declaration");
+
+        var withStats = new AbilityDefinition("tensura.skill.a", null, SKILL_CATEGORY,
+                ActivationType.INSTANT, List.of(), ConsumptionStrategies.ALL,
+                AmountResolvers.STATIC, Set.of("active"), Map.of("k", "v"),
+                List.of(new Stat("tensura.stat.power", "200")));
+        var replaced = new DefinitionOverlay(null, null, null, null, null, null, null, null, null,
+                List.of(new Stat("tensura.stat.range", "15 m"))).mergeInto(withStats);
+        assertEquals(List.of(new Stat("tensura.stat.range", "15 m")), replaced.stats(),
+                "a present stats list replaces the base wholesale - no union");
+        assertEquals(withStats.stats(),
+                new DefinitionOverlay(null, null, null, null, null, null, null, null, null, null)
+                        .mergeInto(withStats).stats(),
+                "absent stats keep the base's stats");
     }
 
     @Test

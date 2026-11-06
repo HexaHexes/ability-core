@@ -15,6 +15,7 @@ import org.bitwisemadness.abilitycore.api.ActivationType;
 import org.bitwisemadness.abilitycore.api.AmountResolvers;
 import org.bitwisemadness.abilitycore.api.ConsumptionStrategies;
 import org.bitwisemadness.abilitycore.api.ResourceCost;
+import org.bitwisemadness.abilitycore.api.Stat;
 import org.junit.jupiter.api.Test;
 
 class AbilityDefinitionTest {
@@ -154,6 +155,71 @@ class AbilityDefinitionTest {
                         + "\"tags\":[\"unarmed\",\"passive\"]}");
         var decoded = AbilityDefinition.CODEC.parse(JsonOps.INSTANCE, encoded).getOrThrow();
         assertEquals(Set.of("unarmed", "passive"), decoded.tags());
+    }
+
+    @Test
+    void codecRoundTripsStats() {
+        // issue #119: the wire key stats survives encode -> decode, in order;
+        // the empty default never reaches the wire (existing JSON stays valid)
+        var withStats = com.google.gson.JsonParser.parseString(
+                "{\"display_name\":\"a.b\",\"category\":\"mod:cat\",\"activation_type\":\"instant\","
+                        + "\"stats\":[{\"label\":\"mod.stat.power\",\"value\":\"200\"},"
+                        + "{\"label\":\"mod.stat.range\",\"value\":\"15 m\"}]}");
+        var decoded = AbilityDefinition.CODEC.parse(JsonOps.INSTANCE, withStats).getOrThrow();
+        assertEquals(List.of(new Stat("mod.stat.power", "200"), new Stat("mod.stat.range", "15 m")),
+                decoded.stats(), "declaration order is presentation order");
+        var full = AbilityDefinition.CODEC.encodeStart(JsonOps.INSTANCE,
+                new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
+                        ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of(),
+                        List.of(new Stat("mod.stat.power", "200"))))
+                .getOrThrow();
+        assertTrue(full.toString().contains("\"stats\""),
+                "a declared stat names its wire key: " + full);
+        var empty = AbilityDefinition.CODEC.encodeStart(JsonOps.INSTANCE, sample()).getOrThrow();
+        assertTrue(!empty.toString().contains("\"stats\""),
+                "the empty default is omitted from the wire: " + empty);
+        assertEquals(sample(), AbilityDefinition.CODEC.parse(JsonOps.INSTANCE, empty).getOrThrow());
+    }
+
+    @Test
+    void statsValidateAtConstruction() {
+        // issue #119: Stat owns label/value; the definition owns the list
+        assertThrows(IllegalArgumentException.class, () -> new Stat(" ", "200"));
+        assertThrows(IllegalArgumentException.class, () -> new Stat("mod.stat.power", " "));
+        assertThrows(NullPointerException.class, () -> new Stat(null, "200"));
+        assertThrows(NullPointerException.class, () -> new Stat("mod.stat.power", null));
+        assertThrows(NullPointerException.class, () -> new AbilityDefinition("a.b", null, CATEGORY,
+                ActivationType.INSTANT, List.of(), ConsumptionStrategies.ALL,
+                AmountResolvers.STATIC, Set.of(), Map.of(), null));
+        var withStats = new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT,
+                List.of(), ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of(),
+                List.of(new Stat("mod.stat.power", "200")));
+        withStats.validateOrThrow(ID); // a well-formed declaration passes the registry gate
+    }
+
+    @Test
+    void theRetainedPreStatsConstructorDeclaresNoStats() {
+        // the non-breaking contract (issue #119): the previous signature stays
+        var legacy = new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT,
+                List.of(), ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of());
+        assertTrue(legacy.stats().isEmpty(), "the retained constructor means stats = List.of()");
+        assertEquals(sample().stats(), legacy.stats());
+        legacy.validateOrThrow(ID);
+    }
+
+    @Test
+    void descriptionReadsTheFormalDataSlot() {
+        // issue #119: data.description is THE description slot, one accessor
+        var withDescription = new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT,
+                List.of(), ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(),
+                Map.of("description", "Hurls a bolt of force."));
+        assertEquals("Hurls a bolt of force.", withDescription.description().orElseThrow());
+        assertTrue(sample().description().isEmpty(), "no declared description reads empty");
+        var blankDescription = new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT,
+                List.of(), ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(),
+                Map.of("description", "  "));
+        assertTrue(blankDescription.description().isEmpty(),
+                "a blank slot reads as none - never an empty tooltip line");
     }
 
     @Test
