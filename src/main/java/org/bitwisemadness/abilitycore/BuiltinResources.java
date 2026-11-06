@@ -3,7 +3,7 @@ package org.bitwisemadness.abilitycore;
 import com.mojang.logging.LogUtils;
 import net.minecraft.server.level.ServerPlayer;
 import org.bitwisemadness.abilitycore.api.Affordability;
-import org.bitwisemadness.abilitycore.api.ResourceConsumer;
+import org.bitwisemadness.abilitycore.api.RefundableConsumer;
 import org.bitwisemadness.abilitycore.api.ResourceConsumers;
 import org.bitwisemadness.abilitycore.api.ResourceProviders;
 import org.slf4j.Logger;
@@ -49,54 +49,90 @@ public final class BuiltinResources {
     public static void registerAll() {
         ResourceProviders.declare(HEALTH, (abilityId, player, amount) ->
                 poolCheck(HEALTH, player.getHealth(), amount));
-        ResourceConsumers.declare(HEALTH, new ResourceConsumer() {
+        ResourceConsumers.declare(HEALTH, new RefundableConsumer() {
             @Override
             public void charge(net.minecraft.resources.ResourceLocation abilityId,
                     ServerPlayer player, Affordability snapshot) {
                 player.setHealth(Math.max(0.0f, player.getHealth() - (float) snapshot.amount()));
             }
+
+            @Override
+            public void refund(net.minecraft.resources.ResourceLocation abilityId,
+                    ServerPlayer player, Affordability snapshot) {
+                player.setHealth((float) refundContinuous(
+                        player.getHealth(), snapshot.amount(), player.getMaxHealth()));
+            }
         });
 
         ResourceProviders.declare(HUNGER, (abilityId, player, amount) ->
                 poolCheck(HUNGER, player.getFoodData().getFoodLevel(), amount));
-        ResourceConsumers.declare(HUNGER, new ResourceConsumer() {
+        ResourceConsumers.declare(HUNGER, new RefundableConsumer() {
             @Override
             public void charge(net.minecraft.resources.ResourceLocation abilityId,
                     ServerPlayer player, Affordability snapshot) {
                 player.getFoodData().setFoodLevel(
                         deductIntegral(player.getFoodData().getFoodLevel(), snapshot.amount()));
             }
+
+            @Override
+            public void refund(net.minecraft.resources.ResourceLocation abilityId,
+                    ServerPlayer player, Affordability snapshot) {
+                player.getFoodData().setFoodLevel(refundIntegral(
+                        player.getFoodData().getFoodLevel(), snapshot.amount(), 20));
+            }
         });
 
         ResourceProviders.declare(EXPERIENCE_POINTS, (abilityId, player, amount) ->
                 poolCheck(EXPERIENCE_POINTS, player.totalExperience, amount));
-        ResourceConsumers.declare(EXPERIENCE_POINTS, new ResourceConsumer() {
+        ResourceConsumers.declare(EXPERIENCE_POINTS, new RefundableConsumer() {
             @Override
             public void charge(net.minecraft.resources.ResourceLocation abilityId,
                     ServerPlayer player, Affordability snapshot) {
                 player.giveExperiencePoints(-deductedIntegral(player.totalExperience, snapshot.amount()));
             }
+
+            @Override
+            public void refund(net.minecraft.resources.ResourceLocation abilityId,
+                    ServerPlayer player, Affordability snapshot) {
+                player.giveExperiencePoints(refundIntegral(
+                        player.totalExperience, snapshot.amount(), Integer.MAX_VALUE)
+                        - player.totalExperience);
+            }
         });
 
         ResourceProviders.declare(EXPERIENCE_LEVELS, (abilityId, player, amount) ->
                 poolCheck(EXPERIENCE_LEVELS, player.experienceLevel, amount));
-        ResourceConsumers.declare(EXPERIENCE_LEVELS, new ResourceConsumer() {
+        ResourceConsumers.declare(EXPERIENCE_LEVELS, new RefundableConsumer() {
             @Override
             public void charge(net.minecraft.resources.ResourceLocation abilityId,
                     ServerPlayer player, Affordability snapshot) {
                 player.giveExperienceLevels(-deductedIntegral(player.experienceLevel, snapshot.amount()));
             }
+
+            @Override
+            public void refund(net.minecraft.resources.ResourceLocation abilityId,
+                    ServerPlayer player, Affordability snapshot) {
+                player.giveExperienceLevels(refundIntegral(
+                        player.experienceLevel, snapshot.amount(), Integer.MAX_VALUE)
+                        - player.experienceLevel);
+            }
         });
 
         // issue #93: the deliberate zero-cost pair - always sufficient at 0,
-        // charge is a verified no-op (debug line only)
+        // charge and refund are verified no-ops (debug lines only)
         ResourceProviders.declare(FREE, (abilityId, player, amount) ->
                 Affordability.sufficient(FREE, 0.0));
-        ResourceConsumers.declare(FREE, new ResourceConsumer() {
+        ResourceConsumers.declare(FREE, new RefundableConsumer() {
             @Override
             public void charge(net.minecraft.resources.ResourceLocation abilityId,
                     ServerPlayer player, Affordability snapshot) {
                 LOGGER.debug("Free resource '{}' charged nothing for {}", abilityId, snapshot.amount());
+            }
+
+            @Override
+            public void refund(net.minecraft.resources.ResourceLocation abilityId,
+                    ServerPlayer player, Affordability snapshot) {
+                LOGGER.debug("Free resource '{}' refunded nothing for {}", abilityId, snapshot.amount());
             }
         });
     }
@@ -131,5 +167,22 @@ public final class BuiltinResources {
      */
     static int deductedIntegral(double balance, double amount) {
         return (int) Math.max(0L, Math.min((long) balance, (long) Math.ceil(amount)));
+    }
+
+    /**
+     * The refund target for an integral pool (food, XP): {@code ceil(amount)}
+     * added back - the mirror of {@link #deductedIntegral}'s rounding - capped
+     * at {@code max} (food's 20; the XP pools pass {@code Integer.MAX_VALUE}).
+     */
+    static int refundIntegral(double balance, double amount, int max) {
+        return (int) Math.min(max, balance + Math.ceil(amount));
+    }
+
+    /**
+     * The refund target for a continuous pool (health): the amount added
+     * back, capped at the pool's maximum so a refund never overheals.
+     */
+    static double refundContinuous(double balance, double amount, double max) {
+        return Math.min(max, balance + amount);
     }
 }

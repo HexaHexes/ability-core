@@ -4,6 +4,8 @@ import com.mojang.logging.LogUtils;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.fml.ModList;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -99,6 +101,54 @@ public final class ResourceConsumers {
 
     public static boolean has(String resourceId) {
         return resourceId != null && CONSUMERS.containsKey(resourceId);
+    }
+
+    /**
+     * Gives back a previously charged snapshot (issue #107): dispatches to the
+     * charged resource's consumer (resolved from {@code snapshot.resourceId()}
+     * - the same lookup the charge site uses) when it is a
+     * {@link RefundableConsumer}, passing the <b>exact snapshot that was
+     * charged</b> - never a recomputed amount, so charge and refund cannot
+     * drift.
+     *
+     * <p>Fail-closed and never loud at the player: an absent consumer, a
+     * consumer that is not refundable, or a refund that throws logs an error
+     * and returns false (the throw is caught here - refund mirrors charge's
+     * post-activation posture and never propagates). Ownership stays with the
+     * pair's owner: integrators ask, they do not invert.</p>
+     *
+     * @param abilityId the ability that was charged
+     * @param player    the player whose pool is restored
+     * @param snapshot  the exact snapshot that was charged (names the resource)
+     * @return true only when the owner's inverse ran
+     * @throws IllegalArgumentException if the ability id or the snapshot is
+     *         null (programmer misuse, loud like {@code declare})
+     */
+    public static boolean refund(ResourceLocation abilityId, ServerPlayer player, Affordability snapshot) {
+        if (abilityId == null) {
+            throw new IllegalArgumentException("abilityId must not be null");
+        }
+        if (snapshot == null) {
+            throw new IllegalArgumentException(
+                    "refund takes the exact charged snapshot, not null for " + abilityId);
+        }
+        String resourceId = snapshot.resourceId();
+        ResourceConsumer consumer = CONSUMERS.get(resourceId);
+        if (consumer == null) {
+            LOGGER.error("Refund for '{}' refused: no consumer registered", resourceId);
+            return false;
+        }
+        if (!(consumer instanceof RefundableConsumer refundable)) {
+            LOGGER.error("Refund for '{}' refused: consumer is not refundable", resourceId);
+            return false;
+        }
+        try {
+            refundable.refund(abilityId, player, snapshot);
+            return true;
+        } catch (RuntimeException e) {
+            LOGGER.error("Refund for '{}' threw", resourceId, e);
+            return false;
+        }
     }
 
     /** Test isolation: removes a declared consumer. */

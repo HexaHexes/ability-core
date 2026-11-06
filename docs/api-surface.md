@@ -8,7 +8,7 @@ for the four consumer repositories.
 
 | Package | Stability | Purpose |
 |---|---|---|
-| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `ActivationRequests` (slot gate), `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies`, pricing: `AmountResolvers` |
+| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `ActivationRequests` (slot gate), `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, `RefundableConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies`, pricing: `AmountResolvers` |
 | `org.bitwisemadness.abilitycore.registry` | **Stable** — public API | `AbilityRegistries` (registry key + `registry()` + `isReady()`) |
 | `org.bitwisemadness.abilitycore.discovery` | **Stable** — public API | `AbilityDiscovery` (presence, enumeration, filtering) |
 | `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler`, `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
@@ -293,6 +293,17 @@ A currency's payment has two halves, declared as a pair:
   `no_provider` chain owns downstream. Tested on `0.5.4.121012` (vendored
   unmodified in `libs/` with its LGPL-2.1 license — `compileOnly`, never
   shaded; see `libs/README.md`).
+- **Refunds (issue #107)**: `RefundableConsumer extends ResourceConsumer`
+  adds `refund(abilityId, player, snapshot)` — the pair owner's inverse of its
+  own charge. `ResourceConsumers.refund(...)` dispatches with the **exact
+  charged snapshot** (never a recomputed amount, so charge and refund cannot
+  drift) and answers `false` with an **error log** — nothing thrown at the
+  player — for an absent consumer, a non-refundable consumer, or a refund
+  that throws (caught at the dispatch, mirroring charge's posture).
+  Integrators that route payments through someone else's consumer *ask* the
+  owner; they cannot invert a charge they did not implement. Declaration is
+  unchanged (the owner decides at declare time); all built-in pairs are
+  refundable, and `free` refunds as a logged no-op.
 - **Fail-closed pipeline** (`ResourceChargeStep`, all-or-nothing per entry,
   issue #89): a cost entry without a provider →
   `ability.refused.unaffordable.no_provider`; without a consumer →

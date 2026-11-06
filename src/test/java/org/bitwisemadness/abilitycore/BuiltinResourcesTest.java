@@ -121,4 +121,52 @@ class BuiltinResourcesTest {
                     "the log states what it did: " + logs.messages().get(0));
         }
     }
+
+    @Test
+    void refundsRestoreTheIntegralPoolsExactly() {
+        // issue #107 AC: charge then refund with the same snapshot amount -
+        // the pool ends where it started (validated flows: balance >= amount)
+        int chargedXp = 100 - BuiltinResources.deductedIntegral(100, 15);
+        assertEquals(85, chargedXp, "the fixed XP charge takes the amount, not the remainder");
+        assertEquals(100, BuiltinResources.refundIntegral(chargedXp, 15, Integer.MAX_VALUE),
+                "the taken amount comes back exactly (levels/XP)");
+
+        int chargedFood = (int) BuiltinResources.deductIntegral(15, 2.5);
+        assertEquals(12, chargedFood, "both sides round a fractional cost up");
+        assertEquals(15, BuiltinResources.refundIntegral(chargedFood, 2.5, 20),
+                "food ends where it started");
+    }
+
+    @Test
+    void refundsRestoreTheContinuousPoolExactly() {
+        // issue #107 AC: the continuous pool (health) round-trips too
+        double charged = Math.max(0.0, 10.0 - 7.0);
+        assertEquals(3.0, charged);
+        assertEquals(10.0, BuiltinResources.refundContinuous(charged, 7.0, 20.0),
+                "health ends where it started");
+
+        double chargedFractional = Math.max(0.0, 10.5 - 4.5);
+        assertEquals(10.5, BuiltinResources.refundContinuous(chargedFractional, 4.5, 20.0));
+
+        assertEquals(20.0, BuiltinResources.refundContinuous(18.0, 5.0, 20.0),
+                "a refund never overheals past the pool maximum");
+    }
+
+    @Test
+    void freeRefundsAsANoOp() {
+        BuiltinResources.registerAll();
+        var snapshot = ResourceProviders.get(BuiltinResources.FREE).orElseThrow()
+                .check(null, null, 0.0);
+
+        try (var logs = org.bitwisemadness.abilitycore.LogCapture.forLogger(
+                BuiltinResources.class, org.apache.logging.log4j.Level.DEBUG)) {
+            assertTrue(ResourceConsumers.refund(net.minecraft.resources.ResourceLocation
+                    .fromNamespaceAndPath("tensura", "free_refund_probe"), null, snapshot),
+                    "free is refundable - its inverse is a verified no-op");
+            assertEquals(1, logs.messages().size(),
+                    "the no-op refund is visible once: " + logs.messages());
+            assertTrue(logs.messages().get(0).contains("refunded nothing"),
+                    "the log states what it did: " + logs.messages().get(0));
+        }
+    }
 }
