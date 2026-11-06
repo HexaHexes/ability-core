@@ -14,7 +14,11 @@ import org.jetbrains.annotations.Nullable;
  * state through {@link CooldownOwners.NativeProjection} - core reports the
  * provider's remaining <em>exactly</em>, never a derived value - and NATIVE
  * without a projection answers empty (unknown: core must neither claim ready
- * nor claim cooling; the provider's pipeline is the gate).
+ * nor claim cooling; the provider's pipeline is the gate). HANDLER answers
+ * empty too: a handler's answer depends on the {@link ActivationRequest}
+ * (its slot/mode context - per-spell, per-mode) which this id-level read
+ * does not carry; guessing which spell or mode to report would be a lie, so
+ * ask {@link CooldownOwners#handlerFor} with the request instead.
  *
  * <p>Client side reads projections only, never this facade: NATIVE cooldown
  * state is synced by its provider (ISS syncs its own - hotbar#2 section 3) and
@@ -23,10 +27,13 @@ import org.jetbrains.annotations.Nullable;
  * (ADR-003). No core packet carries either - the compiled payload inventory
  * is pinned by {@code SyncContractTest}.</p>
  *
- * <p>Start is deliberately not part of this facade: the only start site is
- * {@code ExternalCooldownStep.startExternalCooldown}, called post-activation by
- * the pipeline, so a cooldown always starts at the provider's native moment
- * (core#16 AC2/AC4). A public start here would be a second start site.</p>
+ * <p>Start is deliberately not part of this facade: the only core start site
+ * is {@code ExternalCooldownStep.startExternalCooldown}, called
+ * post-activation by the pipeline for EXTERNAL ids, so a cooldown always
+ * starts at the provider's native moment (core#16 AC2/AC4). HANDLER
+ * cooldowns are never started by core at all - the domain starts them at
+ * its native moment (the single-start rule). A public start here would be a
+ * second start site.</p>
  */
 public final class CooldownContract {
 
@@ -63,8 +70,10 @@ public final class CooldownContract {
 
     /**
      * True only while an affirmative answer says the ability is cooling.
-     * Unknown (empty) is never a cooldown claim - core gates only EXTERNAL,
-     * whose tracker always answers, and NATIVE gating belongs to the provider.
+     * Unknown (empty) is never a cooldown claim - core gates EXTERNAL (whose
+     * tracker always answers) and HANDLER (whose handler is asked per
+     * request by the step), NATIVE gating belongs to the provider, and
+     * HANDLER ids read unknown here by design (request-dependent).
      */
     public static boolean isOnCooldown(ResourceLocation abilityId, @Nullable ServerPlayer player) {
         return remaining(abilityId, player).filter(remaining -> !remaining.isZero()).isPresent();

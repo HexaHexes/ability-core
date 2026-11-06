@@ -2,6 +2,8 @@ package org.bitwisemadness.abilitycore.activation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -37,21 +39,25 @@ import org.junit.jupiter.api.Test;
 /**
  * Cooldown ownership and pipeline integration (REQ-CORE-05 acceptance:
  * exactly one owner per ability, NATIVE untouched by core, EXTERNAL gate
- * pre-activation, start post-activation, failures logged not refused).
+ * pre-activation, start post-activation, HANDLER gate asked with the whole
+ * request and never started by core, failures logged not refused).
  */
 class ExternalCooldownTest {
 
     private static final ResourceLocation COOLED = ResourceLocation.fromNamespaceAndPath("tensura", "cooled");
     private static final ResourceLocation NATIVE = ResourceLocation.fromNamespaceAndPath("tensura", "native_cd");
     private static final ResourceLocation UNKNOWN = ResourceLocation.fromNamespaceAndPath("tensura", "unknown");
+    private static final ResourceLocation HANDLED = ResourceLocation.fromNamespaceAndPath("tensura", "handled_cd");
 
     private ActivationHandlerRegistry handlers;
     private ActivationPipeline pipeline;
     private Registry<AbilityDefinition> previousRegistry;
     private final List<String> trace = new ArrayList<>();
     private final List<Long> startedDurations = new ArrayList<>();
+    private final List<ActivationRequest> handlerReads = new ArrayList<>();
 
     private long stubRemaining = 0L;
+    private long stubHandlerRemaining = 0L;
 
     @BeforeEach
     void setUp() {
@@ -63,11 +69,14 @@ class ExternalCooldownTest {
                 AbilityRegistries.ABILITY_REGISTRY_KEY, Lifecycle.stable(), false);
         Registry.register(fixture, COOLED, def(new ResourceCost(ResourceConsumersDeclarations.RESOURCE, 10.0)));
         Registry.register(fixture, NATIVE, def(null));
+        Registry.register(fixture, HANDLED, def(null));
         AbilityRegistries.installRegistryForTests(fixture);
         // COOLED declares a cost, so the RESOURCE phase needs a consumer: sufficient by default
         ResourceConsumersDeclarations.sufficient();
         startedDurations.clear();
         trace.clear();
+        handlerReads.clear();
+        stubHandlerRemaining = 0L;
     }
 
     @AfterEach
@@ -76,6 +85,7 @@ class ExternalCooldownTest {
         CooldownOwners.remove(COOLED);
         CooldownOwners.remove(NATIVE);
         CooldownOwners.remove(UNKNOWN);
+        CooldownOwners.remove(HANDLED);
         ResourceConsumersDeclarations.reset();
     }
 
@@ -209,5 +219,68 @@ class ExternalCooldownTest {
         assertTrue(CooldownOwners.remove(COOLED));
         assertFalse(CooldownOwners.remove(COOLED), "second removal is a no-op");
         assertEquals(CooldownOwners.Owner.NATIVE, CooldownOwners.ownerOf(COOLED));
+    }
+
+    @Test
+    void handlerGateRefusesWithTheRequestsContext() {
+        CooldownOwners.declareHandler(HANDLED, (req, player) -> {
+            handlerReads.add(req);
+            return stubHandlerRemaining;
+        });
+        handlers.register(HANDLED, (req, player) -> {
+            trace.add("activate");
+            return ActivationResult.ACTED;
+        });
+
+        assertEquals(ActivationOutcome.ACTED, pipeline.run(request(HANDLED), null).outcome());
+        assertEquals(1, handlerReads.size(), "the gate asks the handler once per attempt");
+
+        stubHandlerRemaining = 40L; // this spell (slot) is cooling
+        var refused = pipeline.run(request(HANDLED).withSlot(3).withMode("fireball"), null);
+        assertEquals(ActivationOutcome.REFUSED_COOLDOWN, refused.outcome());
+        assertEquals(1, trace.size(), "provider must not run while the handler gates");
+        ActivationRequest gated = handlerReads.get(1);
+        assertEquals(3, gated.slotContext(), "the handler sees the slot context - the per-spell seam");
+        assertEquals("fireball", gated.modeContext(), "and the mode context - the per-mode seam");
+    }
+
+    @Test
+    void coreNeverStartsHandlerCooldowns() {
+        CooldownOwners.declareHandler(HANDLED, (req, player) -> 0L);
+        handlers.register(HANDLED, (req, player) -> ActivationResult.ACTED);
+
+        assertEquals(ActivationOutcome.ACTED, pipeline.run(request(HANDLED), null).outcome());
+        assertTrue(startedDurations.isEmpty(), "core never starts handler cooldowns - the domain does");
+        assertTrue(CooldownOwners.trackerFor(HANDLED).isEmpty(), "no core tracker for a handler-owned id");
+        assertEquals(0L, CooldownOwners.declaredDurationTicks(HANDLED),
+                "no core duration for a handler-owned id");
+    }
+
+    @Test
+    void contractAnswersUnknownForHandlerOwnedIds() {
+        CooldownOwners.declareHandler(HANDLED, (req, player) -> 77L);
+        // The handler answers only with a request; this id-level facade has
+        // none - it must stay unknown rather than guess a spell or mode.
+        assertTrue(CooldownContract.remaining(HANDLED, null).isEmpty(),
+                "HANDLER ids are unknown at the id-level contract");
+        assertFalse(CooldownContract.isOnCooldown(HANDLED, null),
+                "unknown is never a cooldown claim");
+    }
+
+    @Test
+    void handlerDeclarationsAreExclusiveAndFailClosed() {
+        CooldownOwners.declareHandler(HANDLED, (req, player) -> 0L);
+        assertThrows(IllegalStateException.class,
+                () -> CooldownOwners.declareExternal(HANDLED, 100L, stubTracker()),
+                "dual-owner declaration must fail");
+        assertThrows(IllegalStateException.class,
+                () -> CooldownOwners.declareNative(HANDLED));
+        assertThrows(IllegalArgumentException.class,
+                () -> CooldownOwners.declareHandler(HANDLED, null),
+                "a handler declaration without a handler gates nothing");
+        assertEquals(CooldownOwners.Owner.HANDLER, CooldownOwners.ownerOf(HANDLED));
+        assertNotNull(CooldownOwners.handlerFor(HANDLED), "handlerFor answers the declared handler");
+        assertNull(CooldownOwners.handlerFor(NATIVE), "non-handler owners answer null");
+        assertNull(CooldownOwners.handlerFor(UNKNOWN), "undeclared ids answer null");
     }
 }
