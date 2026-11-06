@@ -84,7 +84,7 @@ Core is the published foundation; consumers pin it **exactly**
 - [ ] Core/ISS pins bumped first if needed; single-charge hooks re-verified
       against the current contract (ADR-002's mapping table).
 
-### `tensura-battlewills` (org.bitwisemadness.abilitybattlewills:ability_battlewills)
+### `ability-tensura` (org.bitwisemadness.abilitytensura:ability_tensura)
 - [ ] CI green; no `mod_version` change in the PR.
 - [ ] Core pin bumped first if needed.
 
