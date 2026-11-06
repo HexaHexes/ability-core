@@ -127,4 +127,40 @@ public final class AbilityCoreGameTests {
         AbilityRegistries.installRegistryForTests(previous);
         helper.succeed();
     }
+
+    /**
+     * Mode-change intent round-trip (issue #113): an intent against an
+     * unregistered ability refuses REFUSED_NO_ADAPTER without guessing, and
+     * a registered provider handler's ACTED reaches the caller - the exact
+     * signal consumers apply their per-slot update on. The intent never
+     * enters the activation pipeline, so no charging or cooldown can run.
+     */
+    @GameTest(template = "empty")
+    public static void mode_change_intent_round_trip(GameTestHelper helper)
+            throws GameTestAssertException {
+        var modeId = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                AbilityCore.MOD_ID, "gametest_modechange");
+        var intent = new org.bitwisemadness.abilitycore.api.ModeChangeRequest(modeId,
+                org.bitwisemadness.abilitycore.api.ActivationRequest.NO_SLOT);
+
+        // undeclared id: the refusal vocabulary, never a silent success
+        var refused = org.bitwisemadness.abilitycore.api.ModeChangeHandlers.run(intent, null);
+        if (refused.outcome()
+                != org.bitwisemadness.abilitycore.api.ActivationOutcome.REFUSED_NO_ADAPTER) {
+            throw new GameTestAssertException("expected REFUSED_NO_ADAPTER, got "
+                    + refused.outcome());
+        }
+
+        // registered handler: its answer passes through untouched
+        org.bitwisemadness.abilitycore.api.ModeChangeHandlers.register(modeId,
+                (request, player) -> org.bitwisemadness.abilitycore.api.ActivationResult.ACTED);
+        var acted = org.bitwisemadness.abilitycore.api.ModeChangeHandlers.run(
+                new org.bitwisemadness.abilitycore.api.ModeChangeRequest(modeId, 3), null);
+        if (acted.outcome() != org.bitwisemadness.abilitycore.api.ActivationOutcome.ACTED) {
+            throw new GameTestAssertException("expected ACTED, got " + acted.outcome());
+        }
+
+        org.bitwisemadness.abilitycore.api.ModeChangeHandlers.remove(modeId);
+        helper.succeed();
+    }
 }

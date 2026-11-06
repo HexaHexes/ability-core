@@ -8,6 +8,8 @@ answer the signal with state.
 ## Channel discipline
 
 One registrar per mod: `event.registrar(modid).versioned(N).optional()`.
+Core's channel is at version **3** (1: baseline; 2: target hint, core#69;
+3: mode context, issue #113).
 
 - `optional()` tolerates channel **absence** (one side lacks the mod) but
   never **version skew** - a mismatched version disconnects at negotiation
@@ -39,7 +41,7 @@ When a registered codec changes:
 | `SelectSlotPayload` | playToServer | Ctrl+wheel slot intent | `tensura-ability-hotbar` | one var-int |
 | `SwitchBarPayload` | playToServer | Alt+wheel / Alt+digit bar intent | `tensura-ability-hotbar` | one resource location |
 | `AssignAbilityPayload` | playToServer | menu assign / replace / clear | `tensura-ability-hotbar` | slot + ability id + bar id |
-| `ActivateAbilityPayload` | playToServer | slot activation (Ctrl+digit / G), carrying the optional target hint | **core** | id + source + slot + stamp + hint; ~60-100 B typical |
+| `ActivateAbilityPayload` | playToServer | slot activation (Ctrl+digit / G), carrying the optional target hint and the slot's mode | **core** | id + source + slot + stamp + hint + mode; ~60-100 B typical |
 | delta payloads | - | **deferred** | - | see amendment below |
 
 ### Serverbound budget
