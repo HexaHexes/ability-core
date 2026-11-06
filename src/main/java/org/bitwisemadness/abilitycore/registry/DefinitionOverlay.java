@@ -41,7 +41,8 @@ public record DefinitionOverlay(
         @Nullable String consumptionStrategy,
         @Nullable String amountResolver,
         @Nullable Set<String> tags,
-        @Nullable Map<String, String> data) {
+        @Nullable Map<String, String> data,
+        @Nullable List<String> modes) {
 
     /** Set codec for the open tag vocabulary (this DFU build has no Codec.unboundedSet). */
     private static final Codec<Set<String>> TAG_SET_CODEC =
@@ -65,7 +66,9 @@ public record DefinitionOverlay(
             TAG_SET_CODEC.optionalFieldOf("tags")
                     .forGetter(o -> Optional.ofNullable(o.tags())),
             Codec.unboundedMap(Codec.STRING, Codec.STRING).optionalFieldOf("data")
-                    .forGetter(o -> Optional.ofNullable(o.data()))
+                    .forGetter(o -> Optional.ofNullable(o.data())),
+            Codec.list(Codec.STRING).optionalFieldOf("modes")
+                    .forGetter(o -> Optional.ofNullable(o.modes()))
     ).apply(instance, DefinitionOverlay::create));
 
     /**
@@ -98,11 +101,13 @@ public record DefinitionOverlay(
             Optional<String> consumptionStrategy,
             Optional<String> amountResolver,
             Optional<Set<String>> tags,
-            Optional<Map<String, String>> data) {
+            Optional<Map<String, String>> data,
+            Optional<List<String>> modes) {
         return new DefinitionOverlay(
                 displayNameKey.orElse(null), iconId.orElse(null), category.orElse(null),
                 activationType.orElse(null), costs.orElse(null), consumptionStrategy.orElse(null),
-                amountResolver.orElse(null), tags.orElse(null), data.orElse(null));
+                amountResolver.orElse(null), tags.orElse(null), data.orElse(null),
+                modes.orElse(null));
     }
 
     public DefinitionOverlay {
@@ -134,13 +139,25 @@ public record DefinitionOverlay(
                 }
             });
         }
+        if (modes != null) {
+            modes = List.copyOf(modes);
+            for (String mode : modes) {
+                if (mode == null || mode.isBlank()) {
+                    throw new IllegalArgumentException("overlay modes must not be blank");
+                }
+            }
+            if (modes.size() != new java.util.HashSet<>(modes).size()) {
+                throw new IllegalArgumentException(
+                        "overlay modes must not contain duplicates: " + modes);
+            }
+        }
     }
 
     /**
      * Applies this overlay to {@code base} at lookup: present fields replace,
      * absent fields keep the base, {@code data} merges per-key (this overlay
-     * wins conflicts), {@code tags} replaces wholesale. A no-op overlay
-     * produces a value-equal definition.
+     * wins conflicts), {@code tags} and {@code modes} replace wholesale. A
+     * no-op overlay produces a value-equal definition.
      */
     public AbilityDefinition mergeInto(AbilityDefinition base) {
         Map<String, String> mergedData = new HashMap<>(base.data());
@@ -156,6 +173,7 @@ public record DefinitionOverlay(
                 consumptionStrategy != null ? consumptionStrategy : base.consumptionStrategy(),
                 amountResolver != null ? amountResolver : base.amountResolver(),
                 tags != null ? tags : base.tags(),
-                mergedData);
+                mergedData,
+                modes != null ? modes : base.modes());
     }
 }

@@ -55,6 +55,8 @@ class AbilityDefinitionTest {
                 "absent amount_resolver defaults to static - existing JSON stays valid");
         assertTrue(decoded.tags().isEmpty());
         assertTrue(decoded.data().isEmpty());
+        assertTrue(decoded.modes().isEmpty(),
+                "absent modes = no declared modes - existing JSON stays valid");
     }
 
     @Test
@@ -157,6 +159,51 @@ class AbilityDefinitionTest {
     }
 
     @Test
+    void codecRoundTripsModes() {
+        // issue #111: the wire key modes survives encode -> decode; the
+        // empty default never reaches the wire (pre-#111 JSON stays valid)
+        var withModes = com.google.gson.JsonParser.parseString(
+                "{\"display_name\":\"a.b\",\"category\":\"mod:cat\",\"activation_type\":\"instant\","
+                        + "\"modes\":[\"single\",\"area\"]}");
+        var decoded = AbilityDefinition.CODEC.parse(JsonOps.INSTANCE, withModes).getOrThrow();
+        assertEquals(List.of("single", "area"), decoded.modes());
+        var full = AbilityDefinition.CODEC.encodeStart(JsonOps.INSTANCE,
+                new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
+                        ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of(),
+                        List.of("single", "area")))
+                .getOrThrow();
+        assertTrue(full.toString().contains("\"modes\""),
+                "a declared cycle names its wire key: " + full);
+        var empty = AbilityDefinition.CODEC.encodeStart(JsonOps.INSTANCE, sample()).getOrThrow();
+        assertTrue(!empty.toString().contains("\"modes\""),
+                "the empty default is omitted from the wire: " + empty);
+        assertEquals(sample(), AbilityDefinition.CODEC.parse(JsonOps.INSTANCE, empty).getOrThrow());
+    }
+
+    @Test
+    void modeCycleFollowsTheDeclaredOrder() {
+        // issue #111: first = default; null/unknown current restarts there;
+        // the cycle wraps; abilities with no declared modes never cycle
+        var def = new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
+                ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of(),
+                List.of("single", "area", "beam"));
+        assertEquals("single", def.defaultMode());
+        assertEquals("single", def.nextMode(null), "no stored mode starts at the default");
+        assertEquals("area", def.nextMode("single"));
+        assertEquals("beam", def.nextMode("area"));
+        assertEquals("single", def.nextMode("beam"), "the cycle wraps to the first");
+        assertEquals("single", def.nextMode("stale_mode"),
+                "an unknown stored value restarts, never crashes");
+        var none = new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
+                ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of());
+        assertNull(none.defaultMode());
+        assertNull(none.nextMode("anything"), "no declared modes = nothing to cycle");
+        // the retained pre-#111 constructor (the non-breaking contract) declares none
+        assertNull(sample().defaultMode());
+        assertNull(sample().nextMode(null));
+    }
+
+    @Test
     void codecRejectsMalformedInput() {
         // missing category
         assertThrows(Exception.class, () -> AbilityDefinition.CODEC.parse(JsonOps.INSTANCE,
@@ -199,6 +246,19 @@ class AbilityDefinitionTest {
         assertThrows(IllegalArgumentException.class, () -> new ResourceCost("tensura:aura", -1.0));
         assertThrows(IllegalArgumentException.class, () -> new ResourceCost("", 1.0));
         assertThrows(IllegalArgumentException.class, () -> new ResourceCost("tensura:aura", Double.NaN));
+        // issue #111: the declared mode cycle is validated at construction
+        assertThrows(NullPointerException.class,
+                () -> new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
+                        ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of(), null));
+        assertThrows(IllegalArgumentException.class,
+                () -> new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
+                        ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of(),
+                        List.of("single", " ")));
+        assertThrows(IllegalArgumentException.class,
+                () -> new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
+                        ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of(),
+                        List.of("single", "single")),
+                "a duplicate makes the declared cycle ambiguous");
     }
 
     @Test
@@ -217,6 +277,10 @@ class AbilityDefinitionTest {
         assertThrows(UnsupportedOperationException.class, () -> def.tags().add("x"));
         assertThrows(UnsupportedOperationException.class,
                 () -> def.costs().add(new ResourceCost("tensura:aura", 1.0)));
+        var withModes = new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT,
+                List.of(), ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of(),
+                new java.util.ArrayList<>(List.of("single")));
+        assertThrows(UnsupportedOperationException.class, () -> withModes.modes().add("area"));
         assertEquals(def, sample());
         assertEquals(def.hashCode(), sample().hashCode());
     }

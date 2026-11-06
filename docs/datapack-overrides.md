@@ -33,23 +33,25 @@ Example:
 
 Each value is a **partial definition** in exactly `AbilityDefinition`'s JSON
 shape (`display_name`, `icon`, `category`, `activation_type`, `costs`,
-`consumption_strategy`, `amount_resolver`, `tags`, `data`) - every field
-optional. `costs` is an
+`consumption_strategy`, `amount_resolver`, `tags`, `data`, `modes`) - every
+field optional. `costs` is an
 **array** of `{"resource": ..., "amount": ...}` entries (issue #89);
 `consumption_strategy` is a **name** resolving to a registered strategy
 (issue #90, default `all` - see `docs/api-surface.md`); `amount_resolver`
 is a **name** resolving to a registered amount resolver (issue #103,
-default `static` - declared amounts are also the nominal amounts); the
-legacy single `cost` object is **rejected with an error** naming the
-replacement key - silently ignoring it would turn a datapack's cost change
-into a no-op.
+default `static` - declared amounts are also the nominal amounts); `modes`
+is an **array** of mode keys (issue #111) - the ability's own ordered mode
+cycle, first entry = the default, empty/absent = no modes; the legacy
+single `cost` object is **rejected with an error** naming the replacement
+key - silently ignoring it would turn a datapack's cost change into a
+no-op.
 
 ## Merge rules (applied at lookup)
 
 | Field | Rule |
 |---|---|
 | `display_name`, `icon`, `category`, `activation_type`, `costs`, `consumption_strategy`, `amount_resolver` | present → **replaces** the base; absent → base kept |
-| `tags` | present → **replaces** wholesale (never a union); absent → base kept |
+| `tags`, `modes` | present → **replaces** wholesale (never a union); absent → base kept |
 | `data` | **merged per-key**: base keys kept, overlay keys win conflicts |
 
 - An overlay that changes nothing is legal (an empty value is a no-op).

@@ -62,6 +62,11 @@ import org.jetbrains.annotations.Nullable;
  * @param data           open string key/value slots for provider- or
  *                       datapack-supplied metadata (feeds the data-map overlay,
  *                       see ADR-001)
+ * @param modes          the ability's own ordered mode cycle (issue #111):
+ *                       open-vocabulary mode keys, first = the default, empty
+ *                       when the ability declares no modes; each ability
+ *                       declares its own - there is no bar-level or global
+ *                       mode vocabulary
  */
 public record AbilityDefinition(
         String displayNameKey,
@@ -72,7 +77,8 @@ public record AbilityDefinition(
         String consumptionStrategy,
         String amountResolver,
         Set<String> tags,
-        Map<String, String> data) {
+        Map<String, String> data,
+        List<String> modes) {
 
     /** Set codec for the open tag vocabulary (this DFU build has no Codec.unboundedSet). */
     private static final Codec<Set<String>> TAG_SET_CODEC =
@@ -93,7 +99,9 @@ public record AbilityDefinition(
             TAG_SET_CODEC.optionalFieldOf("tags", Set.of())
                     .forGetter(AbilityDefinition::tags),
             Codec.unboundedMap(Codec.STRING, Codec.STRING).optionalFieldOf("data", Map.of())
-                    .forGetter(AbilityDefinition::data)
+                    .forGetter(AbilityDefinition::data),
+            Codec.list(Codec.STRING).optionalFieldOf("modes", List.of())
+                    .forGetter(AbilityDefinition::modes)
     ).apply(instance, AbilityDefinition::create));
 
     /**
@@ -127,10 +135,24 @@ public record AbilityDefinition(
             String consumptionStrategy,
             String amountResolver,
             Set<String> tags,
-            Map<String, String> data) {
+            Map<String, String> data,
+            List<String> modes) {
         return new AbilityDefinition(
                 displayNameKey, iconId.orElse(null), category, activationType, costs,
-                consumptionStrategy, amountResolver, tags, data);
+                consumptionStrategy, amountResolver, tags, data, modes);
+    }
+
+    /**
+     * Pre-modes construction (issue #111): the Stable-API signature that
+     * predates the {@code modes} component, retained so no existing caller
+     * changes - equivalent to declaring {@code modes = List.of()}.
+     */
+    public AbilityDefinition(String displayNameKey, @Nullable ResourceLocation iconId,
+            ResourceLocation category, ActivationType activationType, List<ResourceCost> costs,
+            String consumptionStrategy, String amountResolver, Set<String> tags,
+            Map<String, String> data) {
+        this(displayNameKey, iconId, category, activationType, costs, consumptionStrategy,
+                amountResolver, tags, data, List.of());
     }
 
     public AbilityDefinition {
@@ -143,6 +165,7 @@ public record AbilityDefinition(
         costs = List.copyOf(Objects.requireNonNull(costs, "costs"));
         tags = Set.copyOf(Objects.requireNonNull(tags, "tags"));
         data = Map.copyOf(Objects.requireNonNull(data, "data"));
+        modes = List.copyOf(Objects.requireNonNull(modes, "modes"));
         if (displayNameKey.isBlank()) {
             throw new IllegalArgumentException("display name key must not be blank");
         }
@@ -162,6 +185,16 @@ public record AbilityDefinition(
                 throw new IllegalArgumentException("definition data keys must not be blank");
             }
         });
+        for (String mode : modes) {
+            if (mode == null || mode.isBlank()) {
+                throw new IllegalArgumentException("definition modes must not be blank");
+            }
+        }
+        if (modes.size() != new java.util.HashSet<>(modes).size()) {
+            // a duplicate would make the declared cycle ambiguous (issue #111)
+            throw new IllegalArgumentException("definition modes must not contain duplicates: "
+                    + modes);
+        }
     }
 
     /**
@@ -206,5 +239,41 @@ public record AbilityDefinition(
                 throw new IllegalStateException("Invalid ability definition " + id + ": blank tag");
             }
         }
+        for (String mode : modes) {
+            if (mode == null || mode.isBlank()) {
+                throw new IllegalStateException("Invalid ability definition " + id + ": blank mode");
+            }
+        }
+        if (modes.size() != new java.util.HashSet<>(modes).size()) {
+            throw new IllegalStateException("Invalid ability definition " + id
+                    + ": duplicate mode entries " + modes);
+        }
+    }
+
+    /**
+     * The ability's default mode (issue #111): the first declared mode, or
+     * null when the ability declares no modes - the value a slot falls back
+     * to when it stores no (or an unknown) mode.
+     */
+    @Nullable
+    public String defaultMode() {
+        return modes.isEmpty() ? null : modes.get(0);
+    }
+
+    /**
+     * The mode after {@code current} in this ability's declared cycle
+     * (issue #111) - the one pure function the mode keybind and the menu
+     * both drive: null when the ability declares no modes; the default
+     * (first) mode when {@code current} is null, unknown, or not declared
+     * (a stale stored value never crashes a cycle); otherwise the
+     * successor, wrapping to the first.
+     */
+    @Nullable
+    public String nextMode(@Nullable String current) {
+        if (modes.isEmpty()) {
+            return null;
+        }
+        int index = current == null ? -1 : modes.indexOf(current);
+        return modes.get(index + 1 >= modes.size() ? 0 : index + 1);
     }
 }
