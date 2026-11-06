@@ -473,6 +473,25 @@ core#112's findings):
   core#19) - core sends no game data today, and no dedicated modes payload
   exists by design.
 
+## Ability stats and description (issue #119)
+
+- **Stats**: `AbilityDefinition.stats` - an ordered `List<Stat>`
+  (`labelKey` + `value`) presented by menus; declaration order is
+  presentation order. Labels are provider-owned translation keys (the
+  `displayNameKey` rule - core invents no player strings), values are
+  literal display text (`"200"`, `"3s"`) and are never parsed into
+  anything authoritative. Empty = no stats. The previous constructor is
+  retained (`stats = List.of()`), so the addition is non-breaking, and
+  datapack overlays replace the list wholesale (see
+  [`docs/datapack-overrides.md`](datapack-overrides.md)).
+- **Description**: the `data` map's `description` key is the **formal
+  description slot**, read through `AbilityDefinition.description()`
+  (empty for absent or blank) - the per-key-merging data overlay already
+  lets datapacks override it, and there is deliberately no second source.
+- Consumers render stats then the description in the ability menu's
+  inline tooltip; stat-label localisation there follows the consumer's own
+  label convention (ability-hotbar#139).
+
 ## Slot gate (issue #87)
 
 Abilities that act on a specific cell of a content-owned bar share one

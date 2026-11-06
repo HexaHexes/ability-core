@@ -61,7 +61,12 @@ import org.jetbrains.annotations.Nullable;
  *                       first-class replacement for the interim data-slot idea
  * @param data           open string key/value slots for provider- or
  *                       datapack-supplied metadata (feeds the data-map overlay,
- *                       see ADR-001)
+ *                       see ADR-001); the {@code description} key is the
+ *                       formal description slot (issue #119, see
+ *                       {@link #description()})
+ * @param stats          ordered, player-presented stats for the menu (issue
+ *                       #119): declaration order is presentation order,
+ *                       empty when the provider declares none
  */
 public record AbilityDefinition(
         String displayNameKey,
@@ -72,7 +77,8 @@ public record AbilityDefinition(
         String consumptionStrategy,
         String amountResolver,
         Set<String> tags,
-        Map<String, String> data) {
+        Map<String, String> data,
+        List<Stat> stats) {
 
     /** Set codec for the open tag vocabulary (this DFU build has no Codec.unboundedSet). */
     private static final Codec<Set<String>> TAG_SET_CODEC =
@@ -93,7 +99,9 @@ public record AbilityDefinition(
             TAG_SET_CODEC.optionalFieldOf("tags", Set.of())
                     .forGetter(AbilityDefinition::tags),
             Codec.unboundedMap(Codec.STRING, Codec.STRING).optionalFieldOf("data", Map.of())
-                    .forGetter(AbilityDefinition::data)
+                    .forGetter(AbilityDefinition::data),
+            Stat.CODEC.listOf().optionalFieldOf("stats", List.of())
+                    .forGetter(AbilityDefinition::stats)
     ).apply(instance, AbilityDefinition::create));
 
     /**
@@ -127,10 +135,24 @@ public record AbilityDefinition(
             String consumptionStrategy,
             String amountResolver,
             Set<String> tags,
-            Map<String, String> data) {
+            Map<String, String> data,
+            List<Stat> stats) {
         return new AbilityDefinition(
                 displayNameKey, iconId.orElse(null), category, activationType, costs,
-                consumptionStrategy, amountResolver, tags, data);
+                consumptionStrategy, amountResolver, tags, data, stats);
+    }
+
+    /**
+     * Pre-stats construction (issue #119): the Stable-API signature that
+     * predates the {@code stats} component, retained so no existing caller
+     * changes - equivalent to declaring {@code stats = List.of()}.
+     */
+    public AbilityDefinition(String displayNameKey, @Nullable ResourceLocation iconId,
+            ResourceLocation category, ActivationType activationType, List<ResourceCost> costs,
+            String consumptionStrategy, String amountResolver, Set<String> tags,
+            Map<String, String> data) {
+        this(displayNameKey, iconId, category, activationType, costs, consumptionStrategy,
+                amountResolver, tags, data, List.of());
     }
 
     public AbilityDefinition {
@@ -143,6 +165,7 @@ public record AbilityDefinition(
         costs = List.copyOf(Objects.requireNonNull(costs, "costs"));
         tags = Set.copyOf(Objects.requireNonNull(tags, "tags"));
         data = Map.copyOf(Objects.requireNonNull(data, "data"));
+        stats = List.copyOf(Objects.requireNonNull(stats, "stats"));
         if (displayNameKey.isBlank()) {
             throw new IllegalArgumentException("display name key must not be blank");
         }
@@ -162,6 +185,18 @@ public record AbilityDefinition(
                 throw new IllegalArgumentException("definition data keys must not be blank");
             }
         });
+    }
+
+    /**
+     * The ability's description for menus (issue #119): the formal
+     * {@code data.description} slot read through one accessor - empty when
+     * the provider or a datapack declared none (or only a blank value).
+     * The per-key-merging data overlay already lets datapacks override it;
+     * there is deliberately no second source.
+     */
+    public Optional<String> description() {
+        String value = data.get("description");
+        return value == null || value.isBlank() ? Optional.empty() : Optional.of(value);
     }
 
     /**
@@ -204,6 +239,12 @@ public record AbilityDefinition(
         for (String tag : tags) {
             if (tag == null || tag.isBlank()) {
                 throw new IllegalStateException("Invalid ability definition " + id + ": blank tag");
+            }
+        }
+        for (Stat stat : stats) {
+            if (stat == null || stat.labelKey().isBlank() || stat.value().isBlank()) {
+                throw new IllegalStateException(
+                        "Invalid ability definition " + id + ": malformed stat " + stat);
             }
         }
     }

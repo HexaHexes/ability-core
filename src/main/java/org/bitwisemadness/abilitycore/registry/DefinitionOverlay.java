@@ -16,6 +16,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.bitwisemadness.abilitycore.api.AbilityDefinition;
 import org.bitwisemadness.abilitycore.api.ActivationType;
 import org.bitwisemadness.abilitycore.api.ResourceCost;
+import org.bitwisemadness.abilitycore.api.Stat;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -41,7 +42,8 @@ public record DefinitionOverlay(
         @Nullable String consumptionStrategy,
         @Nullable String amountResolver,
         @Nullable Set<String> tags,
-        @Nullable Map<String, String> data) {
+        @Nullable Map<String, String> data,
+        @Nullable List<Stat> stats) {
 
     /** Set codec for the open tag vocabulary (this DFU build has no Codec.unboundedSet). */
     private static final Codec<Set<String>> TAG_SET_CODEC =
@@ -65,7 +67,9 @@ public record DefinitionOverlay(
             TAG_SET_CODEC.optionalFieldOf("tags")
                     .forGetter(o -> Optional.ofNullable(o.tags())),
             Codec.unboundedMap(Codec.STRING, Codec.STRING).optionalFieldOf("data")
-                    .forGetter(o -> Optional.ofNullable(o.data()))
+                    .forGetter(o -> Optional.ofNullable(o.data())),
+            Stat.CODEC.listOf().optionalFieldOf("stats")
+                    .forGetter(o -> Optional.ofNullable(o.stats()))
     ).apply(instance, DefinitionOverlay::create));
 
     /**
@@ -98,11 +102,13 @@ public record DefinitionOverlay(
             Optional<String> consumptionStrategy,
             Optional<String> amountResolver,
             Optional<Set<String>> tags,
-            Optional<Map<String, String>> data) {
+            Optional<Map<String, String>> data,
+            Optional<List<Stat>> stats) {
         return new DefinitionOverlay(
                 displayNameKey.orElse(null), iconId.orElse(null), category.orElse(null),
                 activationType.orElse(null), costs.orElse(null), consumptionStrategy.orElse(null),
-                amountResolver.orElse(null), tags.orElse(null), data.orElse(null));
+                amountResolver.orElse(null), tags.orElse(null), data.orElse(null),
+                stats.orElse(null));
     }
 
     public DefinitionOverlay {
@@ -134,13 +140,17 @@ public record DefinitionOverlay(
                 }
             });
         }
+        if (stats != null) {
+            // entries validate themselves: Stat's constructor owns label/value
+            stats = List.copyOf(stats);
+        }
     }
 
     /**
      * Applies this overlay to {@code base} at lookup: present fields replace,
      * absent fields keep the base, {@code data} merges per-key (this overlay
-     * wins conflicts), {@code tags} replaces wholesale. A no-op overlay
-     * produces a value-equal definition.
+     * wins conflicts), {@code tags} and {@code stats} replace wholesale. A
+     * no-op overlay produces a value-equal definition.
      */
     public AbilityDefinition mergeInto(AbilityDefinition base) {
         Map<String, String> mergedData = new HashMap<>(base.data());
@@ -156,6 +166,7 @@ public record DefinitionOverlay(
                 consumptionStrategy != null ? consumptionStrategy : base.consumptionStrategy(),
                 amountResolver != null ? amountResolver : base.amountResolver(),
                 tags != null ? tags : base.tags(),
-                mergedData);
+                mergedData,
+                stats != null ? stats : base.stats());
     }
 }
