@@ -39,6 +39,7 @@ public record DefinitionOverlay(
         @Nullable ActivationType activationType,
         @Nullable List<ResourceCost> costs,
         @Nullable String consumptionStrategy,
+        @Nullable String amountResolver,
         @Nullable Set<String> tags,
         @Nullable Map<String, String> data) {
 
@@ -59,6 +60,8 @@ public record DefinitionOverlay(
                     .forGetter(o -> Optional.ofNullable(o.costs())),
             Codec.STRING.optionalFieldOf("consumption_strategy")
                     .forGetter(o -> Optional.ofNullable(o.consumptionStrategy())),
+            Codec.STRING.optionalFieldOf("amount_resolver")
+                    .forGetter(o -> Optional.ofNullable(o.amountResolver())),
             TAG_SET_CODEC.optionalFieldOf("tags")
                     .forGetter(o -> Optional.ofNullable(o.tags())),
             Codec.unboundedMap(Codec.STRING, Codec.STRING).optionalFieldOf("data")
@@ -93,12 +96,13 @@ public record DefinitionOverlay(
             Optional<ActivationType> activationType,
             Optional<List<ResourceCost>> costs,
             Optional<String> consumptionStrategy,
+            Optional<String> amountResolver,
             Optional<Set<String>> tags,
             Optional<Map<String, String>> data) {
         return new DefinitionOverlay(
                 displayNameKey.orElse(null), iconId.orElse(null), category.orElse(null),
                 activationType.orElse(null), costs.orElse(null), consumptionStrategy.orElse(null),
-                tags.orElse(null), data.orElse(null));
+                amountResolver.orElse(null), tags.orElse(null), data.orElse(null));
     }
 
     public DefinitionOverlay {
@@ -107,6 +111,9 @@ public record DefinitionOverlay(
         }
         if (consumptionStrategy != null && consumptionStrategy.isBlank()) {
             throw new IllegalArgumentException("overlay consumption strategy must not be blank");
+        }
+        if (amountResolver != null && amountResolver.isBlank()) {
+            throw new IllegalArgumentException("overlay amount resolver must not be blank");
         }
         if (costs != null) {
             costs = List.copyOf(costs);
@@ -147,6 +154,7 @@ public record DefinitionOverlay(
                 activationType != null ? activationType : base.activationType(),
                 costs != null ? costs : base.costs(),
                 consumptionStrategy != null ? consumptionStrategy : base.consumptionStrategy(),
+                amountResolver != null ? amountResolver : base.amountResolver(),
                 tags != null ? tags : base.tags(),
                 mergedData);
     }

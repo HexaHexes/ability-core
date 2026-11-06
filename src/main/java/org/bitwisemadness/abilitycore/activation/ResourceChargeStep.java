@@ -10,6 +10,7 @@ import org.bitwisemadness.abilitycore.api.ActivationOutcome;
 import org.bitwisemadness.abilitycore.api.ActivationRequest;
 import org.bitwisemadness.abilitycore.api.ActivationResult;
 import org.bitwisemadness.abilitycore.api.Affordability;
+import org.bitwisemadness.abilitycore.api.AmountResolvers;
 import org.bitwisemadness.abilitycore.api.ChargingModel;
 import org.bitwisemadness.abilitycore.api.ConsumptionStrategies;
 import org.bitwisemadness.abilitycore.api.ResourceConsumer;
@@ -32,6 +33,13 @@ import org.slf4j.Logger;
  *       their own costs natively); EXTERNAL -> REFUSED_UNAFFORDABLE with
  *       {@code ability.refused.unaffordable.undeclared} (the single core charge
  *       site must have a cost to route through - fail closed pre-activation).</li>
+ *   <li><b>Price</b> the declared list through the definition's named
+ *       {@link AmountResolvers.AmountResolver} (issue #103): resolution runs
+ *       <b>before selection</b> so every consult observes this request's
+ *       amounts. A logged contract violation - unknown or vanished name,
+ *       mirror mismatch (size/order/resource id), non-finite or negative
+ *       amount, a throwing resolver - refuses fail-closed with nothing
+ *       charged. The built-in {@code static} resolver skips dispatch.</li>
  *   <li>Resolve the definition's named {@link ConsumptionStrategies.Strategy}
  *       (validated at registration; a name that
  *       vanished mid-session fails closed with REFUSED_UNAVAILABLE) and ask it
@@ -58,8 +66,9 @@ import org.slf4j.Logger;
  *
  * <p><b>Validation scope belongs to the strategy (issue #90):</b> only the
  * selected entries are validated - a selector that skips an entry is never
- * refused for it - but everything selected must be a declared cost (an
- * undeclared selection entry is a strategy contract violation -> refusal)
+ * refused for it - but everything selected must be a <em>priced</em> entry
+ * from the resolved input list (an outside selection entry is a strategy
+ * contract violation -> refusal)
  * and must pass fail-closed, so a failure at any selected entry charges
  * nothing (all-or-nothing, issue #89). The composition rule settled on #93
  * follows directly for the default {@code all} strategy: an invalid entry
@@ -68,9 +77,9 @@ import org.slf4j.Logger;
  * zero-cost path (each entry still validates and charges its logged
  * no-op).</p>
  *
- * <p>Each snapshot's amount is its entry's amount (the check receives it
- * - no re-derivation); the consumer's charge receives that snapshot verbatim
- * (validate-then-charge).</p>
+ * <p>Each snapshot's amount is its (priced) entry's amount - the check
+ * receives it, the resolution point never re-derives it afterwards; the
+ * consumer's charge receives that snapshot verbatim (validate-then-charge).</p>
  */
 public final class ResourceChargeStep implements ActivationPipeline.Step {
 
@@ -117,7 +126,14 @@ public final class ResourceChargeStep implements ActivationPipeline.Step {
                     request.abilityId(), definition.consumptionStrategy());
             return Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_UNAVAILABLE));
         }
-        List<ResourceCost> selected = strategy.select(request, player, List.copyOf(costs),
+        // issue #103: price before selection - consults and the subset below
+        // see this request's amounts, never the declared nominal ones
+        Optional<List<ResourceCost>> pricedOpt = price(request, player, context, definition);
+        if (pricedOpt.isEmpty()) {
+            return Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_UNAVAILABLE));
+        }
+        List<ResourceCost> priced = pricedOpt.get();
+        List<ResourceCost> selected = strategy.select(request, player, priced,
                 entry -> affordabilityFor(request, player, entry));
         if (selected == null) {
             // contract violation: a strategy must return a subset, never null
@@ -137,11 +153,12 @@ public final class ResourceChargeStep implements ActivationPipeline.Step {
         // siblings validate like every other entry, so free never masks a bad one)
         List<Affordability> snapshots = new ArrayList<>(selected.size());
         for (ResourceCost cost : selected) {
-            if (cost == null || !costs.contains(cost)) {
-                // a strategy selects from the declared costs only - an outside
+            if (cost == null || !priced.contains(cost)) {
+                // a strategy selects from the priced input list only - an outside
                 // entry would charge something the definition never declared
-                LOGGER.error("Consumption strategy '{}' for {} selected an undeclared entry {}",
-                        definition.consumptionStrategy(), request.abilityId(), cost);
+                LOGGER.error("Consumption strategy '{}' for {} selected an entry outside"
+                                + " the priced list {}", definition.consumptionStrategy(),
+                        request.abilityId(), cost);
                 return Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_UNAFFORDABLE));
             }
             ResourceProvider provider = ResourceProviders.get(cost.resourceId()).orElse(null);
@@ -196,5 +213,66 @@ public final class ResourceChargeStep implements ActivationPipeline.Step {
         }
         Affordability verdict = provider.check(request.abilityId(), player, entry.amount());
         return verdict == null ? Affordability.unknown(entry.resourceId()) : verdict;
+    }
+
+    /**
+     * Issue #103's resolution point: prices the declared list for this
+     * request, after the empty-costs gate and before selection, so every
+     * consult observes priced amounts. An empty result is a logged contract
+     * violation the caller refuses fail-closed. The built-in {@code static}
+     * resolver skips dispatch, pinning pre-#103 behavior byte-for-byte.
+     */
+    private static Optional<List<ResourceCost>> price(ActivationRequest request, ServerPlayer player,
+            ActivationContext context, AbilityDefinition definition) {
+        if (AmountResolvers.STATIC.equals(definition.amountResolver())) {
+            return Optional.of(definition.costs());
+        }
+        var resolver = AmountResolvers.get(definition.amountResolver()).orElse(null);
+        if (resolver == null) {
+            // validated at registration; a name that vanished is a wiring bug
+            LOGGER.error("Refusing {}: unknown amount resolver '{}'",
+                    request.abilityId(), definition.amountResolver());
+            return Optional.empty();
+        }
+        Object target = context.get(TargetValidationStep.RESOLVED_ENTITY, Object.class).orElse(null);
+        List<ResourceCost> priced;
+        try {
+            priced = resolver.resolve(definition.costs(), request, player, target);
+        } catch (RuntimeException e) {
+            LOGGER.error("Amount resolver '{}' for {} threw - refusing",
+                    definition.amountResolver(), request.abilityId(), e);
+            return Optional.empty();
+        }
+        String violation = mirrorViolation(definition.costs(), priced);
+        if (violation != null) {
+            LOGGER.error("Amount resolver '{}' for {} violated its contract: {} - refusing",
+                    definition.amountResolver(), request.abilityId(), violation);
+            return Optional.empty();
+        }
+        return Optional.of(List.copyOf(priced));
+    }
+
+    /** The mirror contract (issue #103): same size, same ids in order, valid amounts. */
+    private static String mirrorViolation(List<ResourceCost> declared, List<ResourceCost> priced) {
+        if (priced == null) {
+            return "returned null";
+        }
+        if (priced.size() != declared.size()) {
+            return "returned " + priced.size() + " entries for " + declared.size() + " declared";
+        }
+        for (int i = 0; i < declared.size(); i++) {
+            ResourceCost entry = priced.get(i);
+            if (entry == null) {
+                return "returned a null entry at index " + i;
+            }
+            if (!entry.resourceId().equals(declared.get(i).resourceId())) {
+                return "entry " + i + " is '" + entry.resourceId() + "', expected '"
+                        + declared.get(i).resourceId() + "'";
+            }
+            if (!Double.isFinite(entry.amount()) || entry.amount() < 0) {
+                return "entry " + i + " has invalid amount " + entry.amount();
+            }
+        }
+        return null;
     }
 }
