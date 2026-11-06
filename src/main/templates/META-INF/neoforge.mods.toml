@@ -39,3 +39,12 @@ side = "BOTH"
 # Add your mod's dependencies below. Use type = "optional" for anything the mod
 # works without, and gate the code that touches it (mixins, registrations) so it
 # no-ops when the dependency is absent.
+
+[[dependencies.${mod_id}]]
+# Optional Sky's Ley Lines interop (core#96): the bridge declares cost pairs
+# only when this mod is loaded; core works fully without it.
+modId = "skysleylines"
+type = "optional"
+versionRange = "[0.5.4.121012,)"
+ordering = "AFTER"
+side = "BOTH"
