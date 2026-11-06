@@ -67,6 +67,7 @@ jobs:
         env:
           BUMP: ${{ inputs.bump }}
           CHANNEL: ${{ inputs.channel }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -101,6 +102,37 @@ jobs:
               none)  NEW_BASE="$BASE" ;;
               *) echo "::error::Unknown bump '$BUMP'."; exit 1 ;;
             esac
+          fi
+
+          # Semver floor + the human's major (owner ruling, issue #104):
+          # breaking outstanding forces at least the minor raise of the last
+          # stable - ci's affirmed rule means the patch path above can no
+          # longer ship breaking work - and bump=major raises the train to
+          # the next major on top. The "base was chosen when the train began"
+          # rule yields to semver when breaking landed after that choice.
+          BASELINE=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+          BREAKING=""
+          if [ -n "$BASELINE" ]; then
+            BREAKING=$(gh pr list --state merged --label breaking --search "merged:>=$(git log -1 --format=%cI "$BASELINE")" --json number --jq '.[].number' || true)
+          fi
+          if [ -n "$BREAKING" ]; then
+            echo "breaking PRs since $BASELINE: $BREAKING"
+            if [ "$BUMP" = "major" ]; then
+              RAISED="$((MAJOR + 1)).0.0"
+              if [ "$RAISED" != "$NEW_BASE" ]; then
+                echo "Semver: breaking outstanding - bump=major raises base $NEW_BASE -> $RAISED"
+                NEW_BASE="$RAISED"
+              fi
+            else
+              OLD_BASE="${BASELINE#v}"
+              MAJOR_OLD=$(echo "$OLD_BASE" | cut -d. -f1)
+              MINOR_OLD=$(echo "$OLD_BASE" | cut -d. -f2)
+              FLOOR="$MAJOR_OLD.$((MINOR_OLD + 1)).0"
+              if [ "$NEW_BASE" != "$FLOOR" ] && [ "$(printf '%s\n%s\n' "$NEW_BASE" "$FLOOR" | sort -V | tail -1)" = "$FLOOR" ]; then
+                echo "Semver: breaking outstanding - raising base $NEW_BASE -> $FLOOR (minor floor of $OLD_BASE)"
+                NEW_BASE="$FLOOR"
+              fi
+            fi
           fi
 
           # Semver (#100): a pre-release after a clean stable must advance the
