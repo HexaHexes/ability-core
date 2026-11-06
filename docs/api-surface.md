@@ -8,7 +8,7 @@ for the four consumer repositories.
 
 | Package | Stability | Purpose |
 |---|---|---|
-| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies` |
+| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `ActivationRequests` (slot gate), `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies`, pricing: `AmountResolvers` |
 | `org.bitwisemadness.abilitycore.registry` | **Stable** — public API | `AbilityRegistries` (registry key + `registry()` + `isReady()`) |
 | `org.bitwisemadness.abilitycore.discovery` | **Stable** — public API | `AbilityDiscovery` (presence, enumeration, filtering) |
 | `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler`, `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
@@ -399,6 +399,27 @@ AmountResolvers.declare("mymod:ep_share",
 **Overlay**: `amount_resolver` mirrors the definition shape — present
 replaces wholesale, absent keeps the base; an overlay naming a resolver
 nobody declared refuses fail-closed at runtime (`REFUSED_UNAVAILABLE`).
+
+## Slot gate (issue #87)
+
+Abilities that act on a specific cell of a content-owned bar share one
+wire-level guard — `ActivationRequests.requireSlot(request, slotCount)`
+returns either the validated index or the refusal to return:
+
+- **Missing `slotContext` → refuse, fail-closed.** There is deliberately
+  **no "active slot" fallback**: a request without a cell never guesses
+  which target is meant.
+- **Out-of-range / stale cell → refuse.** The caller passes its **live**
+  slot count (re-read per call), so a stale seeded cell refuses instead of
+  acting on a neighbour.
+- **Outcome vocabulary** (mirrors pseudocore-curios' verified `press`
+  handler): both failures refuse `REFUSED_UNAVAILABLE`; domain refusals
+  (cooldown, gating, unreachable) stay in the handler, which maps them with
+  its own vocabulary.
+
+Usable from `ChargingModel.NATIVE` handlers; carries no upstream-mod types.
+The consumers (curios' `press`, the forthcoming iss-hotbar `cast`) adopt it
+in their own repos with their behaviour unchanged.
 
 ## Leak gates (mechanism)
 
