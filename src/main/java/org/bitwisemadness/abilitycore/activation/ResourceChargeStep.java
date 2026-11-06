@@ -10,6 +10,7 @@ import org.bitwisemadness.abilitycore.api.ActivationOutcome;
 import org.bitwisemadness.abilitycore.api.ActivationRequest;
 import org.bitwisemadness.abilitycore.api.ActivationResult;
 import org.bitwisemadness.abilitycore.api.Affordability;
+import org.bitwisemadness.abilitycore.api.AmountResolvers;
 import org.bitwisemadness.abilitycore.api.ChargingModel;
 import org.bitwisemadness.abilitycore.api.ConsumptionStrategies;
 import org.bitwisemadness.abilitycore.api.ResourceConsumer;
@@ -32,6 +33,14 @@ import org.slf4j.Logger;
  *       their own costs natively); EXTERNAL -> REFUSED_UNAFFORDABLE with
  *       {@code ability.refused.unaffordable.undeclared} (the single core charge
  *       site must have a cost to route through - fail closed pre-activation).</li>
+ *   <li>Priced the declared list through the definition's
+ *       {@link AmountResolvers.AmountResolver amount resolver} for <b>this</b>
+ *       request (issue #103), after the empty-costs gate and before the
+ *       strategy runs - every consult, validation, snapshot and charge sees
+ *       the priced amounts. Unknown name, a throwing resolver, or a
+ *       malformed priced list (null, wrong size, changed/reordered ids,
+ *       non-finite or negative amount) -&gt; REFUSED_UNAVAILABLE with an
+ *       error log, nothing charged.</li>
  *   <li>Resolve the definition's named {@link ConsumptionStrategies.Strategy}
  *       (validated at registration; a name that
  *       vanished mid-session fails closed with REFUSED_UNAVAILABLE) and ask it
@@ -108,6 +117,31 @@ public final class ResourceChargeStep implements ActivationPipeline.Step {
             return Optional.empty();
         }
 
+        // issue #103: price the declared list for THIS request before the
+        // strategy sees it - built-in consults must observe priced amounts
+        var resolver = AmountResolvers.get(definition.amountResolver()).orElse(null);
+        if (resolver == null) {
+            LOGGER.error("Refusing {}: unknown amount resolver '{}'",
+                    request.abilityId(), definition.amountResolver());
+            return Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_UNAVAILABLE));
+        }
+        List<ResourceCost> priced;
+        try {
+            Object resolvedTarget = context
+                    .get(TargetValidationStep.RESOLVED_ENTITY, Object.class).orElse(null);
+            priced = resolver.resolve(List.copyOf(costs), request, player, resolvedTarget);
+        } catch (RuntimeException e) {
+            LOGGER.error("Amount resolver '{}' for {} threw - refusing",
+                    definition.amountResolver(), request.abilityId(), e);
+            return Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_UNAVAILABLE));
+        }
+        String shapeError = shapeError(costs, priced);
+        if (shapeError != null) {
+            LOGGER.error("Amount resolver '{}' for {} returned an invalid priced list: {}",
+                    definition.amountResolver(), request.abilityId(), shapeError);
+            return Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_UNAVAILABLE));
+        }
+
         // issue #90: the named strategy selects the entries to consume; core
         // validates exactly that subset fail-closed and charges it in order
         var strategy = ConsumptionStrategies.get(definition.consumptionStrategy()).orElse(null);
@@ -117,7 +151,7 @@ public final class ResourceChargeStep implements ActivationPipeline.Step {
                     request.abilityId(), definition.consumptionStrategy());
             return Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_UNAVAILABLE));
         }
-        List<ResourceCost> selected = strategy.select(request, player, List.copyOf(costs),
+        List<ResourceCost> selected = strategy.select(request, player, List.copyOf(priced),
                 entry -> affordabilityFor(request, player, entry));
         if (selected == null) {
             // contract violation: a strategy must return a subset, never null
@@ -137,10 +171,11 @@ public final class ResourceChargeStep implements ActivationPipeline.Step {
         // siblings validate like every other entry, so free never masks a bad one)
         List<Affordability> snapshots = new ArrayList<>(selected.size());
         for (ResourceCost cost : selected) {
-            if (cost == null || !costs.contains(cost)) {
-                // a strategy selects from the declared costs only - an outside
-                // entry would charge something the definition never declared
-                LOGGER.error("Consumption strategy '{}' for {} selected an undeclared entry {}",
+            if (cost == null || !priced.contains(cost)) {
+                // a strategy selects from the priced input list only - an
+                // outside entry would charge something the definition never
+                // declared at this price
+                LOGGER.error("Consumption strategy '{}' for {} selected an unpriced entry {}",
                         definition.consumptionStrategy(), request.abilityId(), cost);
                 return Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_UNAFFORDABLE));
             }
@@ -181,6 +216,34 @@ public final class ResourceChargeStep implements ActivationPipeline.Step {
         }
         context.put(AFFORDABILITY_SNAPSHOT, List.copyOf(snapshots));
         return Optional.empty();
+    }
+
+    /**
+     * The fail-closed shape contract for a priced list (issue #103): null,
+     * wrong size, a null entry, a changed or reordered resource id, or an
+     * amount that is negative / not finite. Returns null when the list is
+     * valid, otherwise the reason for the error log.
+     */
+    private static String shapeError(List<ResourceCost> declared, List<ResourceCost> priced) {
+        if (priced == null) {
+            return "returned null";
+        }
+        if (priced.size() != declared.size()) {
+            return "size " + priced.size() + " for declared size " + declared.size();
+        }
+        for (int i = 0; i < priced.size(); i++) {
+            ResourceCost entry = priced.get(i);
+            if (entry == null) {
+                return "null entry at index " + i;
+            }
+            if (!entry.resourceId().equals(declared.get(i).resourceId())) {
+                return "resource id changed or reordered at index " + i + ": " + entry.resourceId();
+            }
+            if (!Double.isFinite(entry.amount()) || entry.amount() < 0) {
+                return "invalid amount " + entry.amount() + " at index " + i;
+            }
+        }
+        return null;
     }
 
     /**

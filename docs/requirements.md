@@ -32,7 +32,7 @@ written into the implementation issues; this table records that they exist.
 | REQ-CORE-01 | Ability registration and metadata contracts: categories, identifiers, tags | F | P0 | designed | SPIKE-core-1 (closed) -> core#12 | Phase 2 |
 | REQ-CORE-02 | Activation request and result contracts (unified success/failure vocabulary) | F | P0 | designed | SPIKE-core-1 (closed) -> core#13 | Phase 2 |
 | REQ-CORE-03 | Ability discovery and availability: provider/consumer registration, missing-provider handling | F | P0 | designed | SPIKE-core-1 (closed) -> core#14 | Phase 2 |
-| REQ-CORE-04 | Resource-provider and resource-consumption interfaces (validate-then-charge contract) | F | P0 | designed | SPIKE-core-1+br-2 (closed) -> core#15 -> #88/#89/#90 | Phase 2 |
+| REQ-CORE-04 | Resource-provider and resource-consumption interfaces (validate-then-charge contract) | F | P0 | designed | SPIKE-core-1+br-2 (closed) -> core#15 -> #88/#89/#90/#103 (parts 1-4) | Phase 2 |
 | REQ-CORE-05 | Cooldown interfaces (check + start, server-authoritative) | F | P1 | designed | SPIKE-core-1 (closed) -> core#16 | Phase 2 |
 | REQ-CORE-06 | Targeting and activation context (self/target/area, trigger source) | F | P1 | designed | SPIKE-core-1 (closed) -> core#17 | Phase 2 |
 | REQ-CORE-07 | Eligibility and restriction interfaces + server-authoritative validation contracts | F | P0 | designed | SPIKE-core-1 (closed) -> core#18 | Phase 2 |

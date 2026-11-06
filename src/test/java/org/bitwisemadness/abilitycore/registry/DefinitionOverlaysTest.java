@@ -17,6 +17,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import org.bitwisemadness.abilitycore.api.AbilityDefinition;
 import org.bitwisemadness.abilitycore.api.ActivationType;
+import org.bitwisemadness.abilitycore.api.AmountResolvers;
 import org.bitwisemadness.abilitycore.api.ConsumptionStrategies;
 import org.bitwisemadness.abilitycore.api.ResourceCost;
 import org.bitwisemadness.abilitycore.discovery.AbilityDiscovery;
@@ -59,12 +60,12 @@ class DefinitionOverlaysTest {
 
     private static AbilityDefinition base() {
         return new AbilityDefinition("tensura.skill.a", null, SKILL_CATEGORY,
-                ActivationType.INSTANT, List.of(), ConsumptionStrategies.ALL, Set.of("active"),
-                Map.of("k", "v"));
+                ActivationType.INSTANT, List.of(), ConsumptionStrategies.ALL,
+                AmountResolvers.STATIC, Set.of("active"), Map.of("k", "v"));
     }
 
     private static DefinitionOverlay overlay(String displayName, Map<String, String> data) {
-        return new DefinitionOverlay(displayName, null, null, null, null, null, null, data);
+        return new DefinitionOverlay(displayName, null, null, null, null, null, null, null, data);
     }
 
     @Test
@@ -73,7 +74,7 @@ class DefinitionOverlaysTest {
                 ResourceLocation.fromNamespaceAndPath("tensura", "icon"),
                 ResourceLocation.fromNamespaceAndPath("tensura", "magic"),
                 ActivationType.INSTANT, List.of(new ResourceCost("tensura:aura", 5.0)),
-                null, Set.of("custom"), Map.of("extra", "1"));
+                null, "test:overlay_pricer", Set.of("custom"), Map.of("extra", "1"));
         var json = DefinitionOverlay.CODEC.encodeStart(JsonOps.INSTANCE, full).getOrThrow();
         assertEquals(full, DefinitionOverlay.CODEC.parse(JsonOps.INSTANCE, json).getOrThrow());
 
@@ -113,10 +114,11 @@ class DefinitionOverlaysTest {
     void costsReplaceWholesaleWhenPresent() {
         var baseWithCosts = new AbilityDefinition("tensura.skill.a", null, SKILL_CATEGORY,
                 ActivationType.INSTANT, List.of(new ResourceCost("tensura:aura", 5.0)),
-                ConsumptionStrategies.ALL, Set.of("active"), Map.of("k", "v"));
+                ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of("active"),
+                Map.of("k", "v"));
         var replacement = List.of(new ResourceCost("tensura:health", 10.0),
                 new ResourceCost("tensura:aura", 2.0));
-        var merged = new DefinitionOverlay(null, null, null, null, replacement, null, null, null)
+        var merged = new DefinitionOverlay(null, null, null, null, replacement, null, null, null, null)
                 .mergeInto(baseWithCosts);
         assertEquals(replacement, merged.costs(),
                 "a present costs list replaces the base wholesale - no union, no per-entry merge");
@@ -138,15 +140,27 @@ class DefinitionOverlaysTest {
 
     @Test
     void tagsReplaceWholesaleWhenPresent() {
-        var merged = new DefinitionOverlay(null, null, null, null, null, null,
+        var merged = new DefinitionOverlay(null, null, null, null, null, null, null,
                 Set.of("custom"), null).mergeInto(base());
         assertEquals(Set.of("custom"), merged.tags(), "present tags replace, never union");
         assertEquals("tensura.skill.a", merged.displayNameKey());
     }
 
     @Test
+    void amountResolverReplacesWholesaleWhenPresent() {
+        var withResolver = new DefinitionOverlay(null, null, null, null, null,
+                null, "test:overlay_pricer", null, null);
+        assertEquals("test:overlay_pricer",
+                withResolver.mergeInto(base()).amountResolver(),
+                "a present amount_resolver replaces the base wholesale");
+        assertEquals(AmountResolvers.STATIC,
+                overlay("tensura.skill.x", Map.of()).mergeInto(base()).amountResolver(),
+                "absent amount_resolver keeps the base (the default static)");
+    }
+
+    @Test
     void anEmptyOverlayIsValueEqualToTheBase() {
-        var noOp = new DefinitionOverlay(null, null, null, null, null, null, null, null);
+        var noOp = new DefinitionOverlay(null, null, null, null, null, null, null, null, null);
         assertEquals(base(), noOp.mergeInto(base()), "a no-op overlay changes nothing");
     }
 

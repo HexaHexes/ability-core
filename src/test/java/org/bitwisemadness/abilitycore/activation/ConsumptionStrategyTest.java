@@ -19,6 +19,7 @@ import org.bitwisemadness.abilitycore.api.ActivationResult;
 import org.bitwisemadness.abilitycore.api.ActivationSource;
 import org.bitwisemadness.abilitycore.api.ActivationType;
 import org.bitwisemadness.abilitycore.api.Affordability;
+import org.bitwisemadness.abilitycore.api.AmountResolvers;
 import org.bitwisemadness.abilitycore.api.ChargingModel;
 import org.bitwisemadness.abilitycore.api.ConsumptionStrategies;
 import org.bitwisemadness.abilitycore.api.ResourceConsumer;
@@ -92,7 +93,7 @@ class ConsumptionStrategyTest {
         Registry.register(fixture, SOLO_ORDER_ABILITY, new AbilityDefinition(
                 "tensura.skill.strat", null, SKILL_CATEGORY,
                 ActivationType.INSTANT, List.of(COST_ONE), ConsumptionStrategies.IN_ORDER,
-                Set.of(), Map.of()));
+                AmountResolvers.STATIC, Set.of(), Map.of()));
         register(fixture, CUSTOM_ABILITY, "test:slot_selector");
         register(fixture, SCOPE_ABILITY, "test:only_second");
         register(fixture, FABRICATE_ABILITY, "test:fabricate");
@@ -145,7 +146,8 @@ class ConsumptionStrategyTest {
     private void register(Registry<AbilityDefinition> fixture, ResourceLocation id, String strategy) {
         Registry.register(fixture, id, new AbilityDefinition(
                 "tensura.skill.strat", null, SKILL_CATEGORY,
-                ActivationType.INSTANT, List.of(COST_ONE, COST_TWO), strategy, Set.of(), Map.of()));
+                ActivationType.INSTANT, List.of(COST_ONE, COST_TWO), strategy,
+                AmountResolvers.STATIC, Set.of(), Map.of()));
     }
 
     private ActivationHandler acting() {

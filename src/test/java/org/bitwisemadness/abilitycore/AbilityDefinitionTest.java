@@ -12,6 +12,7 @@ import java.util.Set;
 import net.minecraft.resources.ResourceLocation;
 import org.bitwisemadness.abilitycore.api.AbilityDefinition;
 import org.bitwisemadness.abilitycore.api.ActivationType;
+import org.bitwisemadness.abilitycore.api.AmountResolvers;
 import org.bitwisemadness.abilitycore.api.ConsumptionStrategies;
 import org.bitwisemadness.abilitycore.api.ResourceCost;
 import org.junit.jupiter.api.Test;
@@ -28,7 +29,7 @@ class AbilityDefinitionTest {
                 CATEGORY,
                 ActivationType.CHARGED,
                 List.of(new ResourceCost("tensura:magicule", 25.0)),
-                ConsumptionStrategies.ALL,
+                ConsumptionStrategies.ALL, AmountResolvers.STATIC,
                 Set.of("melee", "sword"),
                 Map.of("style", "sword"));
     }
@@ -49,6 +50,8 @@ class AbilityDefinitionTest {
         assertTrue(decoded.costs().isEmpty(), "absent costs = no declared cost (never null)");
         assertEquals(ConsumptionStrategies.ALL, decoded.consumptionStrategy(),
                 "absent consumption_strategy defaults to all - existing JSON stays valid");
+        assertEquals(AmountResolvers.STATIC, decoded.amountResolver(),
+                "absent amount_resolver defaults to static - existing JSON stays byte-identical");
         assertTrue(decoded.tags().isEmpty());
         assertTrue(decoded.data().isEmpty());
     }
@@ -63,11 +66,32 @@ class AbilityDefinitionTest {
     }
 
     @Test
+    void codecAcceptsAnExplicitAmountResolver() {
+        var encoded = com.google.gson.JsonParser.parseString(
+                "{\"display_name\":\"a.b\",\"category\":\"mod:cat\",\"activation_type\":\"instant\","
+                        + "\"amount_resolver\":\"test:priced\"}");
+        var decoded = AbilityDefinition.CODEC.parse(JsonOps.INSTANCE, encoded).getOrThrow();
+        assertEquals("test:priced", decoded.amountResolver());
+    }
+
+    @Test
+    void unknownAmountResolverFailsLoudlyAtRegistration() {
+        // registration-time gate (issue #103): resolvers declare at
+        // construction, definitions register at RegisterEvent - order-safe
+        var def = new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
+                ConsumptionStrategies.ALL, "definitely_not_registered_resolver", Set.of(), Map.of());
+        var failure = assertThrows(IllegalStateException.class, () -> def.validateOrThrow(ID));
+        assertTrue(failure.getMessage().contains("definitely_not_registered_resolver"),
+                "the failure names the unknown resolver: " + failure.getMessage());
+        sample().validateOrThrow(ID); // the default (static) passes
+    }
+
+    @Test
     void unknownConsumptionStrategyFailsLoudlyAtRegistration() {
         // registration-time gate: strategies declare at construction, definitions
         // register at RegisterEvent - a name nobody declared is a wiring bug
         var def = new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
-                "definitely_not_registered", Set.of(), Map.of());
+                "definitely_not_registered", AmountResolvers.STATIC, Set.of(), Map.of());
         var failure = assertThrows(IllegalStateException.class, () -> def.validateOrThrow(ID));
         assertTrue(failure.getMessage().contains("definitely_not_registered"),
                 "the failure names the unknown strategy: " + failure.getMessage());
@@ -85,7 +109,7 @@ class AbilityDefinitionTest {
                 ActivationType.CHARGED,
                 List.of(new ResourceCost("tensura:magicule", 25.0),
                         new ResourceCost("tensura:aura", 5.0)),
-                ConsumptionStrategies.ALL,
+                ConsumptionStrategies.ALL, AmountResolvers.STATIC,
                 Set.of("melee"),
                 Map.of());
         var encoded = AbilityDefinition.CODEC.encodeStart(JsonOps.INSTANCE, multi).getOrThrow();
@@ -134,22 +158,22 @@ class AbilityDefinitionTest {
         // compact-constructor guards fire before any value can enter the registry
         assertThrows(IllegalArgumentException.class,
                 () -> new AbilityDefinition("  ", null, CATEGORY, ActivationType.INSTANT, List.of(),
-                        ConsumptionStrategies.ALL, Set.of(), Map.of()));
+                        ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of()));
         assertThrows(NullPointerException.class,
                 () -> new AbilityDefinition("a.b", null, null, ActivationType.INSTANT, List.of(),
-                        ConsumptionStrategies.ALL, Set.of(), Map.of()));
+                        ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of()));
         assertThrows(NullPointerException.class,
                 () -> new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, null,
-                        ConsumptionStrategies.ALL, Set.of(), Map.of()));
+                        ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of()));
         assertThrows(IllegalArgumentException.class,
                 () -> new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
-                        ConsumptionStrategies.ALL, Set.of(" "), Map.of()));
+                        ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(" "), Map.of()));
         assertThrows(NullPointerException.class,
                 () -> new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
-                        null, Set.of(), Map.of()));
+                        null, AmountResolvers.STATIC, Set.of(), Map.of()));
         assertThrows(IllegalArgumentException.class,
                 () -> new AbilityDefinition("a.b", null, CATEGORY, ActivationType.INSTANT, List.of(),
-                        " ", Set.of(), Map.of()));
+                        " ", AmountResolvers.STATIC, Set.of(), Map.of()));
         assertThrows(IllegalArgumentException.class, () -> new ResourceCost("tensura:aura", -1.0));
         assertThrows(IllegalArgumentException.class, () -> new ResourceCost("", 1.0));
         assertThrows(IllegalArgumentException.class, () -> new ResourceCost("tensura:aura", Double.NaN));
@@ -160,7 +184,7 @@ class AbilityDefinitionTest {
         // validateOrThrow is the registry onAdd gate; valid constructions pass it
         sample().validateOrThrow(ID);
         new AbilityDefinition("a.b", null, CATEGORY, ActivationType.UNKNOWN, List.of(),
-                ConsumptionStrategies.ALL, Set.of(), Map.of())
+                ConsumptionStrategies.ALL, AmountResolvers.STATIC, Set.of(), Map.of())
                 .validateOrThrow(ID); // UNKNOWN is permitted in data (refused at activation, not at registration)
     }
 

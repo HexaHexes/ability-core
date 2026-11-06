@@ -8,7 +8,7 @@ for the four consumer repositories.
 
 | Package | Stability | Purpose |
 |---|---|---|
-| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies` |
+| `org.bitwisemadness.abilitycore.api` | **Stable** — public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies`, pricing: `AmountResolvers` |
 | `org.bitwisemadness.abilitycore.registry` | **Stable** — public API | `AbilityRegistries` (registry key + `registry()` + `isReady()`) |
 | `org.bitwisemadness.abilitycore.discovery` | **Stable** — public API | `AbilityDiscovery` (presence, enumeration, filtering) |
 | `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler`, `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
@@ -345,6 +345,55 @@ strategies never charge — charging stays at core's single EXTERNAL site.
 **Overlay**: `consumption_strategy` mirrors the definition shape — present
 replaces wholesale, absent keeps the base; an overlay naming a strategy
 nobody declared refuses fail-closed at runtime (`REFUSED_UNAVAILABLE`).
+
+## Amount resolvers (REQ-CORE-04 part 4, issue #103)
+
+An ability's `amount_resolver` field names the function that prices its
+declared `costs` **for one activation** — the declared amounts are the nominal
+estimate; a resolver re-prices them when the request exists (the planning
+consumer: pseudocore#174 prices capture costs off the aimed mob's EP,
+payment enchantments and `core_efficiency`).
+
+```java
+@FunctionalInterface
+public interface AmountResolver {
+    List<ResourceCost> resolve(List<ResourceCost> declared, ActivationRequest request,
+            @Nullable ServerPlayer player, @Nullable Object resolvedTarget);
+}
+```
+
+The return is the declared list priced for this request: **same resource ids,
+same order, per-request amounts**. `resolvedTarget` is the server-stashed
+`TargetValidationStep.RESOLVED_ENTITY` value for `EntityHint` targets
+(resolved at ELIGIBILITY, before RESOURCE) and null otherwise — opaque by
+doctrine: the resolver owns the cast, exactly as handlers and providers do.
+
+**Order and trust:**
+
+- Registered via `AmountResolvers.declare(name, fn)` at mod construction
+  (same timing contract as providers/consumers/strategies; loud duplicate
+  rejection). The built-in **`static`** (default, core-owned name) is the
+  identity — absent field, byte-identical JSON.
+- The pipeline resolves **after the empty-costs gate and before
+  `strategy.select`**: built-in consults (`random`, `in_order`) and custom
+  selectors all observe the **priced** amounts; snapshots, provider checks and
+  consumer charges carry them through unchanged (the charge receives the
+  resolver's amount, never the declared one).
+- Resolvers are construction-time code (the same trust as handlers and
+  strategies); datapacks may only *name* an already-declared resolver. There
+  is **no clamping** to declared amounts; re-pricing `ability_core:free` is
+  inert (its contract ignores the requested amount) — documented, not
+  enforced. Pricing is server-side only: requests carry no amounts (no wire
+  change).
+
+**Failure table** (each logs an error and refuses `REFUSED_UNAVAILABLE` with
+nothing charged):
+
+| Violation | Outcome |
+|---|---|
+| unknown / vanished resolver name | `REFUSED_UNAVAILABLE` + error log |
+| resolver returns `null`, wrong size, reordered/changed ids, or a non-finite / negative amount | `REFUSED_UNAVAILABLE` + error log |
+| resolver throws | caught at the resolution point → `REFUSED_UNAVAILABLE` + error log (never propagates out of the step) |
 
 ## Leak gates (mechanism)
 

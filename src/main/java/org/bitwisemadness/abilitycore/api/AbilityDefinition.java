@@ -51,6 +51,10 @@ import org.jetbrains.annotations.Nullable;
  *                       {@code random}, {@code in_order} or an addon's
  *                       declared strategy); resolved at registration - an
  *                       unknown name fails loudly
+ * @param amountResolver  name of the registered function pricing the costs
+ *                       for one activation (issue #103; {@code static} or an
+ *                       addon's declared resolver); resolved at registration
+ *                       - an unknown name fails loudly
  * @param tags           open flat tag vocabulary for filtering (e.g.
  *                       {@code "unarmed"}, {@code "passive"}, {@code "melee"});
  *                       delivered with issue #14's enumeration API as the
@@ -66,6 +70,7 @@ public record AbilityDefinition(
         ActivationType activationType,
         List<ResourceCost> costs,
         String consumptionStrategy,
+        String amountResolver,
         Set<String> tags,
         Map<String, String> data) {
 
@@ -83,6 +88,8 @@ public record AbilityDefinition(
                     .forGetter(AbilityDefinition::costs),
             Codec.STRING.optionalFieldOf("consumption_strategy", ConsumptionStrategies.ALL)
                     .forGetter(AbilityDefinition::consumptionStrategy),
+            Codec.STRING.optionalFieldOf("amount_resolver", AmountResolvers.STATIC)
+                    .forGetter(AbilityDefinition::amountResolver),
             TAG_SET_CODEC.optionalFieldOf("tags", Set.of())
                     .forGetter(AbilityDefinition::tags),
             Codec.unboundedMap(Codec.STRING, Codec.STRING).optionalFieldOf("data", Map.of())
@@ -118,11 +125,12 @@ public record AbilityDefinition(
             ActivationType activationType,
             List<ResourceCost> costs,
             String consumptionStrategy,
+            String amountResolver,
             Set<String> tags,
             Map<String, String> data) {
         return new AbilityDefinition(
                 displayNameKey, iconId.orElse(null), category, activationType, costs,
-                consumptionStrategy, tags, data);
+                consumptionStrategy, amountResolver, tags, data);
     }
 
     public AbilityDefinition {
@@ -130,6 +138,7 @@ public record AbilityDefinition(
         Objects.requireNonNull(category, "category");
         Objects.requireNonNull(activationType, "activationType");
         Objects.requireNonNull(consumptionStrategy, "consumptionStrategy");
+        Objects.requireNonNull(amountResolver, "amountResolver");
         // defensive copies: definitions are immutable value objects shared across threads
         costs = List.copyOf(Objects.requireNonNull(costs, "costs"));
         tags = Set.copyOf(Objects.requireNonNull(tags, "tags"));
@@ -139,6 +148,9 @@ public record AbilityDefinition(
         }
         if (consumptionStrategy.isBlank()) {
             throw new IllegalArgumentException("consumption strategy must not be blank");
+        }
+        if (amountResolver.isBlank()) {
+            throw new IllegalArgumentException("amount resolver must not be blank");
         }
         for (String tag : tags) {
             if (tag == null || tag.isBlank()) {
@@ -183,6 +195,11 @@ public record AbilityDefinition(
             // register at RegisterEvent - an unknown name here is a wiring bug
             throw new IllegalStateException("Invalid ability definition " + id
                     + ": unknown consumption strategy '" + consumptionStrategy + "'");
+        }
+        if (!AmountResolvers.has(amountResolver)) {
+            // same timing contract as the strategy check (issue #103)
+            throw new IllegalStateException("Invalid ability definition " + id
+                    + ": unknown amount resolver '" + amountResolver + "'");
         }
         for (String tag : tags) {
             if (tag == null || tag.isBlank()) {
