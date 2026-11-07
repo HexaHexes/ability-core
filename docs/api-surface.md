@@ -8,7 +8,7 @@ for the four consumer repositories.
 
 | Package | Stability | Purpose |
 |---|---|---|
-| `org.bitwisemadness.abilitycore.api` | **Stable** - public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `ActivationRequests` (slot gate), `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, `RefundableConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownHandler`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies`, pricing: `AmountResolvers`, modes contract: `AbilityModes`, `ModeOwners`, `ModeContract`, `ModeChangeRequest`, `ModeChangeHandler`, `ModeChangeHandlers`, unlock contract: `AbilityUnlocks`, `AbilityUnlocks.UnlockProvider`, presentation contract: `PresentationProviders`, `PresentationProvider`, `AbilityPresentation`, `PresentationField`, `Toggle` |
+| `org.bitwisemadness.abilitycore.api` | **Stable** - public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `ActivationRequests` (slot gate), `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, `RefundableConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownHandler`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies`, pricing: `AmountResolvers`, modes contract: `AbilityModes`, `ModeOwners`, `ModeContract`, `ModeChangeRequest`, `ModeChangeHandler`, `ModeChangeHandlers`, unlock contract: `AbilityUnlocks`, `AbilityUnlocks.UnlockProvider`, presentation contract: `PresentationProviders`, `PresentationProvider`, `AbilityPresentation`, `PresentationField`, `Toggle`, menu visibility: `VisibilityHandlers`, `VisibilityHandlers.VisibilityHandler` |
 | `org.bitwisemadness.abilitycore.registry` | **Stable** — public API | `AbilityRegistries` (registry key + `registry()` + `isReady()`) |
 | `org.bitwisemadness.abilitycore.discovery` | **Stable** — public API | `AbilityDiscovery` (presence, enumeration, filtering) |
 | `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler`, `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
@@ -20,7 +20,7 @@ for the four consumer repositories.
 
 ## Extension points
 
-Consumers extend core through exactly thirteen mechanisms:
+Consumers extend core through exactly fourteen mechanisms:
 
 1. **Registry registration** — providers register `AbilityDefinition` entries
    on their own mod bus via `RegisterEvent` for `AbilityRegistries.ABILITY_REGISTRY_KEY`.
@@ -72,6 +72,9 @@ Consumers extend core through exactly thirteen mechanisms:
     the menu via `PresentationProviders.declare(id, provider)`: ordered live
     fields (`PresentationField`) plus an optional `Toggle` state (see the
     presentation contract below).
+14. **Menu visibility** — providers declare a listing rule per ability via
+    `VisibilityHandlers.declare(id, handler)` (the `ALWAYS`/`NEVER` defaults);
+    undeclared ids stay visible (see the visibility contract below).
 
 ## Overlay data contract (REQ-HOT-08)
 
@@ -574,6 +577,28 @@ acquisition-gate (findings #116, unverified item 1).
 
 **Consumers:** the hotbar menu and assignment validation (ability-hotbar#135) —
 the first reader; providers are the first writer (ability-tensura's gate).
+
+## Menu visibility contract (issue #124)
+
+The menu's listing rule per ability (`VisibilityHandlers`), declared at
+mod construction on **both sides** (ADR-003 same-construction: the client
+menu reads it, so no payload exists):
+
+- **Two defaults ship**: `ALWAYS` and `NEVER` - `NEVER` is for abilities
+  exclusive to a provider-owned bar (iss `cast`, curios `press`).
+- **Undeclared ids stay visible** (never-guess, the #116/#117 reading):
+  hiding would punish providers that have not adopted the contract.
+- **Visibility hides; unlock greys**: a visible ability the player is
+  provably unlearned for wears the unavailable tint (hotbar#135/#137) -
+  two states, two mechanics, never conflated.
+- `visible(player, id)` tolerates a null player (handlers must too); a
+  null id is malformed input and answers "nothing to list"; duplicate
+  declarations fail loudly like every other owner here.
+
+Links: hotbar#153 (the menu filter - rows and chips alike), core#124
+(originating contract); consumers: ability-iss and pseudocore-curios
+declare `NEVER` for their provider-bar-exclusive abilities, and
+ability-tensura declares its own unlocked-gated handler.
 
 ## Leak gates (mechanism)
 
