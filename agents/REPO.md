@@ -13,6 +13,13 @@ Release plan: `docs/release-plan.md` (the release train, per-repo checklists, co
 Compatibility matrix: `docs/compatibility-matrix.md` and risk register: `docs/risk-register.md` (evidence-linked; no claim without a link).
 Sync contract and payload inventory: `docs/sync.md` (channel discipline, version-bump checklist, manual checks).
 
+Wiki: `https://github.com/HexaHexes/ability-core/wiki` - the developer-facing
+contract reference (getting started, one page per contract area, configuration,
+versioning policy), written from the docs and code above. **The wiki is part of
+every feature change**: any PR that changes a documented feature updates the
+matching wiki page(s) in the same PR; this repo's docs stay the source the wiki
+is written from, never the reverse.
+
 Architecture decision records: `docs/adr/` (index in `docs/adr/README.md`; new decisions get an ADR in the same PR that records them).
 
 **Repo:** `HexaHexes/ability-core` - **Mod ID:** `ability_core` - **Branch:** `main`
