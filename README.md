@@ -6,8 +6,7 @@ for, independent of where the ability comes from.
 
 ## What it does
 
-*(Design phase, no release yet. The open issues on this repository hold the
-full plan, research tables and open design decisions.)*
+*(Ships as alpha pre-releases - see [Releases](https://github.com/HexaHexes/ability-core/releases); the [wiki](https://github.com/HexaHexes/ability-core/wiki) documents the API for consumers.)*
 
 - **Ability contracts** - registration, metadata, categories and identifiers
   for abilities supplied by other mods.
