@@ -92,4 +92,22 @@ class ModeChangeHandlersTest {
         assertEquals(2, request.slotContext());
         assertEquals(ABILITY, request.abilityId());
     }
+
+    @Test
+    void theIntentCarriesTheCyclingBarOrNullForActive() {
+        // owner's per-hotbar preset design: the menu's pill names its
+        // tab's bar, the keybind's form names none - null = active bar
+        ModeChangeRequest active = new ModeChangeRequest(ABILITY, 2);
+        assertNull(active.barId(), "the two-arg form targets the active bar");
+
+        ResourceLocation bar = ResourceLocation.fromNamespaceAndPath(
+                "ability_hotbar", "window");
+        ModeChangeRequest named = new ModeChangeRequest(ABILITY, 2, bar);
+        assertEquals(bar, named.barId(), "the cycling bar rides the intent");
+        assertEquals(ABILITY, named.abilityId(), "the ability rides unchanged");
+        assertEquals(2, named.slotContext(), "the slot rides unchanged");
+
+        assertNull(ModeChangeRequest.fromWire("tensura:fireball", 3).barId(),
+                "the wire form stays bar-less (null = active)");
+    }
 }
