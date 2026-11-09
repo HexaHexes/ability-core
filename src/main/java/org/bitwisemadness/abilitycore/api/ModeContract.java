@@ -36,6 +36,34 @@ public final class ModeContract {
      */
     public static Optional<String> currentMode(@Nullable ServerPlayer player,
             ResourceLocation abilityId) {
+        return read(player, abilityId, null);
+    }
+
+    /**
+     * The mode the given <b>slot</b> acts through - the read side of
+     * hotbar#29's per-slot setting (the question the ability-wide read
+     * above deliberately never answers for it). A provider whose live
+     * state is per-slot names that slot's own value; one that is not
+     * falls back to the ability-wide answer through the projection's
+     * default, so today's providers answer exactly as before. Empty
+     * still means "cannot tell" - a caller storing this back into the
+     * slot it cycled gets the slot's real mode or no update, never
+     * another slot's value.
+     *
+     * @param player    the player whose mode to read
+     * @param abilityId the ability to read
+     * @param slot      the slot index whose mode to read (the caller's
+     *                  own vocabulary - a hotbar slot)
+     * @return the provider-reported mode id for that slot; empty = unknown
+     */
+    public static Optional<String> currentMode(@Nullable ServerPlayer player,
+            ResourceLocation abilityId, int slot) {
+        return read(player, abilityId, slot);
+    }
+
+    /** Shared body: {@code null} slot reads the ability-wide question. */
+    private static Optional<String> read(@Nullable ServerPlayer player,
+            ResourceLocation abilityId, @Nullable Integer slot) {
         if (abilityId == null) {
             return Optional.empty();
         }
@@ -43,7 +71,9 @@ public final class ModeContract {
         if (projection == null) {
             return Optional.empty();
         }
-        Optional<String> answer = projection.modeId(player, abilityId);
+        Optional<String> answer = slot == null
+                ? projection.modeId(player, abilityId)
+                : projection.modeId(player, abilityId, slot);
         // a projection that answers null reports "cannot tell" - never a mode
         return answer == null ? Optional.empty() : answer;
     }

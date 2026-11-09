@@ -458,7 +458,13 @@ core#112's findings):
   the state; undeclared or projection-less abilities answer empty
   (unknown, never a guessed mode, REQ-HOT-08). This is deliberately
   distinct from the hotbar slot's stored *setting* - two questions, two
-  owners.
+  owners. A caller that knows **which slot** it is asking about (a mode
+  cycle storing its result back) reads `ModeContract.currentMode(player,
+  id, slot)`: the projection's slot-aware default answers the
+  ability-wide value, and a provider whose live state is itself per-slot
+  (ARR's preset slots, mirrored positionally from the bar) overrides it
+  to name that slot's own mode - so the setting never drifts onto
+  another slot's value.
 - **Activation context**: `ActivationRequest.modeContext()` - advisory, like
   the target hint - travels with the intent, on the wire as
   `ActivateAbilityPayload`'s mode field (channel version 3). Two slots of
