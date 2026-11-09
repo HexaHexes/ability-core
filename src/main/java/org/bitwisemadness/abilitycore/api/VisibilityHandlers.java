@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
+import org.bitwisemadness.abilitycore.config.CoreConfig;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -15,11 +16,13 @@ import org.jetbrains.annotations.Nullable;
  *
  * <p>Two defaults ship: {@link #ALWAYS} (explicit opt-in) and
  * {@link #NEVER} (abilities exclusive to a provider-owned bar).
- * Undeclared ids stay visible - the never-guess reading (the #116/#117
- * unlock rule extended): hiding would punish providers that simply have
- * not adopted the contract. Visibility <em>hides</em>; unlock state
- * <em>greys</em> (hotbar#135/#137) - two states, two mechanics, never
- * conflated.</p>
+ * Undeclared ids follow the server's {@code menu.undeclaredAbilities}
+ * rule, <b>visible</b> by default - the never-guess reading (the
+ * #116/#117 unlock rule extended) kept as the shipped value, with the
+ * hide choice a pack makes explicitly: hiding would otherwise punish
+ * providers that simply have not adopted the contract. Visibility
+ * <em>hides</em>; unlock state <em>greys</em> (hotbar#135/#137) - two
+ * states, two mechanics, never conflated.</p>
  */
 public final class VisibilityHandlers {
 
@@ -72,15 +75,27 @@ public final class VisibilityHandlers {
 
     /**
      * The menu's never-guess read: a declared handler answers, an
-     * undeclared id stays visible (unknown is never a reason to hide), and
-     * a null id is malformed input - nothing to list.
+     * undeclared id follows the server's {@code menu.undeclaredAbilities}
+     * rule (visible by default - unknown is never a reason to hide unless
+     * the pack says so), and a null id is malformed input - nothing to
+     * list.
      */
     public static boolean visible(@Nullable Player player, ResourceLocation abilityId) {
         if (abilityId == null) {
             return false;
         }
         VisibilityHandler handler = HANDLERS.get(abilityId);
-        return handler == null || handler.visible(player, abilityId);
+        return handler != null
+                ? handler.visible(player, abilityId)
+                : visibleWhenUndeclared(CoreConfig.undeclaredAbilities());
+    }
+
+    /**
+     * The undeclared-id half alone (the test seam - the config itself is
+     * not loadable headless): everything except {@code HIDDEN} lists.
+     */
+    static boolean visibleWhenUndeclared(CoreConfig.UndeclaredVisibility rule) {
+        return rule != CoreConfig.UndeclaredVisibility.HIDDEN;
     }
 
     /** Test isolation / future reload paths. */

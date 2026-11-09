@@ -127,7 +127,20 @@ error.
 | File | Key | Type | Default | Reader |
 |------|-----|------|---------|--------|
 | `ability_core-server.toml` | `diagnostics.refusalLog` | `once-per-key` / `every` / `off` | `once-per-key` | `EligibilityChain` (live, per refusal) |
+| `ability_core-server.toml` | `diagnostics.malformedPayloadLog` | `once-per-key` / `every` / `off` | `once-per-key` | `ActivateAbilityPayload` (live, per dropped payload) |
+| `ability_core-server.toml` | `gameplay.healthCostsCanKill` | boolean | `true` | `BuiltinResources.healthCheck` (live, per health check) |
+| `ability_core-server.toml` | `gameplay.disabledResources` | list of ids | `[]` | `ResourceChargeStep` (live, per priced entry) |
+| `ability_core-server.toml` | `gameplay.integralCostRounding` | `ceil` / `floor` / `nearest` | `ceil` | `BuiltinResources` integral helpers (live, per charge/refund) |
+| `ability_core-server.toml` | `gameplay.persistExternalCooldowns` | boolean | `false` | `CooldownOwners.CoreCooldownTracker` (write at start, read at login) |
+| `ability_core-server.toml` | `menu.undeclaredAbilities` | `visible` / `hidden` | `visible` | `VisibilityHandlers.visible` (live, per menu read) |
+| `ability_core-server.toml` | `targeting.maxAreaRadius` | number, 1..4096 | `64` | `TargetValidationStep` (live, per area hint) |
+| `ability_core-server.toml` | `network.activationRatePerSecond` | integer, 0..1000 | `0` (unlimited) | `ActivateAbilityPayload.handle` (live, per payload) |
 | `ability_core-client.toml` | `diagnostics.playerNotices` | boolean | `true` | consumers' client code (core renders nothing; the reference CLIENT shape) |
+
+**Core's layer-1 clamps (code, never config):** a target-hint param string
+over 512 characters is dropped before it is parsed, and every ranged key
+above carries a spec range the platform clamps into - no layer can widen
+either.
 
 ## Adoption checklist
 

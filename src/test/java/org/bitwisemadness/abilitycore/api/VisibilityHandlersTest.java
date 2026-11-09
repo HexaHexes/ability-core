@@ -50,6 +50,12 @@ class VisibilityHandlersTest {
     void undeclaredStaysVisible() {
         assertTrue(VisibilityHandlers.visible(null, OTHER),
                 "an undeclared id must keep listing - unknown never hides");
+        assertTrue(VisibilityHandlers.visibleWhenUndeclared(
+                        org.bitwisemadness.abilitycore.config.CoreConfig.UndeclaredVisibility.VISIBLE),
+                "the shipped rule lists");
+        assertFalse(VisibilityHandlers.visibleWhenUndeclared(
+                        org.bitwisemadness.abilitycore.config.CoreConfig.UndeclaredVisibility.HIDDEN),
+                "a pack may opt into hiding undeclared ids");
     }
 
     @Test

@@ -1,9 +1,13 @@
 package org.bitwisemadness.abilitycore.sync;
 
+import com.mojang.logging.LogUtils;
 import io.netty.buffer.ByteBuf;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -12,6 +16,8 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 import org.bitwisemadness.abilitycore.AbilityCore;
 import org.bitwisemadness.abilitycore.api.ActivationRequest;
 import org.bitwisemadness.abilitycore.api.TargetContext;
+import org.bitwisemadness.abilitycore.config.CoreConfig;
+import org.slf4j.Logger;
 
 /**
  * Serverbound activation request payload (REQ-CORE-02, REQ-CORE-08,
@@ -59,6 +65,31 @@ public record ActivateAbilityPayload(
         String targetKind,
         String targetParams,
         String mode) implements CustomPacketPayload {
+
+    private static final Logger LOGGER = LogUtils.getLogger();
+
+    /**
+     * Layer-1 safety clamp (never config - {@code docs/config.md}): a
+     * target hint longer than this is structurally garbage, since the
+     * vocabulary holds uuids, integers and doubles. Drops fail-closed
+     * before it is parsed.
+     */
+    static final int MAX_TARGET_PARAM_CHARS = 512;
+
+    /** One rate window, in milliseconds. */
+    private static final long WINDOW_MILLIS = 1000L;
+
+    /** Windows kept before stale ones are swept (bounded memory). */
+    private static final int MAX_WINDOWS = 512;
+
+    /** Once-per-key cap: the malformed set clears when it reaches this size. */
+    private static final int MAX_LOGGED_KEYS = 1024;
+
+    /** Per-player activation windows ({@code network.activationRatePerSecond}). */
+    private static final Map<UUID, long[]> RATE_WINDOWS = new ConcurrentHashMap<>();
+
+    /** The bounded once-per-key set for malformed-payload logging. */
+    private static final Set<String> LOGGED_MALFORMED = ConcurrentHashMap.newKeySet();
 
     public static final Type<ActivateAbilityPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(AbilityCore.MOD_ID, "activate_ability"));
@@ -139,11 +170,17 @@ public record ActivateAbilityPayload(
      * The hint's flat params: {@code key=value} pairs joined with commas.
      * Structural malformation (a pair without {@code =}) yields null so the
      * request is dropped; value parsing is {@link TargetContext}'s
-     * fail-closed job.
+     * fail-closed job. The length is a <b>layer-1 code clamp</b> (never
+     * config - {@code docs/config.md}): the vocabulary's values are uuids,
+     * integers and doubles, so anything past {@value #MAX_TARGET_PARAM_CHARS}
+     * characters is structurally garbage and drops before it is parsed.
      */
     private static Map<String, String> parseParams(String flat) {
         if (flat == null || flat.isBlank()) {
             return Map.of();
+        }
+        if (flat.length() > MAX_TARGET_PARAM_CHARS) {
+            return null;
         }
         Map<String, String> out = new LinkedHashMap<>();
         for (String pair : flat.split(",")) {
@@ -161,17 +198,77 @@ public record ActivateAbilityPayload(
      * pipeline. Malformed input (unknown id syntax, unknown source, a bad
      * target hint) is fail-closed - the payload is silently dropped (no
      * activation, no state change, no error sent to the client for garbage
-     * input).
+     * input) and logged under {@code diagnostics.malformedPayloadLog}. The
+     * server's per-player ceiling ({@code network.activationRatePerSecond})
+     * drops over-budget payloads before anything is parsed.
      */
     public static void handle(ActivateAbilityPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer serverPlayer) {
+                if (!allowActivation(serverPlayer)) {
+                    return; // over the ceiling: dropped, nothing parsed
+                }
                 var request = toRequest(payload);
                 if (request != null) {
                     AbilityCore.PIPELINE.run(request, serverPlayer);
+                    return;
                 }
-                // null request = malformed input: dropped, no activation, no error sent
+                // null request = malformed input: dropped, no activation,
+                // no error sent - and a line under the server's log mode
+                logMalformed(payload);
             }
         });
+    }
+
+    /**
+     * The per-player activation ceiling (network.activationRatePerSecond):
+     * a fixed one-second window per player; 0 (the default) is unlimited
+     * and never touches the map. Rejected attempts still count, so spam
+     * cannot buy its way past the window, and stale windows are swept
+     * once the map grows past its bound (departed players never pile up).
+     */
+    private static boolean allowActivation(ServerPlayer player) {
+        int perSecond = CoreConfig.activationRatePerSecond();
+        if (perSecond <= 0) {
+            return true;
+        }
+        long now = System.currentTimeMillis();
+        long[] window = RATE_WINDOWS.compute(player.getUUID(),
+                (id, current) -> current == null || now - current[0] >= WINDOW_MILLIS
+                        ? new long[] {now, 1L}
+                        : new long[] {current[0], current[1] + 1L});
+        if (RATE_WINDOWS.size() > MAX_WINDOWS) {
+            RATE_WINDOWS.entrySet()
+                    .removeIf(entry -> now - entry.getValue()[0] >= WINDOW_MILLIS);
+        }
+        return window[1] <= perSecond;
+    }
+
+    /**
+     * The malformed-payload line under {@code diagnostics.malformedPayloadLog}
+     * (the refusal mode's shape): {@code off} silences, {@code every} logs
+     * each drop, the default {@code once-per-key} suppresses repeats per
+     * payload signature until the bounded set clears. The payload itself is
+     * never echoed in full - it is, by definition, garbage.
+     */
+    private static void logMalformed(ActivateAbilityPayload payload) {
+        CoreConfig.RefusalLogMode mode = CoreConfig.malformedPayloadLog();
+        if (mode == CoreConfig.RefusalLogMode.OFF) {
+            return;
+        }
+        String key = payload.abilityId() + "|" + payload.source() + "|" + payload.targetKind();
+        if (mode == CoreConfig.RefusalLogMode.EVERY || addMalformedKey(key)) {
+            LOGGER.debug("Dropping malformed activation payload (id '{}', source '{}',"
+                            + " target kind '{}') - no request built",
+                    payload.abilityId(), payload.source(), payload.targetKind());
+        }
+    }
+
+    /** Bounded once-per-key set: clears wholesale when full, then records. */
+    private static boolean addMalformedKey(String key) {
+        if (LOGGED_MALFORMED.size() >= MAX_LOGGED_KEYS) {
+            LOGGED_MALFORMED.clear();
+        }
+        return LOGGED_MALFORMED.add(key);
     }
 }

@@ -18,6 +18,7 @@ import org.bitwisemadness.abilitycore.api.ResourceConsumers;
 import org.bitwisemadness.abilitycore.api.ResourceCost;
 import org.bitwisemadness.abilitycore.api.ResourceProvider;
 import org.bitwisemadness.abilitycore.api.ResourceProviders;
+import org.bitwisemadness.abilitycore.config.CoreConfig;
 import org.bitwisemadness.abilitycore.registry.AbilityRegistries;
 import org.slf4j.Logger;
 
@@ -162,11 +163,14 @@ public final class ResourceChargeStep implements ActivationPipeline.Step {
                 return Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_UNAFFORDABLE));
             }
             ResourceProvider provider = ResourceProviders.get(cost.resourceId()).orElse(null);
-            if (provider == null) {
-                // the read half owns validation: no provider, no reliable verdict
-                LOGGER.debug("Refusing {}: declared resource '{}' has no provider"
+            if (provider == null || CoreConfig.resourceDisabled(cost.resourceId())) {
+                // the read half owns validation: no provider, no reliable
+                // verdict - and a pack-banned currency answers exactly like
+                // an absent one (fail closed, same message key)
+                LOGGER.debug("Refusing {}: declared resource '{}' has {}"
                                 + " - payment cannot be validated",
-                        request.abilityId(), cost.resourceId());
+                        request.abilityId(), cost.resourceId(),
+                        provider == null ? "no provider" : "been disabled by config");
                 return Optional.of(ActivationResult.refused(
                         ActivationOutcome.REFUSED_UNAFFORDABLE, "ability.refused.unaffordable.no_provider"));
             }
@@ -208,7 +212,9 @@ public final class ResourceChargeStep implements ActivationPipeline.Step {
     private static Affordability affordabilityFor(ActivationRequest request, ServerPlayer player,
             ResourceCost entry) {
         ResourceProvider provider = ResourceProviders.get(entry.resourceId()).orElse(null);
-        if (provider == null) {
+        if (provider == null || CoreConfig.resourceDisabled(entry.resourceId())) {
+            // a banned currency reads as no provider here too: the menu's
+            // consult and the charge loop can never disagree
             return Affordability.unknown(entry.resourceId());
         }
         Affordability verdict = provider.check(request.abilityId(), player, entry.amount());
