@@ -1,12 +1,16 @@
 package org.bitwisemadness.abilitycore.api;
 
+import com.mojang.logging.LogUtils;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import org.bitwisemadness.abilitycore.config.CoreConfig;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
 
 /**
  * Per-ability cooldown ownership (REQ-CORE-05, ADR-002-style exclusivity).
@@ -81,6 +85,8 @@ public final class CooldownOwners {
 
     private static final Map<ResourceLocation, Entry> ENTRIES = new ConcurrentHashMap<>();
 
+    private static final Logger LOGGER = LogUtils.getLogger();
+
     private CooldownOwners() {
     }
 
@@ -102,7 +108,7 @@ public final class CooldownOwners {
         declare(abilityId, new Entry(Owner.NATIVE, 0L, null, projection, null));
     }
 
-    /** Core-tracked cooldown with the built-in non-persistent store. */
+    /** Core-tracked cooldown with the built-in store (persistence optional). */
     public static void declareExternal(ResourceLocation abilityId, long durationTicks) {
         declare(abilityId, new Entry(Owner.EXTERNAL, durationTicks, CoreCooldownTracker.INSTANCE, null, null));
     }
@@ -189,11 +195,19 @@ public final class CooldownOwners {
 
     /**
      * Built-in, in-memory EXTERNAL cooldown store: player UUID -> ability id
-     * -> expiry game-time tick. Not persisted (documented decision above).
+     * -> expiry game-time tick. Persisted only when the server turns on
+     * {@code gameplay.persistExternalCooldowns} (default off keeps the
+     * original in-memory-only decision): the expiry is written beside the
+     * player the moment a cooldown starts and read back at login, so a
+     * rejoin or restart cannot reset one. Game time is absolute, so a saved
+     * expiry reads correctly after a restart.
      */
     public static final class CoreCooldownTracker implements CooldownTracker {
 
         public static final CoreCooldownTracker INSTANCE = new CoreCooldownTracker();
+
+        /** The player-NBT key holding persisted EXTERNAL cooldowns. */
+        static final String PERSIST_TAG = "ability_core:cooldowns";
 
         private final Map<UUID, Map<ResourceLocation, Long>> expiryByPlayer = new ConcurrentHashMap<>();
 
@@ -220,9 +234,62 @@ public final class CooldownOwners {
 
         @Override
         public void start(ResourceLocation abilityId, ServerPlayer player, long durationTicks) {
+            long expiry = player.level().getGameTime() + durationTicks;
             expiryByPlayer
                     .computeIfAbsent(player.getUUID(), k -> new ConcurrentHashMap<>())
-                    .put(abilityId, player.level().getGameTime() + durationTicks);
+                    .put(abilityId, expiry);
+            if (CoreConfig.persistExternalCooldowns()) {
+                persist(player, abilityId, expiry);
+            }
+        }
+
+        /**
+         * Loads this player's persisted cooldowns at login (config-gated,
+         * never throws): only entries still in the future survive, and the
+         * later of a saved and an already-known expiry wins - a restart
+         * can only ever lengthen what memory already holds, never shorten
+         * it. An unreadable tag costs the entries, never the join.
+         */
+        public void restore(ServerPlayer player) {
+            if (!CoreConfig.persistExternalCooldowns()) {
+                return;
+            }
+            try {
+                CompoundTag saved = player.getPersistentData().getCompound(PERSIST_TAG);
+                if (saved.isEmpty()) {
+                    return;
+                }
+                long now = player.level().getGameTime();
+                Map<ResourceLocation, Long> known = expiryByPlayer
+                        .computeIfAbsent(player.getUUID(), k -> new ConcurrentHashMap<>());
+                for (String key : saved.getAllKeys()) {
+                    ResourceLocation id = ResourceLocation.tryParse(key);
+                    if (id == null) {
+                        continue;
+                    }
+                    long expiry = saved.getLong(key);
+                    if (expiry > now) {
+                        known.merge(id, expiry, Math::max);
+                    }
+                }
+            } catch (RuntimeException unreadable) {
+                LOGGER.debug("Could not restore persisted cooldowns for {} ({})",
+                        player.getName().getString(), unreadable.toString());
+            }
+        }
+
+        /** Writes one cooldown beside the player (persist-on-start). */
+        private void persist(ServerPlayer player, ResourceLocation abilityId, long expiry) {
+            try {
+                CompoundTag root = player.getPersistentData();
+                CompoundTag saved = root.getCompound(PERSIST_TAG);
+                saved.putLong(abilityId.toString(), expiry);
+                root.put(PERSIST_TAG, saved);
+            } catch (RuntimeException unwritable) {
+                // diagnostics only: a failed write costs persistence, never a cast
+                LOGGER.debug("Could not persist cooldown {} for {} ({})", abilityId,
+                        player.getName().getString(), unwritable.toString());
+            }
         }
 
         /** Test isolation. */

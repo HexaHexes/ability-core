@@ -6,6 +6,7 @@ import org.bitwisemadness.abilitycore.api.Affordability;
 import org.bitwisemadness.abilitycore.api.RefundableConsumer;
 import org.bitwisemadness.abilitycore.api.ResourceConsumers;
 import org.bitwisemadness.abilitycore.api.ResourceProviders;
+import org.bitwisemadness.abilitycore.config.CoreConfig;
 import org.slf4j.Logger;
 
 /**
@@ -48,7 +49,7 @@ public final class BuiltinResources {
      */
     public static void registerAll() {
         ResourceProviders.declare(HEALTH, (abilityId, player, amount) ->
-                poolCheck(HEALTH, player.getHealth(), amount));
+                healthCheck(player.getHealth(), amount, CoreConfig.healthCostsCanKill()));
         ResourceConsumers.declare(HEALTH, new RefundableConsumer() {
             @Override
             public void charge(net.minecraft.resources.ResourceLocation abilityId,
@@ -148,34 +149,77 @@ public final class BuiltinResources {
     }
 
     /**
+     * The health verdict (REQ-CORE-04): the pool rule, plus the
+     * server's lethality policy ({@code gameplay.healthCostsCanKill}) -
+     * with killing off, a payment that would reduce the caster to 0 is
+     * <b>refused</b> rather than floored, so nothing is charged partially
+     * and a refund stays the exact inverse of its charge. Pure: the
+     * policy arrives as a parameter, callers read it live.
+     */
+    static Affordability healthCheck(float balance, double amount, boolean canKill) {
+        Affordability verdict = poolCheck(HEALTH, balance, amount);
+        if (!verdict.isSufficient()) {
+            return verdict;
+        }
+        if (!canKill && balance - amount <= 0f) {
+            return Affordability.insufficient(HEALTH, amount);
+        }
+        return verdict;
+    }
+
+    /**
+     * The whole units a fractional cost takes from an integral pool under
+     * the live rounding policy ({@code gameplay.integralCostRounding}):
+     * {@code ceil} (default) never under-charges what the check approved,
+     * {@code floor} never over-charges, {@code nearest} rounds to the
+     * closest unit. The mode-carrying form is the test seam; every
+     * integral helper reads the policy live so charge and refund round
+     * alike (a policy change between them shifts a refund by a unit at
+     * most - documented, operator-owned).
+     */
+    static long roundedCost(double amount, CoreConfig.RoundingMode mode) {
+        return switch (mode) {
+            case CEIL -> (long) Math.ceil(amount);
+            case FLOOR -> (long) Math.floor(amount);
+            case NEAREST -> Math.round(amount);
+        };
+    }
+
+    /** The live-policy form of {@link #roundedCost(double, CoreConfig.RoundingMode)}. */
+    private static long roundedCost(double amount) {
+        return roundedCost(amount, CoreConfig.integralCostRounding());
+    }
+
+    /**
      * The post-deduction <b>level</b> for integral pools (food's
-     * {@code setFoodLevel}): the amount rounds <b>up</b> so a fractional cost
-     * never under-charges what the check approved, clamped at zero so a pool
-     * never goes negative. For a <i>taken-amount</i> delta - what a
+     * {@code setFoodLevel}): the amount rounds under the live policy
+     * ({@link #roundedCost}) so a fractional cost never under-charges
+     * what the check approved, clamped at zero so a pool never goes
+     * negative. For a <i>taken-amount</i> delta - what a
      * {@code giveExperience*} call needs - use {@link #deductedIntegral}.
      */
     static int deductIntegral(double balance, double amount) {
-        return Math.max(0, (int) balance - (int) Math.ceil(amount));
+        return Math.max(0, (int) balance - (int) roundedCost(amount));
     }
 
     /**
      * The amount <b>actually taken</b> from an integral pool (XP's
-     * {@code giveExperience*}): {@code ceil(amount)} clamped to the balance.
-     * {@code balance - deductedIntegral(...) == deductIntegral(...)} holds
-     * for any non-negative balance - the two helpers are the subtraction
-     * split into its two halves (issue #108).
+     * {@code giveExperience*}): {@link #roundedCost} clamped to the
+     * balance. {@code balance - deductedIntegral(...) == deductIntegral(...)}
+     * holds for any non-negative balance - the two helpers are the
+     * subtraction split into its two halves (issue #108).
      */
     static int deductedIntegral(double balance, double amount) {
-        return (int) Math.max(0L, Math.min((long) balance, (long) Math.ceil(amount)));
+        return (int) Math.max(0L, Math.min((long) balance, roundedCost(amount)));
     }
 
     /**
-     * The refund target for an integral pool (food, XP): {@code ceil(amount)}
-     * added back - the mirror of {@link #deductedIntegral}'s rounding - capped
-     * at {@code max} (food's 20; the XP pools pass {@code Integer.MAX_VALUE}).
+     * The refund target for an integral pool (food, XP): the same
+     * {@link #roundedCost} mirror of the charge, capped at {@code max}
+     * (food's 20; the XP pools pass {@code Integer.MAX_VALUE}).
      */
     static int refundIntegral(double balance, double amount, int max) {
-        return (int) Math.min(max, balance + Math.ceil(amount));
+        return (int) Math.min(max, balance + roundedCost(amount));
     }
 
     /**

@@ -88,6 +88,20 @@ class SyncContractTest {
     }
 
     @Test
+    void oversizedTargetParamsDropBeforeParsing() {
+        // layer-1 code clamp (docs/config.md): past the ceiling the hint is
+        // structurally garbage - the vocabulary holds uuids and numbers -
+        // so the request drops instead of being buffered and parsed
+        String oversized = "entity=" + "0".repeat(ActivateAbilityPayload.MAX_TARGET_PARAM_CHARS);
+        assertNull(ActivateAbilityPayload.toRequest(new ActivateAbilityPayload(
+                "tensura:fireball", "direct_slot", 3, 12345L, "entity", oversized)));
+        var uuid = java.util.UUID.fromString("069c2a2d-6f5a-4a4b-8f42-5f4e5a5b6c7d");
+        var underCeiling = ActivateAbilityPayload.toRequest(new ActivateAbilityPayload(
+                "tensura:fireball", "direct_slot", 3, 12345L, "entity", "entity=" + uuid));
+        assertNotNull(underCeiling); // a real hint sits far under the ceiling
+    }
+
+    @Test
     void declaredButUnparseableTargetDropsTheRequest() {
         // unknown kind: declared, but not in the vocabulary
         assertNull(ActivateAbilityPayload.toRequest(new ActivateAbilityPayload(

@@ -8,6 +8,7 @@ import org.bitwisemadness.abilitycore.api.ActivationOutcome;
 import org.bitwisemadness.abilitycore.api.ActivationRequest;
 import org.bitwisemadness.abilitycore.api.ActivationResult;
 import org.bitwisemadness.abilitycore.api.TargetContext;
+import org.bitwisemadness.abilitycore.config.CoreConfig;
 import org.bitwisemadness.abilitycore.registry.AbilityRegistries;
 import org.slf4j.Logger;
 
@@ -98,6 +99,15 @@ public final class TargetValidationStep implements ActivationPipeline.Step {
             return loaded(hint.pos(), player, request);
         }
         if (target instanceof TargetContext.AreaHint hint) {
+            // the server's area ceiling (targeting.maxAreaRadius): a client
+            // may propose any positive radius, but the server decides how
+            // large it will honour - the spec's range is the hard clamp
+            if (hint.radius() > CoreConfig.maxAreaRadius()) {
+                LOGGER.debug("Refusing {}: area radius {} exceeds the server ceiling {}",
+                        request.abilityId(), hint.radius(), CoreConfig.maxAreaRadius());
+                return Optional.of(ActivationResult.refused(
+                        ActivationOutcome.REFUSED_INVALID_TARGET));
+            }
             // center must be loaded; radius sanity is enforced by AreaHint's ctor
             return loaded(hint.center(), player, request);
         }

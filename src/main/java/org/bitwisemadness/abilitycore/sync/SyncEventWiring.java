@@ -5,6 +5,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import org.bitwisemadness.abilitycore.api.CooldownOwners;
 import org.slf4j.Logger;
 
 /**
@@ -29,6 +30,8 @@ public final class SyncEventWiring {
     @SubscribeEvent
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
+            // restore first: the sync consumers below read cooldown state
+            CooldownOwners.CoreCooldownTracker.INSTANCE.restore(player);
             LOGGER.debug("Firing AbilitySyncNeededEvent (LOGIN) for {}", player.getName().getString());
             AbilitySyncNeededEvent.fire(player, AbilitySyncNeededEvent.Reason.LOGIN);
         }

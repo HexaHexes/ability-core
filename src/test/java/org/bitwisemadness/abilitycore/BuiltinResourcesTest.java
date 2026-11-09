@@ -3,8 +3,10 @@ package org.bitwisemadness.abilitycore;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.bitwisemadness.abilitycore.api.Affordability;
 import org.bitwisemadness.abilitycore.api.ResourceConsumers;
 import org.bitwisemadness.abilitycore.api.ResourceProviders;
+import org.bitwisemadness.abilitycore.config.CoreConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -40,6 +42,38 @@ class BuiltinResourcesTest {
         }
         assertTrue(ResourceProviders.has("ability_core:experience_levels"),
                 "ids are the reserved ability_core namespace");
+    }
+
+    @Test
+    void healthCostRefusesToKillWhenLethalityIsOff() {
+        assertEquals(Affordability.State.INSUFFICIENT,
+                BuiltinResources.healthCheck(5f, 10f, false).state(),
+                "not enough health is refused either way");
+        assertEquals(Affordability.State.SUFFICIENT,
+                BuiltinResources.healthCheck(10f, 10f, true).state(),
+                "killing on: an exact payment is affordable (the shipped default)");
+        assertEquals(Affordability.State.INSUFFICIENT,
+                BuiltinResources.healthCheck(10f, 10f, false).state(),
+                "killing off: an exact payment would reach 0 - refused, never charged");
+        assertEquals(Affordability.State.INSUFFICIENT,
+                BuiltinResources.healthCheck(5f, 5.5f, false).state(),
+                "so is one that would pass through 0");
+        assertEquals(Affordability.State.SUFFICIENT,
+                BuiltinResources.healthCheck(5f, 4.9f, false).state(),
+                "a payment that leaves the caster alive still goes");
+    }
+
+    @Test
+    void integralRoundingModesRoundTheWayTheyPromise() {
+        assertEquals(3L, BuiltinResources.roundedCost(2.1, CoreConfig.RoundingMode.CEIL),
+                "ceil never under-charges (the default)");
+        assertEquals(3L, BuiltinResources.roundedCost(2.9, CoreConfig.RoundingMode.CEIL));
+        assertEquals(2L, BuiltinResources.roundedCost(2.1, CoreConfig.RoundingMode.FLOOR),
+                "floor never over-charges");
+        assertEquals(2L, BuiltinResources.roundedCost(2.9, CoreConfig.RoundingMode.FLOOR));
+        assertEquals(2L, BuiltinResources.roundedCost(2.4, CoreConfig.RoundingMode.NEAREST),
+                "nearest rounds to the closest unit");
+        assertEquals(3L, BuiltinResources.roundedCost(2.6, CoreConfig.RoundingMode.NEAREST));
     }
 
     @Test
