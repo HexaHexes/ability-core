@@ -32,6 +32,29 @@ public final class ModeOwners {
     @FunctionalInterface
     public interface NativeProjection {
         Optional<String> modeId(ServerPlayer player, ResourceLocation abilityId);
+
+        /**
+         * The <b>slot-scoped</b> read (the read side of hotbar#29's
+         * per-slot setting): which mode the given slot acts through. The
+         * default answers exactly the ability-wide read - a provider
+         * whose live state is one value per ability needs no override -
+         * while a provider whose state is <em>per-slot</em> (ARR's preset
+         * slots, mirrored positionally from the bar) overrides it to name
+         * that slot's own value. Empty stays "cannot tell", never a
+         * guess: a mode cycle stores this answer back into the slot it
+         * cycled, so an unmapped slot must not drift onto another slot's
+         * value.
+         *
+         * @param player    the player whose mode to read
+         * @param abilityId the ability to read
+         * @param slot      the caller's slot index - how (or whether) to
+         *                  map it onto provider state is the provider's
+         *                  own rule
+         */
+        default Optional<String> modeId(ServerPlayer player, ResourceLocation abilityId,
+                int slot) {
+            return modeId(player, abilityId);
+        }
     }
 
     /** Empty = declared without a projection; missing key = undeclared. */

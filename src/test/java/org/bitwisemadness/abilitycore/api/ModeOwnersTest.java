@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Optional;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -70,6 +71,63 @@ class ModeOwnersTest {
         ModeOwners.declareNative(ABILITY, CANNOT_TELL);
         assertTrue(ModeContract.currentMode(null, ABILITY).isEmpty(),
                 "a null answer from the projection reports unknown - never a mode");
+    }
+
+    @Test
+    void theSlotReadFallsBackToTheAbilityWideAnswerByDefault() {
+        // a provider with one live value per ability (the common case)
+        // needs no override: the slot question answers exactly what the
+        // ability-wide one does, through the projection's default method
+        ModeOwners.declareNative(ABILITY, AREA);
+        assertEquals("area", ModeContract.currentMode(null, ABILITY, 3).orElseThrow(),
+                "the default slot read delegates to the ability-wide read");
+        assertTrue(ModeContract.currentMode(null, null, 3).isEmpty(),
+                "a null id is unknown in either shape");
+    }
+
+    @Test
+    void aPerSlotProjectionAnswersItsOwnSlot() {
+        // ARR's shape: preset slots mirror the bar positionally, so the
+        // projection can name the slot's own mode instead of the first
+        // slot holding the ability
+        ModeOwners.declareNative(ABILITY, new ModeOwners.NativeProjection() {
+            @Override
+            public Optional<String> modeId(ServerPlayer player, ResourceLocation id) {
+                return Optional.of("first");
+            }
+
+            @Override
+            public Optional<String> modeId(ServerPlayer player, ResourceLocation id, int slot) {
+                return slot == 2 ? Optional.of("second") : Optional.of("first");
+            }
+        });
+
+        assertEquals("second", ModeContract.currentMode(null, ABILITY, 2).orElseThrow(),
+                "the per-slot answer reaches the caller that named a slot");
+        assertEquals("first", ModeContract.currentMode(null, ABILITY, 0).orElseThrow(),
+                "an unmapped slot falls back, never a guess");
+        assertEquals("first", ModeContract.currentMode(null, ABILITY).orElseThrow(),
+                "the ability-wide read is untouched by the override");
+    }
+
+    @Test
+    void aPerSlotProjectionMayStillAnswerUnknown() {
+        ModeOwners.declareNative(ABILITY, new ModeOwners.NativeProjection() {
+            @Override
+            public Optional<String> modeId(ServerPlayer player, ResourceLocation id) {
+                return Optional.of("first");
+            }
+
+            @Override
+            public Optional<String> modeId(ServerPlayer player, ResourceLocation id, int slot) {
+                return null; // this slot: cannot tell
+            }
+        });
+
+        assertTrue(ModeContract.currentMode(null, ABILITY, 7).isEmpty(),
+                "a null slot answer reports unknown - never a fallback guess");
+        assertEquals("first", ModeContract.currentMode(null, ABILITY).orElseThrow(),
+                "the ability-wide read still answers");
     }
 
     @Test
