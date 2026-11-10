@@ -137,9 +137,9 @@ error.
 | `ability_core-server.toml` | `network.activationRatePerSecond` | integer, 0..1000 | `0` (unlimited) | `ActivateAbilityPayload.handle` (live, per payload) |
 | `ability_core-server.toml` | `mastery.enabled` | boolean | `true` | `MasteryAwards` / `MasteryEffects` (live, per award/read) |
 | `ability_core-server.toml` | `mastery.globalGainMultiplier` | number, 0..100 | `1.0` | `MasteryAwards` (live, per routed award) |
-| `ability_core-server.toml` | `mastery.maxLevel` | integer, 1..1000 | `100` | `MasteryCurve` callers (live, per level read) |
-| `ability_core-server.toml` | `mastery.levelCurveBase` | number, 1..1e9 | `100` | `MasteryCurve` callers (live, per level read) |
-| `ability_core-server.toml` | `mastery.levelCurveGrowth` | number, 1..10 | `1.15` | `MasteryCurve` callers (live, per level read) |
+| `ability_core-server.toml` | `mastery.maxLevel` | integer, 1..1000 | `100` | `MasteryLevels` (live, per level read; formula path - a datapack table overrides it) |
+| `ability_core-server.toml` | `mastery.levelCurveBase` | number, 1..1e9 | `100` | `MasteryLevels` (live, per level read; formula path - a datapack table overrides it) |
+| `ability_core-server.toml` | `mastery.levelCurveGrowth` | number, 1..10 | `1.15` | `MasteryLevels` (live, per level read; formula path - a datapack table overrides it) |
 | `ability_core-server.toml` | `mastery.costReductionPerLevel` | number, 0..1 | `0.005` | `MasteryEffects` COST default curve (live, per cast) |
 | `ability_core-server.toml` | `mastery.maxCostReduction` | number, 0..0.95 | `0.25` | `MasteryEffects` COST default curve (live, per cast) |
 | `ability_core-server.toml` | `mastery.castTimeReductionPerLevel` | number, 0..1 | `0.005` | `MasteryEffects` CAST_TIME default curve (live, per read) |

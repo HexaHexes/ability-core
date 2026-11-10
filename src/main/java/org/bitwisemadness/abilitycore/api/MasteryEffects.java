@@ -4,6 +4,7 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import org.bitwisemadness.abilitycore.config.CoreConfig;
+import org.bitwisemadness.abilitycore.mastery.MasteryOverlays;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
@@ -55,7 +56,7 @@ public final class MasteryEffects {
         if (!CoreConfig.masteryEnabled() || player == null || abilityId == null) {
             return 1.0;
         }
-        MasterySpec spec = MasteryDeclarations.get(abilityId).orElse(null);
+        MasterySpec spec = MasteryOverlays.specFor(abilityId);
         if (spec == null) {
             return 1.0; // opted out
         }

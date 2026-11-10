@@ -3,11 +3,12 @@ package org.bitwisemadness.abilitycore.api;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.ToIntFunction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import org.bitwisemadness.abilitycore.config.CoreConfig;
 import org.bitwisemadness.abilitycore.mastery.MasteryAttachments;
-import org.bitwisemadness.abilitycore.mastery.MasteryCurve;
+import org.bitwisemadness.abilitycore.mastery.MasteryLevels;
+import org.bitwisemadness.abilitycore.mastery.MasteryOverlays;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -60,37 +61,34 @@ public record MasteryView(
      * @return the current view
      */
     public static MasteryView of(@Nullable ServerPlayer player, ResourceLocation abilityId) {
-        MasterySpec spec = MasteryDeclarations.get(abilityId).orElse(null);
+        MasterySpec spec = MasteryOverlays.specFor(abilityId);
         if (spec == null || player == null) {
             return empty();
         }
         var data = MasteryAttachments.data(player);
         return build(spec, data.xp(MasteryTarget.ability(abilityId).key()),
-                target -> data.xp(target.key()),
-                CoreConfig.masteryMaxLevel(), CoreConfig.masteryLevelCurveBase(),
-                CoreConfig.masteryLevelCurveGrowth());
+                target -> data.xp(target.key()), MasteryLevels::level);
     }
 
     /**
      * The pure builder (fixtures read this directly): levels come from the
-     * curve, the aggregate from the share list, self excluded (its own
-     * level is the base term).
+     * supplied function (the datapack table or the config formula in
+     * production), the aggregate from the share list, self excluded (its
+     * own level is the base term).
      *
-     * @param spec     the declared contract
-     * @param ownXp    XP on the ability's own target
-     * @param xpOf     XP lookup for an arbitrary target
-     * @param maxLevel the curve's cap
-     * @param base     XP for the first level step
-     * @param growth   per-level growth factor (&gt;= 1)
+     * @param spec    the declared contract
+     * @param ownXp   XP on the ability's own target
+     * @param xpOf    XP lookup for an arbitrary target
+     * @param levelFn the level function the curve resolves through
      * @return the assembled view
      */
     static MasteryView build(MasterySpec spec, double ownXp,
-            Function<MasteryTarget, Double> xpOf, int maxLevel, double base, double growth) {
-        int ownLevel = MasteryCurve.level(ownXp, maxLevel, base, growth);
+            Function<MasteryTarget, Double> xpOf, ToIntFunction<Double> levelFn) {
+        int ownLevel = levelFn.applyAsInt(ownXp);
         double aggregate = ownLevel;
         List<TargetLevel> targets = new ArrayList<>(spec.shares().size());
         for (MasterySpec.Share share : spec.shares()) {
-            int level = MasteryCurve.level(xpOf.apply(share.target()), maxLevel, base, growth);
+            int level = levelFn.applyAsInt(xpOf.apply(share.target()));
             aggregate += share.share() * level;
             targets.add(new TargetLevel(share.target(), level, share.share()));
         }

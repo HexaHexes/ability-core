@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Map;
 import net.minecraft.resources.ResourceLocation;
+import org.bitwisemadness.abilitycore.mastery.MasteryCurve;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -26,7 +27,7 @@ class MasteryViewTest {
     private static MasteryView view(MasterySpec spec, double ownXp,
             Map<MasteryTarget, Double> stored) {
         return MasteryView.build(spec, ownXp, target -> stored.getOrDefault(target, 0.0),
-                100, 100.0, 1.0);
+                xp -> MasteryCurve.level(xp, 100, 100.0, 1.0));
     }
 
     @Test

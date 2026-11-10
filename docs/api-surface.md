@@ -628,6 +628,13 @@ storage writes, no awards, and inert (`1.0`) effect reads.
   shares sum `<= 1`, self keeps the remainder) and the participating
   effect axes - each on core's default curve or a named
   `MasteryEffectHandlers` entry.
+- **Datapack layer**: per-id spec overlays ride registry data maps
+  (`data/<ns>/data_maps/ability_core/mastery_spec/<name>.json`, the
+  `DefinitionOverlays` convention - present replaces, lists wholesale,
+  live on `/reload`), tuning only what code declared (an overlay never
+  opts an id in); the level table (`data/<ns>/mastery/levels.json`,
+  exactly-one rule) overrides the config formula - steps and cap - while
+  present. Schema in `docs/datapack-overrides.md`.
 - **Storage**: one NeoForge player attachment (`ability_core:mastery`),
   persisted, copied on death. XP only - levels derive on read through the
   curve, so a curve change re-levels every player on the next read.

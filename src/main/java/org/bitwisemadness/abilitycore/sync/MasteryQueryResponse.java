@@ -13,9 +13,8 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import org.bitwisemadness.abilitycore.AbilityCore;
 import org.bitwisemadness.abilitycore.api.MasteryTarget;
-import org.bitwisemadness.abilitycore.config.CoreConfig;
 import org.bitwisemadness.abilitycore.mastery.MasteryAttachments;
-import org.bitwisemadness.abilitycore.mastery.MasteryCurve;
+import org.bitwisemadness.abilitycore.mastery.MasteryLevels;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -102,15 +101,12 @@ public record MasteryQueryResponse(String targetPlayer, List<Entry> entries)
             return new MasteryQueryResponse(targetPlayer, List.of());
         }
         var data = MasteryAttachments.data(target);
-        int maxLevel = CoreConfig.masteryMaxLevel();
-        double base = CoreConfig.masteryLevelCurveBase();
-        double growth = CoreConfig.masteryLevelCurveGrowth();
         List<Entry> entries = new ArrayList<>();
         data.entries().forEach((key, xp) -> {
             MasteryTarget parsed = MasteryTarget.parseKey(key);
             if (parsed != null) {
                 entries.add(new Entry(parsed.kind().name(), parsed.id().toString(), xp,
-                        MasteryCurve.level(xp, maxLevel, base, growth)));
+                        MasteryLevels.level(xp)));
             }
         });
         entries.sort(Comparator.comparing(Entry::kind).thenComparing(Entry::id));
