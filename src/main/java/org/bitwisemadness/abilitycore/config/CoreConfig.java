@@ -64,6 +64,47 @@ public final class CoreConfig {
     /** Server key: how malformed activation payloads reach the log. */
     public static final String MALFORMED_PAYLOAD_LOG_KEY = "diagnostics.malformedPayloadLog";
 
+    // --- mastery / experience policy (REQ-CORE-12) ---
+
+    /** Server key: the mastery system master switch. */
+    public static final String MASTERY_ENABLED_KEY = "mastery.enabled";
+
+    /** Server key: global multiplier on every routed XP grant. */
+    public static final String MASTERY_GAIN_MULTIPLIER_KEY = "mastery.globalGainMultiplier";
+
+    /** Server key: the level ceiling every curve stops at. */
+    public static final String MASTERY_MAX_LEVEL_KEY = "mastery.maxLevel";
+
+    /** Server key: XP for the first level step (curve fallback). */
+    public static final String MASTERY_CURVE_BASE_KEY = "mastery.levelCurveBase";
+
+    /** Server key: per-step growth of the XP curve (1 = linear). */
+    public static final String MASTERY_CURVE_GROWTH_KEY = "mastery.levelCurveGrowth";
+
+    /** Server key: default cost reduction per mastery level. */
+    public static final String MASTERY_COST_PER_LEVEL_KEY = "mastery.costReductionPerLevel";
+
+    /** Server key: cap on the default cost reduction. */
+    public static final String MASTERY_MAX_COST_KEY = "mastery.maxCostReduction";
+
+    /** Server key: default cast-time reduction per mastery level. */
+    public static final String MASTERY_TIME_PER_LEVEL_KEY = "mastery.castTimeReductionPerLevel";
+
+    /** Server key: cap on the default cast-time reduction. */
+    public static final String MASTERY_MAX_TIME_KEY = "mastery.maxCastTimeReduction";
+
+    /** Server key: default power increase per mastery level. */
+    public static final String MASTERY_POWER_PER_LEVEL_KEY = "mastery.powerIncreasePerLevel";
+
+    /** Server key: cap on the default power increase. */
+    public static final String MASTERY_MAX_POWER_KEY = "mastery.maxPowerIncrease";
+
+    /** Server key: default duration increase per mastery level. */
+    public static final String MASTERY_DURATION_PER_LEVEL_KEY = "mastery.durationIncreasePerLevel";
+
+    /** Server key: cap on the default duration increase. */
+    public static final String MASTERY_MAX_DURATION_KEY = "mastery.maxDurationIncrease";
+
     /** Eligibility refusal debug-log modes (read live, see class javadoc). */
     public enum RefusalLogMode {
         /** Log the first refusal per key, suppress repeats (default, spam-safe). */
@@ -164,6 +205,85 @@ public final class CoreConfig {
                             + "every logs each one, off logs none.")
                     .defineEnum(MALFORMED_PAYLOAD_LOG_KEY, RefusalLogMode.ONCE_PER_KEY);
 
+    // --- mastery / experience policy (REQ-CORE-12, read live) ---
+
+    /** The mastery system master switch (default on; off = fully inert). */
+    public static final ModConfigSpec.BooleanValue MASTERY_ENABLED =
+            SERVER.comment("Master switch for the experience/mastery system (REQ-CORE-12). "
+                            + "Off = no awards, no storage writes, every effect multiplier 1.0.")
+                    .define(MASTERY_ENABLED_KEY, true);
+
+    /** Global multiplier on every routed XP grant (awardTo stays literal). */
+    public static final ModConfigSpec.DoubleValue MASTERY_GAIN_MULTIPLIER =
+            SERVER.comment("Global multiplier applied to every share-routed XP award "
+                            + "(direct awardTo grants stay literal). 0 disables routed gains "
+                            + "without disabling effects.")
+                    .defineInRange(MASTERY_GAIN_MULTIPLIER_KEY, 1.0, 0.0, 100.0);
+
+    /** The level ceiling every mastery curve stops at. */
+    public static final ModConfigSpec.IntValue MASTERY_MAX_LEVEL =
+            SERVER.comment("Highest mastery level any target can reach; XP beyond the cap "
+                            + "keeps accumulating but grants no further levels.")
+                    .defineInRange(MASTERY_MAX_LEVEL_KEY, 100, 1, 1000);
+
+    /** XP for the first level step (the config fallback curve). */
+    public static final ModConfigSpec.DoubleValue MASTERY_CURVE_BASE =
+            SERVER.comment("XP required for the first level step; later steps cost "
+                            + "base x growth^n (datapack level tables override this formula).")
+                    .defineInRange(MASTERY_CURVE_BASE_KEY, 100.0, 1.0, 1.0e9);
+
+    /** Per-step growth of the XP curve (1 = linear). */
+    public static final ModConfigSpec.DoubleValue MASTERY_CURVE_GROWTH =
+            SERVER.comment("Growth factor between level steps: 1 = flat steps (default "
+                            + "curve shape is linear), above 1 = each level costs more.")
+                    .defineInRange(MASTERY_CURVE_GROWTH_KEY, 1.15, 1.0, 10.0);
+
+    /** Default cost reduction per mastery level. */
+    public static final ModConfigSpec.DoubleValue MASTERY_COST_PER_LEVEL =
+            SERVER.comment("Default COST effect: this fraction off the casting cost per "
+                            + "aggregate mastery level, capped by maxCostReduction.")
+                    .defineInRange(MASTERY_COST_PER_LEVEL_KEY, 0.005, 0.0, 1.0);
+
+    /** Cap on the default cost reduction (always < 1 so a cost never hits 0). */
+    public static final ModConfigSpec.DoubleValue MASTERY_MAX_COST =
+            SERVER.comment("Cap on the default cost reduction (0.95 = a cost can never "
+                            + "drop below 5% of its nominal amount).")
+                    .defineInRange(MASTERY_MAX_COST_KEY, 0.25, 0.0, 0.95);
+
+    /** Default cast-time reduction per mastery level. */
+    public static final ModConfigSpec.DoubleValue MASTERY_TIME_PER_LEVEL =
+            SERVER.comment("Default CAST_TIME effect: this fraction off the cast time per "
+                            + "aggregate mastery level, capped by maxCastTimeReduction.")
+                    .defineInRange(MASTERY_TIME_PER_LEVEL_KEY, 0.005, 0.0, 1.0);
+
+    /** Cap on the default cast-time reduction. */
+    public static final ModConfigSpec.DoubleValue MASTERY_MAX_TIME =
+            SERVER.comment("Cap on the default cast-time reduction (same 5% floor rule "
+                            + "as costs).")
+                    .defineInRange(MASTERY_MAX_TIME_KEY, 0.25, 0.0, 0.95);
+
+    /** Default power increase per mastery level. */
+    public static final ModConfigSpec.DoubleValue MASTERY_POWER_PER_LEVEL =
+            SERVER.comment("Default POWER effect: this fractional bonus per aggregate "
+                            + "mastery level, capped by maxPowerIncrease.")
+                    .defineInRange(MASTERY_POWER_PER_LEVEL_KEY, 0.01, 0.0, 10.0);
+
+    /** Cap on the default power increase. */
+    public static final ModConfigSpec.DoubleValue MASTERY_MAX_POWER =
+            SERVER.comment("Cap on the default power bonus (0.5 = at most +50%).")
+                    .defineInRange(MASTERY_MAX_POWER_KEY, 0.5, 0.0, 1000.0);
+
+    /** Default duration increase per mastery level. */
+    public static final ModConfigSpec.DoubleValue MASTERY_DURATION_PER_LEVEL =
+            SERVER.comment("Default DURATION effect: this fractional bonus per aggregate "
+                            + "mastery level, capped by maxDurationIncrease.")
+                    .defineInRange(MASTERY_DURATION_PER_LEVEL_KEY, 0.01, 0.0, 10.0);
+
+    /** Cap on the default duration increase. */
+    public static final ModConfigSpec.DoubleValue MASTERY_MAX_DURATION =
+            SERVER.comment("Cap on the default duration bonus (0.5 = at most +50%).")
+                    .defineInRange(MASTERY_MAX_DURATION_KEY, 0.5, 0.0, 1000.0);
+
     /** Core's SERVER spec - reference registration for the shared contract. */
     public static final ModConfigSpec SERVER_SPEC = SERVER.build();
 
@@ -240,5 +360,85 @@ public final class CoreConfig {
     public static RefusalLogMode malformedPayloadLog() {
         return ConfigDiagnostics.readOrDefault(MALFORMED_PAYLOAD_LOG_KEY,
                 () -> MALFORMED_PAYLOAD_LOG.get(), RefusalLogMode.ONCE_PER_KEY);
+    }
+
+    // --- mastery readers (REQ-CORE-12; all live, all default-safe) ---
+
+    /** Whether the mastery system runs at all: read live, default on. */
+    public static boolean masteryEnabled() {
+        return ConfigDiagnostics.readOrDefault(MASTERY_ENABLED_KEY,
+                () -> MASTERY_ENABLED.get(), true);
+    }
+
+    /** The global routed-gain multiplier: read live, default 1.0. */
+    public static double masteryGlobalGainMultiplier() {
+        return ConfigDiagnostics.readOrDefault(MASTERY_GAIN_MULTIPLIER_KEY,
+                () -> MASTERY_GAIN_MULTIPLIER.get(), 1.0);
+    }
+
+    /** The level ceiling: read live, default 100. */
+    public static int masteryMaxLevel() {
+        return ConfigDiagnostics.readOrDefault(MASTERY_MAX_LEVEL_KEY,
+                () -> MASTERY_MAX_LEVEL.get(), 100);
+    }
+
+    /** The curve's first-step XP: read live, default 100. */
+    public static double masteryLevelCurveBase() {
+        return ConfigDiagnostics.readOrDefault(MASTERY_CURVE_BASE_KEY,
+                () -> MASTERY_CURVE_BASE.get(), 100.0);
+    }
+
+    /** The curve's growth factor: read live, default 1.15. */
+    public static double masteryLevelCurveGrowth() {
+        return ConfigDiagnostics.readOrDefault(MASTERY_CURVE_GROWTH_KEY,
+                () -> MASTERY_CURVE_GROWTH.get(), 1.15);
+    }
+
+    /** Default cost reduction per level: read live, default 0.005. */
+    public static double masteryCostReductionPerLevel() {
+        return ConfigDiagnostics.readOrDefault(MASTERY_COST_PER_LEVEL_KEY,
+                () -> MASTERY_COST_PER_LEVEL.get(), 0.005);
+    }
+
+    /** Default cost reduction cap: read live, default 0.25. */
+    public static double masteryMaxCostReduction() {
+        return ConfigDiagnostics.readOrDefault(MASTERY_MAX_COST_KEY,
+                () -> MASTERY_MAX_COST.get(), 0.25);
+    }
+
+    /** Default cast-time reduction per level: read live, default 0.005. */
+    public static double masteryCastTimeReductionPerLevel() {
+        return ConfigDiagnostics.readOrDefault(MASTERY_TIME_PER_LEVEL_KEY,
+                () -> MASTERY_TIME_PER_LEVEL.get(), 0.005);
+    }
+
+    /** Default cast-time reduction cap: read live, default 0.25. */
+    public static double masteryMaxCastTimeReduction() {
+        return ConfigDiagnostics.readOrDefault(MASTERY_MAX_TIME_KEY,
+                () -> MASTERY_MAX_TIME.get(), 0.25);
+    }
+
+    /** Default power increase per level: read live, default 0.01. */
+    public static double masteryPowerIncreasePerLevel() {
+        return ConfigDiagnostics.readOrDefault(MASTERY_POWER_PER_LEVEL_KEY,
+                () -> MASTERY_POWER_PER_LEVEL.get(), 0.01);
+    }
+
+    /** Default power increase cap: read live, default 0.5. */
+    public static double masteryMaxPowerIncrease() {
+        return ConfigDiagnostics.readOrDefault(MASTERY_MAX_POWER_KEY,
+                () -> MASTERY_MAX_POWER.get(), 0.5);
+    }
+
+    /** Default duration increase per level: read live, default 0.01. */
+    public static double masteryDurationIncreasePerLevel() {
+        return ConfigDiagnostics.readOrDefault(MASTERY_DURATION_PER_LEVEL_KEY,
+                () -> MASTERY_DURATION_PER_LEVEL.get(), 0.01);
+    }
+
+    /** Default duration increase cap: read live, default 0.5. */
+    public static double masteryMaxDurationIncrease() {
+        return ConfigDiagnostics.readOrDefault(MASTERY_MAX_DURATION_KEY,
+                () -> MASTERY_MAX_DURATION.get(), 0.5);
     }
 }

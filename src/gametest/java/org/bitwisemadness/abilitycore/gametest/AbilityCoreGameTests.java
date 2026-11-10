@@ -163,4 +163,101 @@ public final class AbilityCoreGameTests {
         org.bitwisemadness.abilitycore.api.ModeChangeHandlers.remove(modeId);
         helper.succeed();
     }
+
+    /**
+     * Mastery end-to-end (REQ-CORE-12): an EXTERNAL fixture ability with a
+     * declared cost runs the real pipeline - the declared COST effect halves
+     * the priced charge (health drops by 2, not 4), the ACTIVATION award
+     * lands split 50/50 between the ability's own target and its category
+     * share, an undeclared trigger grants nothing, and the view reads back
+     * the stored XP. Cleanup restores every seam.
+     */
+    @GameTest(template = "empty")
+    public static void mastery_awards_and_discounts_the_charge(GameTestHelper helper)
+            throws GameTestAssertException {
+        var abilityId = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                AbilityCore.MOD_ID, "gametest_mastery");
+        var tree = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                "tensura", "mastery_tree");
+
+        // RESOLVE needs a registered id: install a fixture registry, then restore
+        var previous = AbilityRegistries.registry();
+        var fixture = new MappedRegistry<org.bitwisemadness.abilitycore.api.AbilityDefinition>(
+                AbilityRegistries.ABILITY_REGISTRY_KEY, com.mojang.serialization.Lifecycle.stable(), false);
+        Registry.register(fixture, abilityId, new org.bitwisemadness.abilitycore.api.AbilityDefinition(
+                "tensura.skill.gametest_mastery", null,
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
+                org.bitwisemadness.abilitycore.api.ActivationType.INSTANT,
+                List.of(new org.bitwisemadness.abilitycore.api.ResourceCost("ability_core:health", 4.0)),
+                org.bitwisemadness.abilitycore.api.ConsumptionStrategies.ALL,
+                org.bitwisemadness.abilitycore.api.AmountResolvers.STATIC, Set.of(), Map.of()));
+        AbilityRegistries.installRegistryForTests(fixture);
+
+        // EXTERNAL: core validates the discounted price and charges it (CHARGE phase)
+        AbilityCore.HANDLERS.register(abilityId, (req, player) ->
+                org.bitwisemadness.abilitycore.api.ActivationResult.ACTED,
+                org.bitwisemadness.abilitycore.api.ChargingModel.EXTERNAL);
+        org.bitwisemadness.abilitycore.api.MasteryDeclarations.declare(abilityId,
+                org.bitwisemadness.abilitycore.api.MasterySpec.gained(10.0)
+                        .withShare(org.bitwisemadness.abilitycore.api.MasteryTarget.category(tree), 0.5)
+                        .withEffect(org.bitwisemadness.abilitycore.api.MasteryAxis.COST,
+                                "gametest:half"));
+        org.bitwisemadness.abilitycore.api.MasteryEffectHandlers.declare(
+                org.bitwisemadness.abilitycore.api.MasteryAxis.COST, "gametest:half",
+                (player, id, view) -> 0.5);
+
+        var server = helper.getLevel().getServer();
+        var profile = new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(),
+                "MasteryProbe");
+        var player = new net.minecraft.server.level.ServerPlayer(server, helper.getLevel(),
+                profile, net.minecraft.server.level.ClientInformation.createDefault());
+        double healthBefore = player.getHealth();
+
+        var result = AbilityCore.PIPELINE.run(
+                org.bitwisemadness.abilitycore.api.ActivationRequest.of(abilityId,
+                        org.bitwisemadness.abilitycore.api.ActivationSource.DIRECT_SLOT), player);
+        if (!result.isSuccess()) {
+            throw new GameTestAssertException("expected success, got " + result.outcome());
+        }
+
+        // the COST effect halved the charge: 4.0 nominal -> 2.0 deducted
+        double charged = healthBefore - player.getHealth();
+        if (Math.abs(charged - 2.0) > 1.0e-4) {
+            throw new GameTestAssertException("expected a 2.0 mastery-discounted charge, got "
+                    + charged);
+        }
+
+        // the award landed split 50/50: own target + category share
+        var data = org.bitwisemadness.abilitycore.mastery.MasteryAttachments.data(player);
+        double own = data.xp(org.bitwisemadness.abilitycore.api.MasteryTarget
+                .ability(abilityId).key());
+        double category = data.xp(org.bitwisemadness.abilitycore.api.MasteryTarget
+                .category(tree).key());
+        if (Math.abs(own - 5.0) > 1.0e-9 || Math.abs(category - 5.0) > 1.0e-9) {
+            throw new GameTestAssertException(
+                    "expected a 5/5 split, got own=" + own + " category=" + category);
+        }
+
+        // an undeclared trigger grants nothing (declared intent filter)
+        org.bitwisemadness.abilitycore.api.MasteryAwards.award(player, abilityId,
+                org.bitwisemadness.abilitycore.api.MasteryTrigger.HIT);
+        double afterHit = data.xp(org.bitwisemadness.abilitycore.api.MasteryTarget
+                .ability(abilityId).key());
+        if (Math.abs(afterHit - 5.0) > 1.0e-9) {
+            throw new GameTestAssertException("HIT was not declared but granted XP: " + afterHit);
+        }
+
+        // the view reads the stored state back (attachment -> curve -> aggregate)
+        var view = org.bitwisemadness.abilitycore.api.MasteryView.of(player, abilityId);
+        if (Math.abs(view.ownXp() - 5.0) > 1.0e-9) {
+            throw new GameTestAssertException("view ownXp expected 5.0, got " + view.ownXp());
+        }
+
+        org.bitwisemadness.abilitycore.api.MasteryDeclarations.remove(abilityId);
+        org.bitwisemadness.abilitycore.api.MasteryEffectHandlers.remove(
+                org.bitwisemadness.abilitycore.api.MasteryAxis.COST, "gametest:half");
+        AbilityCore.HANDLERS.remove(abilityId);
+        AbilityRegistries.installRegistryForTests(previous);
+        helper.succeed();
+    }
 }

@@ -12,6 +12,8 @@ import org.bitwisemadness.abilitycore.api.ActivationRequest;
 import org.bitwisemadness.abilitycore.api.ActivationResult;
 import org.bitwisemadness.abilitycore.api.Affordability;
 import org.bitwisemadness.abilitycore.api.ChargingModel;
+import org.bitwisemadness.abilitycore.api.MasteryAwards;
+import org.bitwisemadness.abilitycore.api.MasteryTrigger;
 import org.bitwisemadness.abilitycore.api.ResourceConsumer;
 import org.bitwisemadness.abilitycore.api.ResourceConsumers;
 import org.bitwisemadness.abilitycore.registry.AbilityRegistries;
@@ -143,6 +145,15 @@ public final class ActivationPipeline {
         // COOLDOWN start - built-in: EXTERNAL-owned cooldowns start post-activation
         // (REQ-CORE-05; NATIVE cooldowns are started by the provider's own pipeline)
         ExternalCooldownStep.startExternalCooldown(request, player);
+        // MASTERY - built-in: declared abilities grant on any non-refusal
+        // (REQ-CORE-12). Post-activation like charge and cooldown start: a
+        // failure is logged, never able to un-act or re-refuse the result.
+        try {
+            MasteryAwards.award(player, request.abilityId(), MasteryTrigger.ACTIVATION);
+        } catch (RuntimeException e) {
+            LOGGER.error("Mastery award failed for {} after successful activation",
+                    request.abilityId(), e);
+        }
         return result;
     }
 
