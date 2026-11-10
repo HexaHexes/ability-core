@@ -13,6 +13,7 @@ import org.bitwisemadness.abilitycore.api.Affordability;
 import org.bitwisemadness.abilitycore.api.AmountResolvers;
 import org.bitwisemadness.abilitycore.api.ChargingModel;
 import org.bitwisemadness.abilitycore.api.ConsumptionStrategies;
+import org.bitwisemadness.abilitycore.api.MasteryEffects;
 import org.bitwisemadness.abilitycore.api.ResourceConsumer;
 import org.bitwisemadness.abilitycore.api.ResourceConsumers;
 import org.bitwisemadness.abilitycore.api.ResourceCost;
@@ -134,6 +135,15 @@ public final class ResourceChargeStep implements ActivationPipeline.Step {
             return Optional.of(ActivationResult.refused(ActivationOutcome.REFUSED_UNAVAILABLE));
         }
         List<ResourceCost> priced = pricedOpt.get();
+        // REQ-CORE-12: the mastery discount scales the priced list before
+        // selection and every consult - same ids, same order, scaled amounts,
+        // so the mirror contract and priced.contains() identity both hold.
+        double mastery = MasteryEffects.costMultiplier(player, request.abilityId());
+        if (mastery != 1.0) {
+            priced = priced.stream()
+                    .map(cost -> new ResourceCost(cost.resourceId(), cost.amount() * mastery))
+                    .toList();
+        }
         List<ResourceCost> selected = strategy.select(request, player, priced,
                 entry -> affordabilityFor(request, player, entry));
         if (selected == null) {

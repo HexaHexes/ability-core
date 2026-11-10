@@ -19,9 +19,17 @@ Core's channel is at version **3** (1: baseline; 2: target hint, core#69;
   current state - ADR-003's "rejection re-sends the snapshot"). Core itself
   sends no game data: it fires `AbilitySyncNeededEvent`
   (`SyncEventWiring`: LOGIN, RESPAWN, DIMENSION_CHANGE) and consumers answer
-  it with a full snapshot.
+  it with a full snapshot. The one exception is the **solicited** mastery
+  query answer (`MasteryQueryResponse`, REQ-CORE-12): a reply to an explicit
+  request, never a push - core still originates no state on its own.
 
 ### Version-bump checklist
+
+Adding a **new** payload type is additive and does not bump `N`: an
+older peer never sends it (its UI does not exist), and a peer that
+predates the type rejects it at the payload layer - ordinary version
+skew, the same as any consumer payload. Only changing a **registered**
+codec bumps the channel.
 
 When a registered codec changes:
 
@@ -42,6 +50,8 @@ When a registered codec changes:
 | `SwitchBarPayload` | playToServer | Alt+wheel / Alt+digit bar intent | `tensura-ability-hotbar` | one resource location |
 | `AssignAbilityPayload` | playToServer | menu assign / replace / clear | `tensura-ability-hotbar` | slot + ability id + bar id |
 | `ActivateAbilityPayload` | playToServer | slot activation (Ctrl+digit / G), carrying the optional target hint and the slot's mode | **core** | id + source + slot + stamp + hint + mode; ~60-100 B typical |
+| `MasteryQueryRequest` | playToServer | an explicit UI request for one player's mastery snapshot (REQ-CORE-12) | **core** | one UUID string; the answer below is its only response |
+| `MasteryQueryResponse` | playToClient | the answer to `MasteryQueryRequest` - solicited only, never a push | **core** | echoed UUID + one entry per stored target (kind, id, xp, level), sorted; distinct targets only, far under the wire bound |
 | delta payloads | - | **deferred** | - | see amendment below |
 
 ### Serverbound budget

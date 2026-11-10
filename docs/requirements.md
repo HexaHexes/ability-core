@@ -40,6 +40,7 @@ written into the implementation issues; this table records that they exist.
 | REQ-CORE-09 | Extension points and versioned stability policy for future providers (published artifact) | F | P1 | designed | SPIKE-core-1 (closed) -> core#20 (closes Phase 2 last) | Phase 2 |
 | REQ-CORE-10 | Ability-mode contracts: declaration (per-ability cycles), live-state projection, activation mode context, mode-change intent | F | P1 | designed | core#112 (findings, closed) -> core#113 | Phase 2 |
 | REQ-CORE-11 | Menu-presentation contract: provider-declared live fields (progress/text) and toggle state for menu rendering | F | P1 | designed | core#122 | Phase 2 |
+| REQ-CORE-12 | Experience/mastery contract: opt-in declarations, XP routing (ability/category/subcategory shares), trigger-scoped awards, level curve, effect axes (cost/time/power/duration) with default curves and custom handlers, solicited client query | F | P1 | designed | core#136 | Phase 2 |
 
 ## B. Tensura x ISS integration - `tensura-iss-integration`
 

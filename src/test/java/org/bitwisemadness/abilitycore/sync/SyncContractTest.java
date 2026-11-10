@@ -144,9 +144,9 @@ class SyncContractTest {
 
     @Test
     void corePayloadInventoryIsServerboundIntentOnly() throws Exception {
-        // core#16 AC1 (no duplicate packet): NATIVE cooldown state is the
-        // provider's to sync (ISS syncs its own - hotbar#2 section 3). A new
-        // core payload must fail this list and be reviewed in docs/sync.md.
+        // core#16 AC1: NATIVE cooldown state is the provider's to sync. A
+        // new core payload must fail this list and be reviewed in
+        // docs/sync.md (REQ-CORE-12 added the mastery query pair there).
         Path mainClasses = Path.of(NetworkRegistration.class
                 .getProtectionDomain().getCodeSource().getLocation().toURI());
         String payloadInterface =
@@ -164,15 +164,20 @@ class SyncContractTest {
         referencing.sort(null);
         assertEquals(List.of(
                 "org/bitwisemadness/abilitycore/sync/ActivateAbilityPayload.class",
+                "org/bitwisemadness/abilitycore/sync/MasteryQueryRequest.class",
+                "org/bitwisemadness/abilitycore/sync/MasteryQueryResponse.class",
                 "org/bitwisemadness/abilitycore/sync/NetworkRegistration.class"), referencing);
-        // playToClient on the registrar would be a clientbound core channel -
-        // native cooldown state must never ride one (core#16's no-resync rule)
+        // Core's channel carries intent serverbound plus one solicited
+        // clientbound answer (the mastery query response, REQ-CORE-12) -
+        // never a state push: native cooldowns stay the provider's (core#16).
         byte[] registrar = Files.readAllBytes(
                 mainClasses.resolve("org/bitwisemadness/abilitycore/sync/NetworkRegistration.class"));
         assertTrue(containsAscii(registrar, "playToServer"),
-                "the only core payload registers serverbound (intent)");
-        assertFalse(containsAscii(registrar, "playToClient"),
-                "core registers no clientbound payload - native cooldowns are never re-synced");
+                "core's payloads register serverbound (intent)");
+        assertTrue(containsAscii(registrar, "MasteryQueryResponse"),
+                "the one clientbound core payload is the mastery query response");
+        assertFalse(containsAscii(registrar, "BarStateSnapshot"),
+                "core never pushes game state - snapshots stay consumer-owned");
     }
 
     @Test

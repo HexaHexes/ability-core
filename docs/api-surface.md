@@ -8,7 +8,7 @@ for the four consumer repositories.
 
 | Package | Stability | Purpose |
 |---|---|---|
-| `org.bitwisemadness.abilitycore.api` | **Stable** - public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `ActivationRequests` (slot gate), `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, `RefundableConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownHandler`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies`, pricing: `AmountResolvers`, modes contract: `AbilityModes`, `ModeOwners`, `ModeContract`, `ModeChangeRequest`, `ModeChangeHandler`, `ModeChangeHandlers`, unlock contract: `AbilityUnlocks`, `AbilityUnlocks.UnlockProvider`, presentation contract: `PresentationProviders`, `PresentationProvider`, `AbilityPresentation`, `PresentationField`, `Toggle`, menu visibility: `VisibilityHandlers`, `VisibilityHandlers.VisibilityHandler` |
+| `org.bitwisemadness.abilitycore.api` | **Stable** - public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `ActivationRequests` (slot gate), `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, `RefundableConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownHandler`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies`, pricing: `AmountResolvers`, modes contract: `AbilityModes`, `ModeOwners`, `ModeContract`, `ModeChangeRequest`, `ModeChangeHandler`, `ModeChangeHandlers`, unlock contract: `AbilityUnlocks`, `AbilityUnlocks.UnlockProvider`, presentation contract: `PresentationProviders`, `PresentationProvider`, `AbilityPresentation`, `PresentationField`, `Toggle`, menu visibility: `VisibilityHandlers`, `VisibilityHandlers.VisibilityHandler`, mastery contract: `MasteryDeclarations`, `MasterySpec`, `MasteryTarget`, `MasteryTrigger`, `MasteryAxis`, `MasteryView`, `MasteryAwards`, `MasteryEffects`, `MasteryGainHandlers`, `MasteryEffectHandlers` |
 | `org.bitwisemadness.abilitycore.registry` | **Stable** — public API | `AbilityRegistries` (registry key + `registry()` + `isReady()`) |
 | `org.bitwisemadness.abilitycore.discovery` | **Stable** — public API | `AbilityDiscovery` (presence, enumeration, filtering) |
 | `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler`, `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
@@ -20,7 +20,7 @@ for the four consumer repositories.
 
 ## Extension points
 
-Consumers extend core through exactly fourteen mechanisms:
+Consumers extend core through exactly fifteen mechanisms:
 
 1. **Registry registration** — providers register `AbilityDefinition` entries
    on their own mod bus via `RegisterEvent` for `AbilityRegistries.ABILITY_REGISTRY_KEY`.
@@ -75,6 +75,11 @@ Consumers extend core through exactly fourteen mechanisms:
 14. **Menu visibility** — providers declare a listing rule per ability via
     `VisibilityHandlers.declare(id, handler)` (the `ALWAYS`/`NEVER` defaults);
     undeclared ids stay visible (see the visibility contract below).
+15. **Mastery and experience** - opt-in per-ability declarations via
+    `MasteryDeclarations.declare(id, spec)`, named gain/effect handlers
+    (`MasteryGainHandlers`, `MasteryEffectHandlers`), domain grants through
+    `MasteryAwards`, and the four effect reads through `MasteryEffects`
+    (see the mastery contract below).
 
 ## Overlay data contract (REQ-HOT-08)
 
@@ -605,6 +610,46 @@ Links: hotbar#153 (the menu filter - rows and chips alike), core#124
 (originating contract); consumers: ability-iss and pseudocore-curios
 declare `NEVER` for their provider-bar-exclusive abilities, and
 ability-tensura declares its own unlocked-gated handler.
+
+## Mastery and experience (REQ-CORE-12, issue #136)
+
+An opt-in, per-player XP/mastery layer over the ability registry. **No
+declaration, no system**: an ability without a `MasterySpec` gets no
+storage writes, no awards, and inert (`1.0`) effect reads.
+
+- **Declaration**: `MasteryDeclarations.declare(abilityId, spec)` at mod
+  construction (the standard timing contract - handler *names* resolve at
+  first use, so declaration order between registries stays free). A
+  `MasterySpec` names the base gain (or a `MasteryGainHandlers` entry),
+  the granting triggers (`ACTIVATION` is core's auto-fired one;
+  `HIT`/`KILL`/`CUSTOM` are fired by domains through
+  `MasteryAwards.award`, which ignores triggers the spec did not
+  declare), the share list (`ABILITY`/`CATEGORY`/`SUBCATEGORY` targets,
+  shares sum `<= 1`, self keeps the remainder) and the participating
+  effect axes - each on core's default curve or a named
+  `MasteryEffectHandlers` entry.
+- **Storage**: one NeoForge player attachment (`ability_core:mastery`),
+  persisted, copied on death. XP only - levels derive on read through the
+  curve, so a curve change re-levels every player on the next read.
+- **Awards**: the pipeline grants `ACTIVATION` post-activation for any
+  non-refusal (a failure logs, never re-refuses); `MasteryAwards.award`
+  routes through the share list, `awardTo` writes one target literally
+  (no shares, no global multiplier). `mastery.enabled` is the master
+  switch; `mastery.globalGainMultiplier` scales routed grants only.
+- **Effects**: `MasteryEffects.{cost,castTime,power,duration}Multiplier`
+  return the per-cast multiplier (`1.0` = inert; undeclared, disabled,
+  or non-participating axes all land there). Core applies COST inside
+  `ResourceChargeStep` - after amount resolution, before selection - so
+  consults, validation and the charge see one identical priced list; the
+  other axes are read by the domain that owns the semantics. Default
+  curves are the `mastery.*` server keys; a custom handler replaces its
+  axis wholesale and must return a finite multiplier `> 0` (anything
+  else logs and the default curve applies - an effect read never fails
+  an activation).
+- **Client query**: `MasteryQueryRequest`/`MasteryQueryResponse` -
+  core's only clientbound exchange, **solicited only** (never a push),
+  answered to listeners as `MasteryQueryAnsweredEvent`
+  (`docs/sync.md` inventory).
 
 ## Leak gates (mechanism)
 

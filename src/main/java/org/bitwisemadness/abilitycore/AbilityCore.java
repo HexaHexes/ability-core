@@ -12,6 +12,7 @@ import org.bitwisemadness.abilitycore.activation.ExternalCooldownStep;
 import org.bitwisemadness.abilitycore.activation.ResourceChargeStep;
 import org.bitwisemadness.abilitycore.activation.TargetValidationStep;
 import org.bitwisemadness.abilitycore.config.CoreConfig;
+import org.bitwisemadness.abilitycore.mastery.MasteryAttachments;
 import org.bitwisemadness.abilitycore.registry.AbilityRegistries;
 import org.slf4j.Logger;
 
@@ -40,6 +41,7 @@ public final class AbilityCore {
         modContainer.registerConfig(ModConfig.Type.SERVER, CoreConfig.SERVER_SPEC, "ability_core-server.toml");
         modContainer.registerConfig(ModConfig.Type.CLIENT, CoreConfig.CLIENT_SPEC, "ability_core-client.toml");
         modBus.addListener(AbilityRegistries::onNewRegistry);
+        MasteryAttachments.register(modBus);
         PIPELINE.registerStep(ActivationPipeline.PipelinePhase.ELIGIBILITY, TargetValidationStep.INSTANCE);
         PIPELINE.registerStep(ActivationPipeline.PipelinePhase.ELIGIBILITY, ELIGIBILITY.asStep());
         PIPELINE.registerStep(ActivationPipeline.PipelinePhase.COOLDOWN, ExternalCooldownStep.INSTANCE);

@@ -135,6 +135,19 @@ error.
 | `ability_core-server.toml` | `menu.undeclaredAbilities` | `visible` / `hidden` | `visible` | `VisibilityHandlers.visible` (live, per menu read) |
 | `ability_core-server.toml` | `targeting.maxAreaRadius` | number, 1..4096 | `64` | `TargetValidationStep` (live, per area hint) |
 | `ability_core-server.toml` | `network.activationRatePerSecond` | integer, 0..1000 | `0` (unlimited) | `ActivateAbilityPayload.handle` (live, per payload) |
+| `ability_core-server.toml` | `mastery.enabled` | boolean | `true` | `MasteryAwards` / `MasteryEffects` (live, per award/read) |
+| `ability_core-server.toml` | `mastery.globalGainMultiplier` | number, 0..100 | `1.0` | `MasteryAwards` (live, per routed award) |
+| `ability_core-server.toml` | `mastery.maxLevel` | integer, 1..1000 | `100` | `MasteryCurve` callers (live, per level read) |
+| `ability_core-server.toml` | `mastery.levelCurveBase` | number, 1..1e9 | `100` | `MasteryCurve` callers (live, per level read) |
+| `ability_core-server.toml` | `mastery.levelCurveGrowth` | number, 1..10 | `1.15` | `MasteryCurve` callers (live, per level read) |
+| `ability_core-server.toml` | `mastery.costReductionPerLevel` | number, 0..1 | `0.005` | `MasteryEffects` COST default curve (live, per cast) |
+| `ability_core-server.toml` | `mastery.maxCostReduction` | number, 0..0.95 | `0.25` | `MasteryEffects` COST default curve (live, per cast) |
+| `ability_core-server.toml` | `mastery.castTimeReductionPerLevel` | number, 0..1 | `0.005` | `MasteryEffects` CAST_TIME default curve (live, per read) |
+| `ability_core-server.toml` | `mastery.maxCastTimeReduction` | number, 0..0.95 | `0.25` | `MasteryEffects` CAST_TIME default curve (live, per read) |
+| `ability_core-server.toml` | `mastery.powerIncreasePerLevel` | number, 0..10 | `0.01` | `MasteryEffects` POWER default curve (live, per read) |
+| `ability_core-server.toml` | `mastery.maxPowerIncrease` | number, 0..1000 | `0.5` | `MasteryEffects` POWER default curve (live, per read) |
+| `ability_core-server.toml` | `mastery.durationIncreasePerLevel` | number, 0..10 | `0.01` | `MasteryEffects` DURATION default curve (live, per read) |
+| `ability_core-server.toml` | `mastery.maxDurationIncrease` | number, 0..1000 | `0.5` | `MasteryEffects` DURATION default curve (live, per read) |
 | `ability_core-client.toml` | `diagnostics.playerNotices` | boolean | `true` | consumers' client code (core renders nothing; the reference CLIENT shape) |
 
 **Core's layer-1 clamps (code, never config):** a target-hint param string

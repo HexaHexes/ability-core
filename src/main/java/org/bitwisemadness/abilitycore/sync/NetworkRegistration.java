@@ -35,8 +35,8 @@ public final class NetworkRegistration {
     @SubscribeEvent
     public static void onRegisterPayloads(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar(AbilityCore.MOD_ID)
-                // 2 (core#69): target hint. 3 (issue #113): ActivateAbilityPayload
-                // carries the slot's mode context.
+                // 2 (core#69): target hint. 3 (issue #113): mode context.
+                // Additive payload types do not bump N (docs/sync.md).
                 .versioned("3")
                 .optional();
 
@@ -44,6 +44,18 @@ public final class NetworkRegistration {
                 ActivateAbilityPayload.TYPE,
                 ActivateAbilityPayload.STREAM_CODEC,
                 ActivateAbilityPayload::handle
+        );
+        // REQ-CORE-12: the explicit mastery query - one serverbound request,
+        // one solicited clientbound answer, never a state push (docs/sync.md)
+        registrar.playToServer(
+                MasteryQueryRequest.TYPE,
+                MasteryQueryRequest.STREAM_CODEC,
+                MasteryQueryRequest::handle
+        );
+        registrar.playToClient(
+                MasteryQueryResponse.TYPE,
+                MasteryQueryResponse.STREAM_CODEC,
+                MasteryQueryResponse::handle
         );
     }
 }
