@@ -6,6 +6,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import org.bitwisemadness.abilitycore.config.CoreConfig;
 import org.bitwisemadness.abilitycore.mastery.MasteryAttachments;
+import org.bitwisemadness.abilitycore.mastery.MasteryOverlays;
 import org.bitwisemadness.abilitycore.mastery.MasteryRouting;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -80,7 +81,7 @@ public final class MasteryAwards {
                 || !CoreConfig.masteryEnabled()) {
             return;
         }
-        MasterySpec spec = MasteryDeclarations.get(source).orElse(null);
+        MasterySpec spec = MasteryOverlays.specFor(source);
         if (spec == null) {
             return; // opted out: the system is invisible for this ability
         }

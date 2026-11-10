@@ -71,6 +71,74 @@ no-op.
   overlay's list is the definition's list), and a datapack-adjusted
   `accepted_targets` is what gates targeting.
 
+## Mastery spec overlays (REQ-CORE-12)
+
+The mastery layer rides the same data-map machinery, one type over:
+
+```text
+<data pack>/data/<namespace>/data_maps/ability_core/mastery_spec/<overlay name>.json
+```
+
+```json
+{
+  "values": {
+    "irons_spellbooks:fireball": {
+      "base_gain": 25.0,
+      "gain_handler": "mymod:scale",
+      "triggers": ["ACTIVATION", "HIT"],
+      "shares": [
+        { "kind": "CATEGORY", "id": "irons_spellbooks:fire", "share": 0.5 }
+      ],
+      "effects": [
+        { "axis": "COST", "handler": "mymod:discount" },
+        { "axis": "POWER" }
+      ]
+    }
+  }
+}
+```
+
+Every field is optional. `triggers` are `ACTIVATION` / `HIT` / `KILL` /
+`CUSTOM`; `shares` are `ABILITY` / `CATEGORY` / `SUBCATEGORY` targets with
+shares in `(0, 1]` summing to at most 1 (self keeps the remainder);
+`effects` entries name an axis (`COST` / `CAST_TIME` / `POWER` /
+`DURATION`) with an optional handler name (absent = core's default
+curve). Merge follows the same convention as definition overlays -
+present replaces, absent keeps, **lists replace wholesale** - and an
+empty `effects` array removes every effect axis from the ability.
+
+- **Opt-in stays in code**: an overlay only tunes a spec that
+  `MasteryDeclarations.declare` registered; an undeclared id has no
+  system at all, overlay or not.
+- **Fail to base, never to a crash**: unknown triggers/kinds/axes,
+  invalid shares and malformed JSON are rejected at load (logged), the
+  overlay is dropped, and the code declaration stays in force.
+- **Live reads, not synced**: `/reload` applies on the next award or
+  effect read; the overlay never leaves the server (awards, effects and
+  the query answer are all server-side).
+
+## Mastery level table (REQ-CORE-12)
+
+```text
+<data pack>/data/<namespace>/mastery/levels.json
+```
+
+```json
+{ "levels": [100, 250, 450, 700] }
+```
+
+Cumulative XP thresholds: `100` XP reaches level 1, `250` level 2, and
+so on; the level pins at the table's length past the last entry - the
+table owns both the steps **and** the cap while present, overriding
+`mastery.levelCurveBase`, `mastery.levelCurveGrowth` and
+`mastery.maxLevel` entirely.
+
+- **Exactly one owner**: zero tables = the config formula, one table =
+  it wins, several = an error naming every owner and the formula (a
+  conflict is an authoring bug, never a silent pick).
+- **Validation at load**: non-empty, finite, non-negative and strictly
+  ascending; a bad file logs and is ignored (fail to the formula).
+
 ## Scope
 
 - The Java type (`DefinitionOverlay`) is **internal** per
