@@ -99,4 +99,34 @@ class MasteryLevelsTest {
         assertEquals(1, MasteryLevels.level(100.0));
         assertTrue(MasteryLevels.level(10_000.0) > 1, "the formula keeps leveling");
     }
+
+    @Test
+    void tableProgressRunsBetweenTheThresholds() {
+        MasteryLevels.installForTests(new double[] {100.0, 250.0});
+        assertEquals(0.0, MasteryLevels.progress(-1.0), 1e-9, "degenerate reads as empty");
+        assertEquals(0.5, MasteryLevels.progress(50.0), 1e-9, "halfway to the first step");
+        assertEquals(0.0, MasteryLevels.progress(100.0), 1e-9,
+                "exactly at a level the next step starts empty");
+        assertEquals(100.0 / 150.0, MasteryLevels.progress(200.0), 1e-9,
+                "inside level 1: (200 - 100) / (250 - 100)");
+        assertEquals(1.0, MasteryLevels.progress(250.0), 1e-9,
+                "at the table's length the bar pins full - the table owns the cap");
+        assertEquals(1.0, MasteryLevels.progress(1_000_000.0), 1e-9);
+        assertEquals(0.0, MasteryLevels.progress(Double.NaN), 1e-9);
+    }
+
+    @Test
+    void formulaProgressAnswersWithoutATable() {
+        MasteryLevels.installForTests(null);
+        assertEquals(0.0, MasteryLevels.progress(0.0), 1e-9);
+        assertEquals(0.5, MasteryLevels.progress(50.0), 1e-9,
+                "level 0's step is the base (100 with no loaded config)");
+        assertEquals(0.0, MasteryLevels.progress(100.0), 1e-9,
+                "the level-1 step starts empty");
+        double inRange = MasteryLevels.progress(5_000.0);
+        assertTrue(inRange >= 0.0 && inRange <= 1.0,
+                "the formula path stays in range, got " + inRange);
+        assertEquals(1.0, MasteryLevels.progress(1.0e12), 1e-9,
+                "a pool past every configured step pins full");
+    }
 }

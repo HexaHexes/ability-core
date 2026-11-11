@@ -372,6 +372,14 @@ public final class AbilityCoreGameTests {
             throw new GameTestAssertException("levels must come from the server's curve, got "
                     + abilityEntry.level() + " expected " + expectedLevel);
         }
+        double expectedProgress = org.bitwisemadness.abilitycore.mastery.MasteryLevels
+                .progress(expectedHalf);
+        if (abilityEntry.progress() < 0.0 || abilityEntry.progress() > 1.0
+                || Math.abs(abilityEntry.progress() - expectedProgress) > 1.0e-9) {
+            throw new GameTestAssertException(
+                    "the snapshot must carry the server's in-level progress, got "
+                            + abilityEntry.progress() + " expected " + expectedProgress);
+        }
 
         // the offline answer: echo kept, no entries, never an error
         String unknown = java.util.UUID.randomUUID().toString();

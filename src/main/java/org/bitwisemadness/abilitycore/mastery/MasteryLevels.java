@@ -60,6 +60,42 @@ public final class MasteryLevels {
     }
 
     /**
+     * The pool's 0..1 progress inside its current level - the display's
+     * bar fill, from the SAME source of truth as {@link #level}: the
+     * table when one is loaded (between this level's threshold and the
+     * next, pinned at 1.0 at/above the table's length), else the config
+     * formula. Server-side state by design - clients read this off the
+     * query answer's {@code progress} field and never recompute it (a
+     * datapack table the client lacks would diverge).
+     *
+     * @param xp raw XP (degenerate inputs read as empty)
+     * @return progress in {@code [0, 1]}
+     */
+    public static double progress(double xp) {
+        double[] table = thresholds;
+        if (table != null) {
+            if (!Double.isFinite(xp) || xp <= 0.0) {
+                return 0.0;
+            }
+            int level = 0;
+            while (level < table.length && xp >= table[level]) {
+                level++;
+            }
+            if (level >= table.length) {
+                return 1.0;
+            }
+            double previous = level == 0 ? 0.0 : table[level - 1];
+            double next = table[level];
+            if (!(next > previous)) {
+                return 0.0; // unreachable: the parser demands strict ascent
+            }
+            return Math.max(0.0, Math.min(1.0, (xp - previous) / (next - previous)));
+        }
+        return MasteryCurve.progress(xp, CoreConfig.masteryMaxLevel(),
+                CoreConfig.masteryLevelCurveBase(), CoreConfig.masteryLevelCurveGrowth());
+    }
+
+    /**
      * Parses one datapack table ({@code {"levels": [100, 250, ...]}}):
      * non-empty, finite, non-negative and strictly ascending, else an
      * {@link IllegalArgumentException} naming the problem (the listener
