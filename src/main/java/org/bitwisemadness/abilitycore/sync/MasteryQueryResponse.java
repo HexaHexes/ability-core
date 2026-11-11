@@ -19,9 +19,9 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * The mastery snapshot a query answers with (REQ-CORE-12): one entry per
- * stored target (kind, id, XP, derived level), sorted for a stable UI,
- * echoing the requested player so a client can correlate replies. An
- * offline player answers with the echo and empty entries.
+ * stored target (kind, id, XP, derived level, in-level progress), sorted
+ * for a stable UI, echoing the requested player so a client can correlate
+ * replies. An offline player answers with the echo and empty entries.
  *
  * <p>The client fires {@link MasteryQueryAnsweredEvent} when this
  * arrives; core keeps no client-side copy (display-only, solicited-only
@@ -36,12 +36,15 @@ public record MasteryQueryResponse(String targetPlayer, List<Entry> entries)
     /**
      * One stored target's snapshot.
      *
-     * @param kind  {@code ABILITY} / {@code CATEGORY} / {@code SUBCATEGORY}
-     * @param id    the target id as a string
-     * @param xp    raw stored XP
-     * @param level the level the XP reaches on the current curve
+     * @param kind     {@code ABILITY} / {@code CATEGORY} / {@code SUBCATEGORY}
+     * @param id       the target id as a string
+     * @param xp       raw stored XP
+     * @param level    the level the XP reaches on the current curve
+     * @param progress the pool's 0..1 fill inside that level (the row
+     *                 meter's bar - server-computed like {@code level},
+     *                 never recomputed client-side)
      */
-    public record Entry(String kind, String id, double xp, int level) {
+    public record Entry(String kind, String id, double xp, int level, double progress) {
     }
 
     public static final Type<MasteryQueryResponse> TYPE = new Type<>(
@@ -61,6 +64,7 @@ public record MasteryQueryResponse(String targetPlayer, List<Entry> entries)
                         ByteBufCodecs.STRING_UTF8.encode(buf, entry.id());
                         ByteBufCodecs.DOUBLE.encode(buf, entry.xp());
                         buf.writeVarInt(entry.level());
+                        ByteBufCodecs.DOUBLE.encode(buf, entry.progress());
                     }
                 }
 
@@ -78,7 +82,8 @@ public record MasteryQueryResponse(String targetPlayer, List<Entry> entries)
                         String id = ByteBufCodecs.STRING_UTF8.decode(buf);
                         double xp = ByteBufCodecs.DOUBLE.decode(buf);
                         int level = buf.readVarInt();
-                        entries.add(new Entry(kind, id, xp, level));
+                        double progress = ByteBufCodecs.DOUBLE.decode(buf);
+                        entries.add(new Entry(kind, id, xp, level, progress));
                     }
                     return new MasteryQueryResponse(targetPlayer, List.copyOf(entries));
                 }
@@ -106,7 +111,7 @@ public record MasteryQueryResponse(String targetPlayer, List<Entry> entries)
             MasteryTarget parsed = MasteryTarget.parseKey(key);
             if (parsed != null) {
                 entries.add(new Entry(parsed.kind().name(), parsed.id().toString(), xp,
-                        MasteryLevels.level(xp)));
+                        MasteryLevels.level(xp), MasteryLevels.progress(xp)));
             }
         });
         entries.sort(Comparator.comparing(Entry::kind).thenComparing(Entry::id));

@@ -8,8 +8,9 @@ answer the signal with state.
 ## Channel discipline
 
 One registrar per mod: `event.registrar(modid).versioned(N).optional()`.
-Core's channel is at version **3** (1: baseline; 2: target hint, core#69;
-3: mode context, issue #113).
+Core's channel is at version **4** (1: baseline; 2: target hint, core#69;
+3: mode context, issue #113; 4: mastery progress in the query answer,
+REQ-CORE-12's row display).
 
 - `optional()` tolerates channel **absence** (one side lacks the mod) but
   never **version skew** - a mismatched version disconnects at negotiation
@@ -51,7 +52,7 @@ When a registered codec changes:
 | `AssignAbilityPayload` | playToServer | menu assign / replace / clear | `tensura-ability-hotbar` | slot + ability id + bar id |
 | `ActivateAbilityPayload` | playToServer | slot activation (Ctrl+digit / G), carrying the optional target hint and the slot's mode | **core** | id + source + slot + stamp + hint + mode; ~60-100 B typical |
 | `MasteryQueryRequest` | playToServer | an explicit UI request for one player's mastery snapshot (REQ-CORE-12) | **core** | one UUID string; the answer below is its only response |
-| `MasteryQueryResponse` | playToClient | the answer to `MasteryQueryRequest` - solicited only, never a push | **core** | echoed UUID + one entry per stored target (kind, id, xp, level), sorted; distinct targets only, far under the wire bound |
+| `MasteryQueryResponse` | playToClient | the answer to `MasteryQueryRequest` - solicited only, never a push | **core** | echoed UUID + one entry per stored target (kind, id, xp, level, progress), sorted; distinct targets only, far under the wire bound |
 | delta payloads | - | **deferred** | - | see amendment below |
 
 ### Serverbound budget

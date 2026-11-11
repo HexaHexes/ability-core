@@ -9,7 +9,7 @@ import org.bitwisemadness.abilitycore.AbilityCore;
 /**
  * Network channel registration (REQ-CORE-08, ADR-003).
  *
- * <p>One registrar, {@code versioned("3").optional()} - the org-idiomatic
+ * <p>One registrar, {@code versioned("4").optional()} - the org-idiomatic
  * pattern verified against ISS and Better Spellcasting. {@code optional()}
  * tolerates channel <em>absence</em> (mod not installed on one side) but
  * never <em>version skew</em> - codec changes require a version bump shipped
@@ -35,9 +35,10 @@ public final class NetworkRegistration {
     @SubscribeEvent
     public static void onRegisterPayloads(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar(AbilityCore.MOD_ID)
-                // 2 (core#69): target hint. 3 (issue #113): mode context.
-                // Additive payload types do not bump N (docs/sync.md).
-                .versioned("3")
+                // Version history (docs/sync.md): 2 target hint (core#69),
+                // 3 mode context (#113), 4 mastery progress (query answer).
+                // Additive payload types do not bump N.
+                .versioned("4")
                 .optional();
 
         registrar.playToServer(
