@@ -51,7 +51,20 @@ public final class MasteryEffects {
         return multiplier(player, abilityId, MasteryAxis.DURATION);
     }
 
-    private static double multiplier(@Nullable ServerPlayer player, ResourceLocation abilityId,
+    /**
+     * The multiplier for one axis, read against the given view - the
+     * effect read behind the four axis conveniences and the query
+     * answer's bonus list (REQ-CORE-12). Inert ({@code 1.0}) unless the
+     * system is enabled, the ability declared a spec, and the axis
+     * participates; a named handler replaces the default curve and any
+     * handler failure logs and falls back - an effect read never fails.
+     *
+     * @param player   the caster (null reads as disabled)
+     * @param abilityId the declared ability
+     * @param axis     the effect axis
+     * @return the multiplier in the axis's honest range
+     */
+    public static double multiplier(@Nullable ServerPlayer player, ResourceLocation abilityId,
             MasteryAxis axis) {
         if (!CoreConfig.masteryEnabled() || player == null || abilityId == null) {
             return 1.0;

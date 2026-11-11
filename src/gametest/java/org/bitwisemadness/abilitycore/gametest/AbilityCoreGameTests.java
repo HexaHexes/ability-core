@@ -329,7 +329,14 @@ public final class AbilityCoreGameTests {
         AbilityRegistries.installRegistryForTests(fixture);
         org.bitwisemadness.abilitycore.api.MasteryDeclarations.declare(abilityId,
                 org.bitwisemadness.abilitycore.api.MasterySpec.gained(10.0)
-                        .withShare(org.bitwisemadness.abilitycore.api.MasteryTarget.category(tree), 0.5));
+                        .withShare(org.bitwisemadness.abilitycore.api.MasteryTarget.category(tree), 0.5)
+                        .withEffect(org.bitwisemadness.abilitycore.api.MasteryAxis.COST,
+                                "query:quarter"));
+        // a distinct handler name: the award gametest declares its own
+        // concurrently in the same batch (duplicate names would collide)
+        org.bitwisemadness.abilitycore.api.MasteryEffectHandlers.declare(
+                org.bitwisemadness.abilitycore.api.MasteryAxis.COST, "query:quarter",
+                (caster, id, view) -> 0.25);
 
         var server = helper.getLevel().getServer();
         var profile = new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(),
@@ -379,6 +386,22 @@ public final class AbilityCoreGameTests {
             throw new GameTestAssertException(
                     "the snapshot must carry the server's in-level progress, got "
                             + abilityEntry.progress() + " expected " + expectedProgress);
+        }
+        // the ability entry carries its CURRENT effect bonuses (the pane's
+        // mastery-bonuses section): one declared axis, server-evaluated
+        if (abilityEntry.bonuses().size() != 1) {
+            throw new GameTestAssertException(
+                    "expected exactly the declared COST bonus, got "
+                            + abilityEntry.bonuses());
+        }
+        var bonus = abilityEntry.bonuses().get(0);
+        if (!"COST".equals(bonus.axis()) || Math.abs(bonus.multiplier() - 0.25) > 1.0e-9) {
+            throw new GameTestAssertException(
+                    "the bonus must be the handler's live answer, got " + bonus);
+        }
+        if (!categoryEntry.bonuses().isEmpty()) {
+            throw new GameTestAssertException(
+                    "only ability entries carry bonuses, got " + categoryEntry.bonuses());
         }
 
         // the offline answer: echo kept, no entries, never an error
@@ -449,6 +472,8 @@ public final class AbilityCoreGameTests {
         }
 
         org.bitwisemadness.abilitycore.api.MasteryDeclarations.remove(abilityId);
+        org.bitwisemadness.abilitycore.api.MasteryEffectHandlers.remove(
+                org.bitwisemadness.abilitycore.api.MasteryAxis.COST, "query:quarter");
         AbilityRegistries.installRegistryForTests(previous);
         helper.succeed();
     }

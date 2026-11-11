@@ -12,16 +12,21 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import org.bitwisemadness.abilitycore.AbilityCore;
+import org.bitwisemadness.abilitycore.api.MasteryAxis;
+import org.bitwisemadness.abilitycore.api.MasteryEffects;
+import org.bitwisemadness.abilitycore.api.MasterySpec;
 import org.bitwisemadness.abilitycore.api.MasteryTarget;
 import org.bitwisemadness.abilitycore.mastery.MasteryAttachments;
 import org.bitwisemadness.abilitycore.mastery.MasteryLevels;
+import org.bitwisemadness.abilitycore.mastery.MasteryOverlays;
 import org.jetbrains.annotations.Nullable;
 
 /**
  * The mastery snapshot a query answers with (REQ-CORE-12): one entry per
- * stored target (kind, id, XP, derived level, in-level progress), sorted
- * for a stable UI, echoing the requested player so a client can correlate
- * replies. An offline player answers with the echo and empty entries.
+ * stored target (kind, id, XP, derived level, in-level progress, and the
+ * ability's current effect bonuses), sorted for a stable UI, echoing the
+ * requested player so a client can correlate replies. An offline player
+ * answers with the echo and empty entries.
  *
  * <p>The client fires {@link MasteryQueryAnsweredEvent} when this
  * arrives; core keeps no client-side copy (display-only, solicited-only
@@ -43,8 +48,23 @@ public record MasteryQueryResponse(String targetPlayer, List<Entry> entries)
      * @param progress the pool's 0..1 fill inside that level (the row
      *                 meter's bar - server-computed like {@code level},
      *                 never recomputed client-side)
+     * @param bonuses  the ability's CURRENT effect bonuses - one per
+     *                 declared axis, server-evaluated against the
+     *                 overlay-merged spec and this player's view (empty
+     *                 for non-ability targets and undeclared axes: the
+     *                 pane shows exactly what the server would apply)
      */
-    public record Entry(String kind, String id, double xp, int level, double progress) {
+    public record Entry(String kind, String id, double xp, int level, double progress,
+            List<Bonus> bonuses) {
+    }
+
+    /**
+     * One declared effect axis's current multiplier.
+     *
+     * @param axis       {@code COST} / {@code CAST_TIME} / {@code POWER} / {@code DURATION}
+     * @param multiplier the value the domain would apply right now
+     */
+    public record Bonus(String axis, double multiplier) {
     }
 
     public static final Type<MasteryQueryResponse> TYPE = new Type<>(
@@ -52,6 +72,9 @@ public record MasteryQueryResponse(String targetPlayer, List<Entry> entries)
 
     /** Wire bound: entries are distinct targets, never near this many. */
     private static final int MAX_ENTRIES = 4096;
+
+    /** Wire bound: one bonus per declared axis (four exist today). */
+    private static final int MAX_BONUSES = 16;
 
     public static final StreamCodec<RegistryFriendlyByteBuf, MasteryQueryResponse> STREAM_CODEC =
             new StreamCodec<>() {
@@ -65,6 +88,11 @@ public record MasteryQueryResponse(String targetPlayer, List<Entry> entries)
                         ByteBufCodecs.DOUBLE.encode(buf, entry.xp());
                         buf.writeVarInt(entry.level());
                         ByteBufCodecs.DOUBLE.encode(buf, entry.progress());
+                        buf.writeVarInt(entry.bonuses().size());
+                        for (Bonus bonus : entry.bonuses()) {
+                            ByteBufCodecs.STRING_UTF8.encode(buf, bonus.axis());
+                            ByteBufCodecs.DOUBLE.encode(buf, bonus.multiplier());
+                        }
                     }
                 }
 
@@ -83,7 +111,20 @@ public record MasteryQueryResponse(String targetPlayer, List<Entry> entries)
                         double xp = ByteBufCodecs.DOUBLE.decode(buf);
                         int level = buf.readVarInt();
                         double progress = ByteBufCodecs.DOUBLE.decode(buf);
-                        entries.add(new Entry(kind, id, xp, level, progress));
+                        int bonusCount = buf.readVarInt();
+                        if (bonusCount < 0 || bonusCount > MAX_BONUSES) {
+                            throw new IllegalArgumentException(
+                                    "mastery query response bonus count out of range: "
+                                            + bonusCount);
+                        }
+                        List<Bonus> bonuses = new ArrayList<>(bonusCount);
+                        for (int j = 0; j < bonusCount; j++) {
+                            String axis = ByteBufCodecs.STRING_UTF8.decode(buf);
+                            double multiplier = ByteBufCodecs.DOUBLE.decode(buf);
+                            bonuses.add(new Bonus(axis, multiplier));
+                        }
+                        entries.add(new Entry(kind, id, xp, level, progress,
+                                List.copyOf(bonuses)));
                     }
                     return new MasteryQueryResponse(targetPlayer, List.copyOf(entries));
                 }
@@ -110,12 +151,35 @@ public record MasteryQueryResponse(String targetPlayer, List<Entry> entries)
         data.entries().forEach((key, xp) -> {
             MasteryTarget parsed = MasteryTarget.parseKey(key);
             if (parsed != null) {
+                boolean ability = parsed.kind() == MasteryTarget.Kind.ABILITY;
                 entries.add(new Entry(parsed.kind().name(), parsed.id().toString(), xp,
-                        MasteryLevels.level(xp), MasteryLevels.progress(xp)));
+                        MasteryLevels.level(xp), MasteryLevels.progress(xp),
+                        ability ? bonusesFor(target, parsed.id()) : List.of()));
             }
         });
         entries.sort(Comparator.comparing(Entry::kind).thenComparing(Entry::id));
         return new MasteryQueryResponse(targetPlayer, List.copyOf(entries));
+    }
+
+    /**
+     * One ability's CURRENT effect bonuses: every axis its spec declares,
+     * evaluated against this player's live view - the overlay-merged spec
+     * and the real handler/curve answer, so the pane shows exactly what
+     * the server would apply (never a client-side re-derivation).
+     */
+    private static List<Bonus> bonusesFor(ServerPlayer player, ResourceLocation id) {
+        MasterySpec spec = MasteryOverlays.specFor(id);
+        if (spec == null || spec.effects().isEmpty()) {
+            return List.of();
+        }
+        List<Bonus> bonuses = new ArrayList<>(spec.effects().size());
+        for (MasteryAxis axis : MasteryAxis.values()) {
+            if (spec.effects().containsKey(axis)) {
+                bonuses.add(new Bonus(axis.name(),
+                        MasteryEffects.multiplier(player, id, axis)));
+            }
+        }
+        return List.copyOf(bonuses);
     }
 
     /** Client-side: hand the arrived snapshot to listeners (display code). */
