@@ -3,6 +3,7 @@ package org.bitwisemadness.abilitycore.gametest;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import net.minecraft.core.MappedRegistry;
 import net.minecraft.core.Registry;
 import net.minecraft.gametest.framework.GameTest;
@@ -297,5 +298,213 @@ public final class AbilityCoreGameTests {
         AbilityCore.HANDLERS.remove(abilityId);
         AbilityRegistries.installRegistryForTests(previous);
         helper.succeed();
+    }
+
+    /**
+     * The mastery query round-trip (REQ-CORE-12's solicited exchange, the
+     * payload the phase-3 display consumes): a granted player's snapshot
+     * carries one entry per stored target with the WIRE kind vocabulary
+     * and SERVER-truth levels, an unknown player answers with the echo
+     * and no entries, and the request handler relays the builder's answer
+     * through its reply channel (inline work, correlated by uuid).
+     */
+    @GameTest(template = "empty")
+    public static void mastery_query_answers_with_stored_entries(GameTestHelper helper)
+            throws GameTestAssertException {
+        var abilityId = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                AbilityCore.MOD_ID, "gametest_query");
+        var tree = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                "tensura", "mastery_tree");
+
+        // fixture registry + declared spec (share 50/50), as the mastery e2e
+        var previous = AbilityRegistries.registry();
+        var fixture = new MappedRegistry<org.bitwisemadness.abilitycore.api.AbilityDefinition>(
+                AbilityRegistries.ABILITY_REGISTRY_KEY, com.mojang.serialization.Lifecycle.stable(), false);
+        Registry.register(fixture, abilityId, new org.bitwisemadness.abilitycore.api.AbilityDefinition(
+                "tensura.skill.gametest_query", null,
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
+                org.bitwisemadness.abilitycore.api.ActivationType.INSTANT,
+                List.of(), org.bitwisemadness.abilitycore.api.ConsumptionStrategies.ALL,
+                org.bitwisemadness.abilitycore.api.AmountResolvers.STATIC, Set.of(), Map.of()));
+        AbilityRegistries.installRegistryForTests(fixture);
+        org.bitwisemadness.abilitycore.api.MasteryDeclarations.declare(abilityId,
+                org.bitwisemadness.abilitycore.api.MasterySpec.gained(10.0)
+                        .withShare(org.bitwisemadness.abilitycore.api.MasteryTarget.category(tree), 0.5));
+
+        var server = helper.getLevel().getServer();
+        var profile = new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(),
+                "QueryProbe");
+        var player = new net.minecraft.server.level.ServerPlayer(server, helper.getLevel(),
+                profile, net.minecraft.server.level.ClientInformation.createDefault());
+        org.bitwisemadness.abilitycore.api.MasteryAwards.award(player, abilityId,
+                org.bitwisemadness.abilitycore.api.MasteryTrigger.ACTIVATION);
+
+        // the online answer: echo + one entry per stored target, server level
+        String uuid = player.getUUID().toString();
+        var online = org.bitwisemadness.abilitycore.sync.MasteryQueryResponse.of(uuid, player);
+        if (!uuid.equals(online.targetPlayer())) {
+            throw new GameTestAssertException("the answer must echo the requested uuid, got "
+                    + online.targetPlayer());
+        }
+        if (online.entries().size() != 2) {
+            throw new GameTestAssertException("expected the ability and category entries, got "
+                    + online.entries());
+        }
+        var abilityEntry = online.entries().stream()
+                .filter(e -> "ABILITY".equals(e.kind()) && abilityId.toString().equals(e.id()))
+                .findFirst().orElse(null);
+        var categoryEntry = online.entries().stream()
+                .filter(e -> "CATEGORY".equals(e.kind()) && tree.toString().equals(e.id()))
+                .findFirst().orElse(null);
+        if (abilityEntry == null || categoryEntry == null) {
+            throw new GameTestAssertException(
+                    "the wire kind vocabulary must name both entries: " + online.entries());
+        }
+        double expectedHalf = 5.0;
+        if (Math.abs(abilityEntry.xp() - expectedHalf) > 1.0e-9
+                || Math.abs(categoryEntry.xp() - expectedHalf) > 1.0e-9) {
+            throw new GameTestAssertException("expected the 5/5 split in the snapshot, got "
+                    + abilityEntry.xp() + "/" + categoryEntry.xp());
+        }
+        int expectedLevel = org.bitwisemadness.abilitycore.mastery.MasteryLevels
+                .level(expectedHalf);
+        if (abilityEntry.level() != expectedLevel) {
+            throw new GameTestAssertException("levels must come from the server's curve, got "
+                    + abilityEntry.level() + " expected " + expectedLevel);
+        }
+
+        // the offline answer: echo kept, no entries, never an error
+        String unknown = java.util.UUID.randomUUID().toString();
+        var offline = org.bitwisemadness.abilitycore.sync.MasteryQueryResponse.of(unknown, null);
+        if (!unknown.equals(offline.targetPlayer()) || !offline.entries().isEmpty()) {
+            throw new GameTestAssertException(
+                    "an unknown player must answer echo + empty, got " + offline);
+        }
+
+        // the handler's relay: inline work, reply captured (the target is not
+        // on this list, so the honest offline answer comes back through reply)
+        var captured = new AtomicReference<org.bitwisemadness.abilitycore.sync.MasteryQueryResponse>();
+        var context = new net.neoforged.neoforge.network.handling.IPayloadContext() {
+            @Override
+            public net.neoforged.neoforge.common.extensions.ICommonPacketListener listener() {
+                return refusingListener();
+            }
+
+            @Override
+            public net.minecraft.world.entity.player.Player player() {
+                return player;
+            }
+
+            @Override
+            public java.util.concurrent.CompletableFuture<Void> enqueueWork(Runnable task) {
+                task.run();
+                return java.util.concurrent.CompletableFuture.completedFuture(null);
+            }
+
+            @Override
+            public <T> java.util.concurrent.CompletableFuture<T> enqueueWork(
+                    java.util.function.Supplier<T> supplier) {
+                return java.util.concurrent.CompletableFuture.completedFuture(supplier.get());
+            }
+
+            @Override
+            public net.minecraft.network.protocol.PacketFlow flow() {
+                return net.minecraft.network.protocol.PacketFlow.SERVERBOUND;
+            }
+
+            @Override
+            public void handle(
+                    net.minecraft.network.protocol.common.custom.CustomPacketPayload payload) {
+                // nothing: the handler answers through reply
+            }
+
+            @Override
+            public void finishCurrentTask(net.minecraft.server.network.ConfigurationTask.Type type) {
+                // configuration-phase only: irrelevant to this payload
+            }
+
+            @Override
+            public void reply(net.minecraft.network.protocol.common.custom.CustomPacketPayload p) {
+                captured.set((org.bitwisemadness.abilitycore.sync.MasteryQueryResponse) p);
+            }
+        };
+        org.bitwisemadness.abilitycore.sync.MasteryQueryRequest.handle(
+                new org.bitwisemadness.abilitycore.sync.MasteryQueryRequest(unknown), context);
+        var relayed = captured.get();
+        if (relayed == null) {
+            throw new GameTestAssertException("the handler must answer through reply()");
+        }
+        if (!unknown.equals(relayed.targetPlayer()) || !relayed.entries().isEmpty()) {
+            throw new GameTestAssertException(
+                    "the relayed answer must echo + stay empty for a list-absent player, got "
+                            + relayed);
+        }
+
+        org.bitwisemadness.abilitycore.api.MasteryDeclarations.remove(abilityId);
+        AbilityRegistries.installRegistryForTests(previous);
+        helper.succeed();
+    }
+
+    /**
+     * A listener that refuses every call: the handler's contract needs only
+     * player/enqueueWork/reply, so consulting the listener would be contract
+     * drift this stub names loudly - and it satisfies the interface's
+     * {@code @Nonnull} honestly instead of returning null.
+     */
+    private static net.neoforged.neoforge.common.extensions.ICommonPacketListener
+            refusingListener() {
+        String where = "the mastery query must never consult the packet listener";
+        return new net.neoforged.neoforge.common.extensions.ICommonPacketListener() {
+            @Override
+            public void send(net.minecraft.network.protocol.Packet<?> packet) {
+                throw new UnsupportedOperationException(where);
+            }
+
+            @Override
+            public void send(
+                    net.minecraft.network.protocol.common.custom.CustomPacketPayload payload) {
+                throw new UnsupportedOperationException(where);
+            }
+
+            @Override
+            public void disconnect(net.minecraft.network.chat.Component reason) {
+                throw new UnsupportedOperationException(where);
+            }
+
+            @Override
+            public net.minecraft.network.Connection getConnection() {
+                throw new UnsupportedOperationException(where);
+            }
+
+            @Override
+            public net.minecraft.util.thread.ReentrantBlockableEventLoop<?> getMainThreadEventLoop() {
+                throw new UnsupportedOperationException(where);
+            }
+
+            @Override
+            public net.neoforged.neoforge.network.connection.ConnectionType getConnectionType() {
+                throw new UnsupportedOperationException(where);
+            }
+
+            @Override
+            public net.minecraft.network.protocol.PacketFlow flow() {
+                throw new UnsupportedOperationException(where);
+            }
+
+            @Override
+            public net.minecraft.network.ConnectionProtocol protocol() {
+                throw new UnsupportedOperationException(where);
+            }
+
+            @Override
+            public void onDisconnect(net.minecraft.network.DisconnectionDetails details) {
+                throw new UnsupportedOperationException(where);
+            }
+
+            @Override
+            public boolean isAcceptingMessages() {
+                throw new UnsupportedOperationException(where);
+            }
+        };
     }
 }
