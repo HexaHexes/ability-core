@@ -169,8 +169,10 @@ public final class AbilityCoreGameTests {
      * declared cost runs the real pipeline - the declared COST effect halves
      * the priced charge (health drops by 2, not 4), the ACTIVATION award
      * lands split 50/50 between the ability's own target and its category
-     * share, an undeclared trigger grants nothing, and the view reads back
-     * the stored XP. Cleanup restores every seam.
+     * share, an undeclared trigger grants nothing, the view reads back
+     * the stored XP, and the toggle channel (MENU + NO_SLOT) is the one
+     * shape that reaches ACTED without granting (MENU with a slot does).
+     * Cleanup restores every seam.
      */
     @GameTest(template = "empty")
     public static void mastery_awards_and_discounts_the_charge(GameTestHelper helper)
@@ -251,6 +253,42 @@ public final class AbilityCoreGameTests {
         var view = org.bitwisemadness.abilitycore.api.MasteryView.of(player, abilityId);
         if (Math.abs(view.ownXp() - 5.0) > 1.0e-9) {
             throw new GameTestAssertException("view ownXp expected 5.0, got " + view.ownXp());
+        }
+
+        // the toggle channel (MENU + NO_SLOT, Toggle's wire shape) reaches
+        // ACTED through the pipeline but grants nothing - flipping a switch
+        // is not activating the ability (REQ-CORE-12's one skip)
+        var toggle = AbilityCore.PIPELINE.run(
+                org.bitwisemadness.abilitycore.api.ActivationRequest.of(abilityId,
+                        org.bitwisemadness.abilitycore.api.ActivationSource.MENU),
+                player);
+        if (!toggle.isSuccess()) {
+            throw new GameTestAssertException("toggle-shaped run expected success, got "
+                    + toggle.outcome());
+        }
+        double afterToggle = data.xp(org.bitwisemadness.abilitycore.api.MasteryTarget
+                .ability(abilityId).key());
+        if (Math.abs(afterToggle - 5.0) > 1.0e-9) {
+            throw new GameTestAssertException(
+                    "the toggle channel must grant nothing, got " + afterToggle);
+        }
+
+        // the rule keys on the shape, not the source alone: MENU naming a
+        // real slot is a menu activation and still awards
+        var menuSlotted = AbilityCore.PIPELINE.run(
+                org.bitwisemadness.abilitycore.api.ActivationRequest.of(abilityId,
+                                org.bitwisemadness.abilitycore.api.ActivationSource.MENU)
+                        .withSlot(1),
+                player);
+        if (!menuSlotted.isSuccess()) {
+            throw new GameTestAssertException("menu run expected success, got "
+                    + menuSlotted.outcome());
+        }
+        double afterMenu = data.xp(org.bitwisemadness.abilitycore.api.MasteryTarget
+                .ability(abilityId).key());
+        if (Math.abs(afterMenu - 10.0) > 1.0e-9) {
+            throw new GameTestAssertException(
+                    "a MENU activation with a slot must grant the gain, got " + afterMenu);
         }
 
         org.bitwisemadness.abilitycore.api.MasteryDeclarations.remove(abilityId);

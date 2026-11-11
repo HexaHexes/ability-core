@@ -10,6 +10,7 @@ import net.minecraft.server.level.ServerPlayer;
 import org.bitwisemadness.abilitycore.api.ActivationOutcome;
 import org.bitwisemadness.abilitycore.api.ActivationRequest;
 import org.bitwisemadness.abilitycore.api.ActivationResult;
+import org.bitwisemadness.abilitycore.api.ActivationSource;
 import org.bitwisemadness.abilitycore.api.Affordability;
 import org.bitwisemadness.abilitycore.api.ChargingModel;
 import org.bitwisemadness.abilitycore.api.MasteryAwards;
@@ -145,16 +146,33 @@ public final class ActivationPipeline {
         // COOLDOWN start - built-in: EXTERNAL-owned cooldowns start post-activation
         // (REQ-CORE-05; NATIVE cooldowns are started by the provider's own pipeline)
         ExternalCooldownStep.startExternalCooldown(request, player);
-        // MASTERY - built-in: declared abilities grant on any non-refusal
-        // (REQ-CORE-12). Post-activation like charge and cooldown start: a
-        // failure is logged, never able to un-act or re-refuse the result.
-        try {
-            MasteryAwards.award(player, request.abilityId(), MasteryTrigger.ACTIVATION);
-        } catch (RuntimeException e) {
-            LOGGER.error("Mastery award failed for {} after successful activation",
-                    request.abilityId(), e);
+        // MASTERY - built-in: a successful activation grants a declared
+        // ability (REQ-CORE-12), post-activation like charge/cooldown
+        // start; the toggle channel grants nothing (isToggleChannel).
+        if (!isToggleChannel(request)) {
+            try {
+                MasteryAwards.award(player, request.abilityId(), MasteryTrigger.ACTIVATION);
+            } catch (RuntimeException e) {
+                LOGGER.error("Mastery award failed for {} after successful activation",
+                        request.abilityId(), e);
+            }
         }
         return result;
+    }
+
+    /**
+     * The Enable/Disable control's exact wire shape ({@link
+     * org.bitwisemadness.abilitycore.api.Toggle}'s javadoc): a {@link
+     * ActivationSource#MENU} request with {@link ActivationRequest#NO_SLOT}.
+     * The control executes through this pipeline like any activation - a
+     * provider handler flips its toggle state and answers ACTED - but the
+     * press of a switch is not the use of the ability, so the mastery
+     * award skips it (REQ-CORE-12; the shape, not the source alone, is
+     * the rule: a MENU request naming a real slot still awards).
+     */
+    private static boolean isToggleChannel(ActivationRequest request) {
+        return request.source() == ActivationSource.MENU
+                && request.slotContext() == ActivationRequest.NO_SLOT;
     }
 
     private void chargeExternally(ActivationRequest request, ServerPlayer player,
