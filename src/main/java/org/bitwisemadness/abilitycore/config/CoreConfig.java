@@ -72,37 +72,34 @@ public final class CoreConfig {
     /** Server key: global multiplier on every routed XP grant. */
     public static final String MASTERY_GAIN_MULTIPLIER_KEY = "mastery.globalGainMultiplier";
 
-    /** Server key: the level ceiling every curve stops at. */
-    public static final String MASTERY_MAX_LEVEL_KEY = "mastery.maxLevel";
-
     /** Server key: XP for the first level step (curve fallback). */
     public static final String MASTERY_CURVE_BASE_KEY = "mastery.levelCurveBase";
 
     /** Server key: per-step growth of the XP curve (1 = linear). */
     public static final String MASTERY_CURVE_GROWTH_KEY = "mastery.levelCurveGrowth";
 
-    /** Server key: default cost reduction per mastery level. */
+    /** Server key: the COST approach rate toward its asymptote. */
     public static final String MASTERY_COST_PER_LEVEL_KEY = "mastery.costReductionPerLevel";
 
-    /** Server key: cap on the default cost reduction. */
+    /** Server key: the cost-reduction asymptote (X). */
     public static final String MASTERY_MAX_COST_KEY = "mastery.maxCostReduction";
 
-    /** Server key: default cast-time reduction per mastery level. */
+    /** Server key: the CAST_TIME approach rate toward its asymptote. */
     public static final String MASTERY_TIME_PER_LEVEL_KEY = "mastery.castTimeReductionPerLevel";
 
-    /** Server key: cap on the default cast-time reduction. */
+    /** Server key: the cast-time-reduction asymptote (Z). */
     public static final String MASTERY_MAX_TIME_KEY = "mastery.maxCastTimeReduction";
 
-    /** Server key: default power increase per mastery level. */
+    /** Server key: the POWER approach rate toward its asymptote. */
     public static final String MASTERY_POWER_PER_LEVEL_KEY = "mastery.powerIncreasePerLevel";
 
-    /** Server key: cap on the default power increase. */
+    /** Server key: the power-bonus asymptote (Y). */
     public static final String MASTERY_MAX_POWER_KEY = "mastery.maxPowerIncrease";
 
-    /** Server key: default duration increase per mastery level. */
+    /** Server key: the DURATION approach rate toward its asymptote. */
     public static final String MASTERY_DURATION_PER_LEVEL_KEY = "mastery.durationIncreasePerLevel";
 
-    /** Server key: cap on the default duration increase. */
+    /** Server key: the duration-bonus asymptote (A). */
     public static final String MASTERY_MAX_DURATION_KEY = "mastery.maxDurationIncrease";
 
     /** Eligibility refusal debug-log modes (read live, see class javadoc). */
@@ -220,12 +217,6 @@ public final class CoreConfig {
                             + "without disabling effects.")
                     .defineInRange(MASTERY_GAIN_MULTIPLIER_KEY, 1.0, 0.0, 100.0);
 
-    /** The level ceiling every mastery curve stops at. */
-    public static final ModConfigSpec.IntValue MASTERY_MAX_LEVEL =
-            SERVER.comment("Highest mastery level any target can reach; XP beyond the cap "
-                            + "keeps accumulating but grants no further levels.")
-                    .defineInRange(MASTERY_MAX_LEVEL_KEY, 100, 1, 1000);
-
     /** XP for the first level step (the config fallback curve). */
     public static final ModConfigSpec.DoubleValue MASTERY_CURVE_BASE =
             SERVER.comment("XP required for the first level step; later steps cost "
@@ -238,50 +229,58 @@ public final class CoreConfig {
                             + "curve shape is linear), above 1 = each level costs more.")
                     .defineInRange(MASTERY_CURVE_GROWTH_KEY, 1.15, 1.0, 10.0);
 
-    /** Default cost reduction per mastery level. */
+    /** The COST effect's approach rate toward its asymptote. */
     public static final ModConfigSpec.DoubleValue MASTERY_COST_PER_LEVEL =
-            SERVER.comment("Default COST effect: this fraction off the casting cost per "
-                            + "aggregate mastery level, capped by maxCostReduction.")
+            SERVER.comment("Default COST effect's approach rate: the reduction reaches "
+                            + "maxCostReduction as max x (1 - e^(-rate x level)) - "
+                            + "asymptotic, never crossing it as the level grows.")
                     .defineInRange(MASTERY_COST_PER_LEVEL_KEY, 0.005, 0.0, 1.0);
 
-    /** Cap on the default cost reduction (always < 1 so a cost never hits 0). */
+    /** The cost-reduction asymptote (always < 1 so a cost never hits 0). */
     public static final ModConfigSpec.DoubleValue MASTERY_MAX_COST =
-            SERVER.comment("Cap on the default cost reduction (0.95 = a cost can never "
-                            + "drop below 5% of its nominal amount).")
+            SERVER.comment("The cost-reduction ASYMPTOTE (the owner's X): the reduction "
+                            + "nears but never reaches it (0.25 = a cost never drops "
+                            + "below 75% of its nominal amount).")
                     .defineInRange(MASTERY_MAX_COST_KEY, 0.25, 0.0, 0.95);
 
-    /** Default cast-time reduction per mastery level. */
+    /** The CAST_TIME effect's approach rate toward its asymptote. */
     public static final ModConfigSpec.DoubleValue MASTERY_TIME_PER_LEVEL =
-            SERVER.comment("Default CAST_TIME effect: this fraction off the cast time per "
-                            + "aggregate mastery level, capped by maxCastTimeReduction.")
+            SERVER.comment("Default CAST_TIME effect's approach rate: the reduction "
+                            + "reaches maxCastTimeReduction as max x (1 - e^(-rate x "
+                            + "level)) - asymptotic, never crossing it.")
                     .defineInRange(MASTERY_TIME_PER_LEVEL_KEY, 0.005, 0.0, 1.0);
 
-    /** Cap on the default cast-time reduction. */
+    /** The cast-time-reduction asymptote (the owner's Z). */
     public static final ModConfigSpec.DoubleValue MASTERY_MAX_TIME =
-            SERVER.comment("Cap on the default cast-time reduction (same 5% floor rule "
-                            + "as costs).")
+            SERVER.comment("The cast-time-reduction ASYMPTOTE (the owner's Z): nears but "
+                            + "never reaches it (0.25 = a cast never drops below 75% of "
+                            + "its nominal time).")
                     .defineInRange(MASTERY_MAX_TIME_KEY, 0.25, 0.0, 0.95);
 
-    /** Default power increase per mastery level. */
+    /** The POWER effect's approach rate toward its asymptote. */
     public static final ModConfigSpec.DoubleValue MASTERY_POWER_PER_LEVEL =
-            SERVER.comment("Default POWER effect: this fractional bonus per aggregate "
-                            + "mastery level, capped by maxPowerIncrease.")
+            SERVER.comment("Default POWER effect's approach rate: the bonus reaches "
+                            + "maxPowerIncrease as max x (1 - e^(-rate x level)) - "
+                            + "asymptotic, never crossing it.")
                     .defineInRange(MASTERY_POWER_PER_LEVEL_KEY, 0.01, 0.0, 10.0);
 
-    /** Cap on the default power increase. */
+    /** The power-bonus asymptote (the owner's Y). */
     public static final ModConfigSpec.DoubleValue MASTERY_MAX_POWER =
-            SERVER.comment("Cap on the default power bonus (0.5 = at most +50%).")
+            SERVER.comment("The power-bonus ASYMPTOTE (the owner's Y): nears but never "
+                            + "reaches it (0.5 = at most +50%, approached forever).")
                     .defineInRange(MASTERY_MAX_POWER_KEY, 0.5, 0.0, 1000.0);
 
-    /** Default duration increase per mastery level. */
+    /** The DURATION effect's approach rate toward its asymptote. */
     public static final ModConfigSpec.DoubleValue MASTERY_DURATION_PER_LEVEL =
-            SERVER.comment("Default DURATION effect: this fractional bonus per aggregate "
-                            + "mastery level, capped by maxDurationIncrease.")
+            SERVER.comment("Default DURATION effect's approach rate: the bonus reaches "
+                            + "maxDurationIncrease as max x (1 - e^(-rate x level)) - "
+                            + "asymptotic, never crossing it.")
                     .defineInRange(MASTERY_DURATION_PER_LEVEL_KEY, 0.01, 0.0, 10.0);
 
-    /** Cap on the default duration increase. */
+    /** The duration-bonus asymptote (the owner's A). */
     public static final ModConfigSpec.DoubleValue MASTERY_MAX_DURATION =
-            SERVER.comment("Cap on the default duration bonus (0.5 = at most +50%).")
+            SERVER.comment("The duration-bonus ASYMPTOTE (the owner's A): nears but never "
+                            + "reaches it (0.5 = at most +50%, approached forever).")
                     .defineInRange(MASTERY_MAX_DURATION_KEY, 0.5, 0.0, 1000.0);
 
     /** Core's SERVER spec - reference registration for the shared contract. */
@@ -374,12 +373,6 @@ public final class CoreConfig {
     public static double masteryGlobalGainMultiplier() {
         return ConfigDiagnostics.readOrDefault(MASTERY_GAIN_MULTIPLIER_KEY,
                 () -> MASTERY_GAIN_MULTIPLIER.get(), 1.0);
-    }
-
-    /** The level ceiling: read live, default 100. */
-    public static int masteryMaxLevel() {
-        return ConfigDiagnostics.readOrDefault(MASTERY_MAX_LEVEL_KEY,
-                () -> MASTERY_MAX_LEVEL.get(), 100);
     }
 
     /** The curve's first-step XP: read live, default 100. */

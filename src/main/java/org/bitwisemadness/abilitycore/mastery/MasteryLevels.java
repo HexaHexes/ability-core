@@ -10,9 +10,11 @@ import org.slf4j.Logger;
 /**
  * The XP-to-level source of truth (REQ-CORE-12): a datapack threshold
  * table when one is loaded, otherwise the server-config formula. The
- * table is <b>authoritative while present</b> - it defines both the
- * steps and the cap (its length) - so a pack that ships
- * {@code data/<ns>/mastery/levels.json} owns progression pacing outright.
+ * table is <b>authoritative while present</b> - it defines the steps,
+ * and its data bounds the levels it ships - so a pack that ships
+ * {@code data/<ns>/mastery/levels.json} owns progression pacing
+ * outright; the formula path is <b>unbounded</b> (the effect
+ * asymptotes in {@code MasteryEffects} bound what mastery does instead).
  *
  * <p>Exactly-one rule (the fleet's loud-ownership convention): zero
  * tables = formula, one table = it wins, several = an error naming every
@@ -37,8 +39,9 @@ public final class MasteryLevels {
 
     /**
      * The level an XP pool reaches: the table when present (count of
-     * thresholds at or below the pool, no cap beyond the table's length),
-     * otherwise the config formula.
+     * thresholds at or below the pool - its data bounds it), otherwise
+     * the config formula, which is <b>unbounded</b> (the effect
+     * asymptotes bound what mastery does instead).
      *
      * @param xp raw XP (degenerate inputs read as level 0)
      * @return the level
@@ -55,18 +58,19 @@ public final class MasteryLevels {
             }
             return level;
         }
-        return MasteryCurve.level(xp, CoreConfig.masteryMaxLevel(),
-                CoreConfig.masteryLevelCurveBase(), CoreConfig.masteryLevelCurveGrowth());
+        return MasteryCurve.level(xp, CoreConfig.masteryLevelCurveBase(),
+                CoreConfig.masteryLevelCurveGrowth());
     }
 
     /**
      * The pool's 0..1 progress inside its current level - the display's
      * bar fill, from the SAME source of truth as {@link #level}: the
      * table when one is loaded (between this level's threshold and the
-     * next, pinned at 1.0 at/above the table's length), else the config
-     * formula. Server-side state by design - clients read this off the
-     * query answer's {@code progress} field and never recompute it (a
-     * datapack table the client lacks would diverge).
+     * next, pinned at 1.0 at/above the table's finite data), else the
+     * config formula, whose unbounded levels keep the fill inside
+     * {@code [0, 1)} forever. Server-side state by design - clients read
+     * this off the query answer's {@code progress} field and never
+     * recompute it (a datapack table the client lacks would diverge).
      *
      * @param xp raw XP (degenerate inputs read as empty)
      * @return progress in {@code [0, 1]}
@@ -91,8 +95,8 @@ public final class MasteryLevels {
             }
             return Math.max(0.0, Math.min(1.0, (xp - previous) / (next - previous)));
         }
-        return MasteryCurve.progress(xp, CoreConfig.masteryMaxLevel(),
-                CoreConfig.masteryLevelCurveBase(), CoreConfig.masteryLevelCurveGrowth());
+        return MasteryCurve.progress(xp, CoreConfig.masteryLevelCurveBase(),
+                CoreConfig.masteryLevelCurveGrowth());
     }
 
     /**

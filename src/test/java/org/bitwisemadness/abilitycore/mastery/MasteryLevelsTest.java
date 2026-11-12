@@ -126,7 +126,8 @@ class MasteryLevelsTest {
         double inRange = MasteryLevels.progress(5_000.0);
         assertTrue(inRange >= 0.0 && inRange <= 1.0,
                 "the formula path stays in range, got " + inRange);
-        assertEquals(1.0, MasteryLevels.progress(1.0e12), 1e-9,
-                "a pool past every configured step pins full");
+        double vast = MasteryLevels.progress(1.0e12);
+        assertTrue(vast >= 0.0 && vast < 1.0,
+                "the unbounded formula fill never pins at 1.0, got " + vast);
     }
 }
