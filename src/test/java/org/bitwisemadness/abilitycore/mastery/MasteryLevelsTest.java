@@ -21,10 +21,11 @@ import org.junit.jupiter.api.Test;
  */
 class MasteryLevelsTest {
 
+    // keys shaped as vanilla produces them: mastery/ and .json stripped
     private static final ResourceLocation ONE =
-            ResourceLocation.fromNamespaceAndPath("pack_a", "mastery/levels.json");
+            ResourceLocation.fromNamespaceAndPath("pack_a", "levels");
     private static final ResourceLocation TWO =
-            ResourceLocation.fromNamespaceAndPath("pack_b", "mastery/levels.json");
+            ResourceLocation.fromNamespaceAndPath("pack_b", "levels");
 
     @AfterEach
     void isolate() {
