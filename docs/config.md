@@ -148,6 +148,8 @@ error.
 | `ability_core-server.toml` | `mastery.maxPowerIncrease` | number, 0..1000 | `0.5` | `MasteryEffects` POWER default curve (live, per read) |
 | `ability_core-server.toml` | `mastery.durationIncreasePerLevel` | number, 0..10 | `0.01` | `MasteryEffects` DURATION default curve (live, per read) |
 | `ability_core-server.toml` | `mastery.maxDurationIncrease` | number, 0..1000 | `0.5` | `MasteryEffects` DURATION default curve (live, per read) |
+| `ability_core-server.toml` | `mastery.rangeIncreasePerLevel` | number, 0..10 | `0.05` | `MasteryEffects` RANGE default curve - ~99% of cap by level 100 (live, per read) |
+| `ability_core-server.toml` | `mastery.maxRangeIncrease` | number, 0..1000 | `0.25` | `MasteryEffects` RANGE default curve (live, per read) |
 | `ability_core-client.toml` | `diagnostics.playerNotices` | boolean | `true` | consumers' client code (core renders nothing; the reference CLIENT shape) |
 
 **Core's layer-1 clamps (code, never config):** a target-hint param string

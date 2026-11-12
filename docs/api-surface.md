@@ -643,7 +643,7 @@ storage writes, no awards, and inert (`1.0`) effect reads.
   routes through the share list, `awardTo` writes one target literally
   (no shares, no global multiplier). `mastery.enabled` is the master
   switch; `mastery.globalGainMultiplier` scales routed grants only.
-- **Effects**: `MasteryEffects.{cost,castTime,power,duration}Multiplier`
+- **Effects**: `MasteryEffects.{cost,castTime,power,duration,range}Multiplier`
   return the per-cast multiplier (`1.0` = inert; undeclared, disabled,
   or non-participating axes all land there). Core applies COST inside
   `ResourceChargeStep` - after amount resolution, before selection - so
