@@ -62,7 +62,8 @@ public record MasteryQueryResponse(String targetPlayer, List<Entry> entries)
     /**
      * One declared effect axis's current multiplier.
      *
-     * @param axis       {@code COST} / {@code CAST_TIME} / {@code POWER} / {@code DURATION}
+     * @param axis       {@code COST} / {@code CAST_TIME} / {@code POWER} /
+     *                   {@code DURATION} / {@code RANGE}
      * @param multiplier the value the domain would apply right now
      */
     public record Bonus(String axis, double multiplier) {

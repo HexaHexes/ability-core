@@ -12,9 +12,9 @@ import org.junit.jupiter.api.Test;
  * level))} - so each multiplier nears its X/Y/Z/A (the max* config keys)
  * as the level grows without bound and never crosses it. Level 0 is
  * always the inert 1.0. Values assert against the readers' shipped
- * defaults (0.005/0.25 reductions, 0.01/0.5 bonuses) with the config
- * unloaded - exactly the fallback path production uses before a config
- * file exists.
+ * defaults (0.005/0.25 reductions, 0.01/0.5 bonuses, 0.05/0.25 for the
+ * RANGE bonus) with the config unloaded - exactly the fallback path
+ * production uses before a config file exists.
  */
 class MasteryEffectsTest {
 
@@ -88,5 +88,31 @@ class MasteryEffectsTest {
                 "a zero asymptote applies nothing");
         assertEquals(0.0, MasteryEffects.approach(0.25, 0.005, 0.0), 1e-12,
                 "level 0 applies nothing");
+    }
+
+    @Test
+    void rangeNearsTwentyFivePercentByLevelOneHundred() {
+        // the owner's default: cap 0.25 at rate 0.05 - level 100 sits at
+        // ~99.3% of the cap (1 - e^-5), reading ~+25%, never crossing it
+        double at100 = MasteryEffects.defaultMultiplier(MasteryAxis.RANGE, 100.0);
+        assertEquals(1.0 + 0.25 * (1.0 - Math.exp(-0.05 * 100.0)), at100, 1e-9,
+                "the shipped formula: 1 + cap x (1 - e^(-rate x level))");
+        assertTrue(at100 > 1.24 && at100 <= 1.25,
+                "level 100 reads ~+25% (the owner's soft cap), got " + at100);
+        assertEquals(1.25, MasteryEffects.defaultMultiplier(MasteryAxis.RANGE, 1.0e6),
+                1e-9, "at a vast level the bonus sits on its asymptote");
+        double atFinite = MasteryEffects.defaultMultiplier(MasteryAxis.RANGE, 200.0);
+        assertTrue(atFinite > at100 && atFinite < 1.25,
+                "a finite level approaches without reaching, got " + atFinite);
+        double previous = 1.0;
+        for (int level = 0; level <= 500; level += 25) {
+            double bonus = MasteryEffects.defaultMultiplier(MasteryAxis.RANGE,
+                    (double) level);
+            assertTrue(bonus >= previous - 1e-12,
+                    "range never regresses at level " + level);
+            assertTrue(bonus <= 1.25 + 1e-12,
+                    "range never crosses the cap at level " + level);
+            previous = bonus;
+        }
     }
 }

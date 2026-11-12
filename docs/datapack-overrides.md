@@ -103,8 +103,11 @@ Every field is optional. `triggers` are `ACTIVATION` / `HIT` / `KILL` /
 `CUSTOM`; `shares` are `ABILITY` / `CATEGORY` / `SUBCATEGORY` targets with
 shares in `(0, 1]` summing to at most 1 (self keeps the remainder);
 `effects` entries name an axis (`COST` / `CAST_TIME` / `POWER` /
-`DURATION`) with an optional handler name (absent = core's default
-curve); `max_level` is the ability's mastery cap (`0` = uncapped, absent
+`DURATION` / `RANGE`) with an optional handler name (absent = core's default
+curve); `RANGE` and `DURATION` have no applying pipeline in the fleet yet
+(declared-only contracts - an overlay can stage them, the pane shows them,
+nothing applies them until a domain builds the seam); `max_level` is the
+ability's mastery cap (`0` = uncapped, absent
 keeps the base's cap - `MasterySpec.DEFAULT_MAX_LEVEL`, 100) and the
 server's `mastery.capModes` config decides whether that cap HARDs the
 level or SOFTens the XP beyond it. Merge follows the same convention as

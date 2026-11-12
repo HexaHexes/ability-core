@@ -9,7 +9,7 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
 /**
- * The mastery effect read API (REQ-CORE-12): four multipliers, one per
+ * The mastery effect read API (REQ-CORE-12): five multipliers, one per
  * {@link MasteryAxis}. Every read is inert ({@code 1.0}) unless the
  * system is enabled, the ability declared a spec, and the axis
  * participates - so an undeclared fleet pays nothing for this system.
@@ -49,6 +49,17 @@ public final class MasteryEffects {
     public static double durationMultiplier(@Nullable ServerPlayer player,
             ResourceLocation abilityId) {
         return multiplier(player, abilityId, MasteryAxis.DURATION);
+    }
+
+    /**
+     * The range multiplier for one cast ({@code >= 1}, 1 = no bonus).
+     * Ready like {@link #durationMultiplier}: the read exists so a domain
+     * with a caster-aware range seam can apply it the moment it declares
+     * the axis - no fleet consumer declares {@link MasteryAxis#RANGE} yet.
+     */
+    public static double rangeMultiplier(@Nullable ServerPlayer player,
+            ResourceLocation abilityId) {
+        return multiplier(player, abilityId, MasteryAxis.RANGE);
     }
 
     /**
@@ -121,6 +132,8 @@ public final class MasteryEffects {
                     CoreConfig.masteryPowerIncreasePerLevel(), level);
             case DURATION -> 1.0 + approach(CoreConfig.masteryMaxDurationIncrease(),
                     CoreConfig.masteryDurationIncreasePerLevel(), level);
+            case RANGE -> 1.0 + approach(CoreConfig.masteryMaxRangeIncrease(),
+                    CoreConfig.masteryRangeIncreasePerLevel(), level);
         };
     }
 

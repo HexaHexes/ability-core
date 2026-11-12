@@ -18,9 +18,10 @@ import org.jetbrains.annotations.Nullable;
  *
  * <p>The returned multiplier is the whole effect: {@code <= 1} for
  * {@link MasteryAxis#COST}/{@link MasteryAxis#CAST_TIME} (a discount),
- * {@code >= 1} for {@link MasteryAxis#POWER}/{@link MasteryAxis#DURATION}
- * (a bonus). Values that are not finite and {@code > 0} are rejected with
- * an error log and the default curve applies instead.</p>
+ * {@code >= 1} for {@link MasteryAxis#POWER}/{@link MasteryAxis#DURATION}/
+ * {@link MasteryAxis#RANGE} (a bonus). Values that are not finite and
+ * {@code > 0} are rejected with an error log and the default curve
+ * applies instead.</p>
  */
 public final class MasteryEffectHandlers {
 

@@ -103,6 +103,12 @@ public final class CoreConfig {
     /** Server key: the duration-bonus asymptote (A). */
     public static final String MASTERY_MAX_DURATION_KEY = "mastery.maxDurationIncrease";
 
+    /** Server key: the RANGE approach rate toward its asymptote. */
+    public static final String MASTERY_RANGE_PER_LEVEL_KEY = "mastery.rangeIncreasePerLevel";
+
+    /** Server key: the range-bonus asymptote (A). */
+    public static final String MASTERY_MAX_RANGE_KEY = "mastery.maxRangeIncrease";
+
     /** Server key: per-integration cap modes ({@code ns=soft|hard}, {@code *} default). */
     public static final String MASTERY_CAP_MODES_KEY = "mastery.capModes";
 
@@ -301,6 +307,20 @@ public final class CoreConfig {
             SERVER.comment("The duration-bonus ASYMPTOTE (the owner's A): nears but never "
                             + "reaches it (0.5 = at most +50%, approached forever).")
                     .defineInRange(MASTERY_MAX_DURATION_KEY, 0.5, 0.0, 1000.0);
+
+    /** The RANGE effect's approach rate toward its asymptote. */
+    public static final ModConfigSpec.DoubleValue MASTERY_RANGE_PER_LEVEL =
+            SERVER.comment("Default RANGE effect's approach rate: the bonus reaches "
+                            + "maxRangeIncrease as max x (1 - e^(-rate x level)) - "
+                            + "0.05 sits at ~99% of the cap by level 100 (the owner's "
+                            + "25%-at-100 default), asymptotic, never crossing it.")
+                    .defineInRange(MASTERY_RANGE_PER_LEVEL_KEY, 0.05, 0.0, 10.0);
+
+    /** The range-bonus asymptote (the owner's 25%). */
+    public static final ModConfigSpec.DoubleValue MASTERY_MAX_RANGE =
+            SERVER.comment("The range-bonus ASYMPTOTE (the owner's 25%): nears but never "
+                            + "reaches it (0.25 = at most +25%, approached forever).")
+                    .defineInRange(MASTERY_MAX_RANGE_KEY, 0.25, 0.0, 1000.0);
 
     /** Per-integration cap modes: {@code namespace=soft|hard} entries, {@code *} the default. */
     public static final ModConfigSpec.ConfigValue<List<? extends String>> MASTERY_CAP_MODES =
@@ -515,5 +535,17 @@ public final class CoreConfig {
     public static double masteryMaxDurationIncrease() {
         return ConfigDiagnostics.readOrDefault(MASTERY_MAX_DURATION_KEY,
                 () -> MASTERY_MAX_DURATION.get(), 0.5);
+    }
+
+    /** Default range increase per level: read live, default 0.05. */
+    public static double masteryRangeIncreasePerLevel() {
+        return ConfigDiagnostics.readOrDefault(MASTERY_RANGE_PER_LEVEL_KEY,
+                () -> MASTERY_RANGE_PER_LEVEL.get(), 0.05);
+    }
+
+    /** Default range increase cap: read live, default 0.25. */
+    public static double masteryMaxRangeIncrease() {
+        return ConfigDiagnostics.readOrDefault(MASTERY_MAX_RANGE_KEY,
+                () -> MASTERY_MAX_RANGE.get(), 0.25);
     }
 }
