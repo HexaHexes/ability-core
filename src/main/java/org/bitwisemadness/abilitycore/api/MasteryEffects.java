@@ -102,22 +102,36 @@ public final class MasteryEffects {
     }
 
     /**
-     * The default curve for one axis at an aggregate level: reductions
-     * are {@code 1 - min(max, perLevel × level)} (config-clamped to
-     * {@code (0, 1]}), bonuses are {@code 1 + min(max, perLevel × level)}.
-     * Package-private so fixtures pin the math without a player.
+     * The default curve for one axis at an aggregate level: an
+     * asymptotic approach to the configured bound - reductions are
+     * {@code 1 - approach(max, rate, level)} and bonuses
+     * {@code 1 + approach(max, rate, level)}, where the approach is
+     * {@code max * (1 - e^(-rate * level))}: it nears X/Y/Z/A (the max*
+     * config keys) as the level grows without bound and never crosses
+     * them. Package-private so fixtures pin the math without a player.
      */
     static double defaultMultiplier(MasteryAxis axis, double aggregateLevel) {
         double level = Math.max(0.0, aggregateLevel);
         return switch (axis) {
-            case COST -> 1.0 - Math.min(CoreConfig.masteryMaxCostReduction(),
-                    CoreConfig.masteryCostReductionPerLevel() * level);
-            case CAST_TIME -> 1.0 - Math.min(CoreConfig.masteryMaxCastTimeReduction(),
-                    CoreConfig.masteryCastTimeReductionPerLevel() * level);
-            case POWER -> 1.0 + Math.min(CoreConfig.masteryMaxPowerIncrease(),
-                    CoreConfig.masteryPowerIncreasePerLevel() * level);
-            case DURATION -> 1.0 + Math.min(CoreConfig.masteryMaxDurationIncrease(),
-                    CoreConfig.masteryDurationIncreasePerLevel() * level);
+            case COST -> 1.0 - approach(CoreConfig.masteryMaxCostReduction(),
+                    CoreConfig.masteryCostReductionPerLevel(), level);
+            case CAST_TIME -> 1.0 - approach(CoreConfig.masteryMaxCastTimeReduction(),
+                    CoreConfig.masteryCastTimeReductionPerLevel(), level);
+            case POWER -> 1.0 + approach(CoreConfig.masteryMaxPowerIncrease(),
+                    CoreConfig.masteryPowerIncreasePerLevel(), level);
+            case DURATION -> 1.0 + approach(CoreConfig.masteryMaxDurationIncrease(),
+                    CoreConfig.masteryDurationIncreasePerLevel(), level);
         };
+    }
+
+    /**
+     * The asymptote: {@code max * (1 - e^(-rate * level))} - 0 at level 0,
+     * strictly increasing, never reaching {@code max} at any finite level.
+     */
+    static double approach(double max, double rate, double level) {
+        if (!(max > 0.0) || !(rate > 0.0) || !(level > 0.0)) {
+            return 0.0;
+        }
+        return max * (1.0 - Math.exp(-rate * level));
     }
 }
