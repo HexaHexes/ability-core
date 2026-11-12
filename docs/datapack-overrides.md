@@ -92,7 +92,8 @@ The mastery layer rides the same data-map machinery, one type over:
       "effects": [
         { "axis": "COST", "handler": "mymod:discount" },
         { "axis": "POWER" }
-      ]
+      ],
+      "max_level": 60
     }
   }
 }
@@ -103,7 +104,11 @@ Every field is optional. `triggers` are `ACTIVATION` / `HIT` / `KILL` /
 shares in `(0, 1]` summing to at most 1 (self keeps the remainder);
 `effects` entries name an axis (`COST` / `CAST_TIME` / `POWER` /
 `DURATION`) with an optional handler name (absent = core's default
-curve). Merge follows the same convention as definition overlays -
+curve); `max_level` is the ability's mastery cap (`0` = uncapped, absent
+keeps the base's cap - `MasterySpec.DEFAULT_MAX_LEVEL`, 100) and the
+server's `mastery.capModes` config decides whether that cap HARDs the
+level or SOFTens the XP beyond it. Merge follows the same convention as
+definition overlays -
 present replaces, absent keeps, **lists replace wholesale** - and an
 empty `effects` array removes every effect axis from the ability.
 

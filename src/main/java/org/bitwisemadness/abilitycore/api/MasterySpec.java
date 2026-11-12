@@ -34,13 +34,21 @@ import org.jetbrains.annotations.Nullable;
  *                      {@code baseGain} when present
  * @param effects       participating axes to their rule; an absent axis
  *                      does not participate at all
+ * @param maxLevel      the ability's mastery cap ({@link #DEFAULT_MAX_LEVEL}
+ *                      by default; {@code 0} = uncapped) - HARD modes stop
+ *                      the level here, SOFT modes keep growing past it
+ *                      with reduced XP (the per-integration config switch)
  */
 public record MasterySpec(
         double baseGain,
         Set<MasteryTrigger> triggers,
         List<Share> shares,
         @Nullable String gainHandler,
-        Map<MasteryAxis, EffectRule> effects) {
+        Map<MasteryAxis, EffectRule> effects,
+        int maxLevel) {
+
+    /** The default cap when an ability does not declare one (owner: 100). */
+    public static final int DEFAULT_MAX_LEVEL = 100;
 
     /**
      * One external contribution target and its share of every grant
@@ -88,6 +96,10 @@ public record MasterySpec(
         if (!Double.isFinite(baseGain) || baseGain < 0.0) {
             throw new IllegalArgumentException("baseGain must be finite and >= 0, got " + baseGain);
         }
+        if (maxLevel < 0) {
+            throw new IllegalArgumentException(
+                    "maxLevel must be >= 0 (0 = uncapped), got " + maxLevel);
+        }
         if (triggers == null) {
             throw new IllegalArgumentException("triggers must not be null");
         }
@@ -119,34 +131,46 @@ public record MasterySpec(
     }
 
     /**
+     * Source-compatible constructor for the pre-cap shape: the default
+     * cap ({@link #DEFAULT_MAX_LEVEL}) applies.
+     */
+    public MasterySpec(double baseGain, Set<MasteryTrigger> triggers, List<Share> shares,
+            @Nullable String gainHandler, Map<MasteryAxis, EffectRule> effects) {
+        this(baseGain, triggers, shares, gainHandler, effects, DEFAULT_MAX_LEVEL);
+    }
+
+    /**
      * A new spec granting {@code baseGain} on every successful activation
-     * (the common case: one trigger, self-remainder only, no effects).
+     * (the common case: one trigger, self-remainder only, no effects) with
+     * the default cap.
      *
      * @param baseGain XP per activation, finite and >= 0
      * @return the base spec for fluent {@code with...} calls
      */
     public static MasterySpec gained(double baseGain) {
         return new MasterySpec(baseGain, Set.of(MasteryTrigger.ACTIVATION),
-                List.of(), null, Map.of());
+                List.of(), null, Map.of(), DEFAULT_MAX_LEVEL);
     }
 
     /** A copy adding triggers (idempotent per trigger). */
     public MasterySpec withTriggers(MasteryTrigger... more) {
         Set<MasteryTrigger> merged = new HashSet<>(triggers);
         Collections.addAll(merged, more);
-        return new MasterySpec(baseGain, Set.copyOf(merged), shares, gainHandler, effects);
+        return new MasterySpec(baseGain, Set.copyOf(merged), shares, gainHandler, effects,
+                maxLevel);
     }
 
     /** A copy routing one more share of every grant to {@code target}. */
     public MasterySpec withShare(MasteryTarget target, double share) {
         List<Share> merged = new ArrayList<>(shares);
         merged.add(new Share(target, share));
-        return new MasterySpec(baseGain, triggers, List.copyOf(merged), gainHandler, effects);
+        return new MasterySpec(baseGain, triggers, List.copyOf(merged), gainHandler, effects,
+                maxLevel);
     }
 
     /** A copy whose gain comes from the named handler instead of baseGain. */
     public MasterySpec withGainHandler(String handlerName) {
-        return new MasterySpec(baseGain, triggers, shares, handlerName, effects);
+        return new MasterySpec(baseGain, triggers, shares, handlerName, effects, maxLevel);
     }
 
     /** A copy participating in {@code axis} on core's default curve. */
@@ -159,6 +183,18 @@ public record MasterySpec(
         return withRule(axis, new EffectRule(handlerName));
     }
 
+    /**
+     * A copy capped at {@code level} - HARD modes stop the level here,
+     * SOFT modes grow past it with reduced XP; {@code 0} = uncapped.
+     */
+    public MasterySpec withMaxLevel(int level) {
+        if (level < 0) {
+            throw new IllegalArgumentException(
+                    "maxLevel must be >= 0 (0 = uncapped), got " + level);
+        }
+        return new MasterySpec(baseGain, triggers, shares, gainHandler, effects, level);
+    }
+
     private MasterySpec withRule(MasteryAxis axis, EffectRule rule) {
         if (axis == null) {
             throw new IllegalArgumentException("axis must not be null");
@@ -167,6 +203,6 @@ public record MasterySpec(
         merged.putAll(effects);
         merged.put(axis, rule);
         return new MasterySpec(baseGain, triggers, shares, gainHandler,
-                Collections.unmodifiableMap(merged));
+                Collections.unmodifiableMap(merged), maxLevel);
     }
 }
