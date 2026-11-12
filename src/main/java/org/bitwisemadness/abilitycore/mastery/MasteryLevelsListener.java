@@ -22,6 +22,12 @@ import org.slf4j.Logger;
  * exactly-one rule ({@link MasteryLevels#applyTables}). A bad file logs
  * and is ignored (fail to the formula); the reload never fails.
  *
+ * <p>Vanilla's {@link SimpleJsonResourceReloadListener#scanDirectory}
+ * keys every collected file through {@code FileToIdConverter.fileToId},
+ * which strips the {@code mastery/} folder and the {@code .json}
+ * extension - the documented file arrives as {@code <ns>:levels}, and
+ * {@link #isLevelTable} matches exactly that shape.</p>
+ *
  * <p>The per-ability spec overlays need no listener at all - they ride
  * registry data maps and read live ({@link MasteryOverlays}).</p>
  */
@@ -30,7 +36,7 @@ public final class MasteryLevelsListener {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    private static final String LEVELS_SUFFIX = "levels.json";
+    private static final String LEVELS_PATH = "levels";
 
     private MasteryLevelsListener() {
     }
@@ -41,21 +47,44 @@ public final class MasteryLevelsListener {
             @Override
             protected void apply(Map<ResourceLocation, JsonElement> map,
                     ResourceManager resourceManager, ProfilerFiller profiler) {
-                Map<ResourceLocation, double[]> tables = new LinkedHashMap<>();
-                for (Map.Entry<ResourceLocation, JsonElement> entry : map.entrySet()) {
-                    // the directory collects mastery/**; only our table file qualifies
-                    if (!entry.getKey().getPath().endsWith(LEVELS_SUFFIX)) {
-                        continue;
-                    }
-                    try {
-                        tables.put(entry.getKey(), MasteryLevels.parseLevels(entry.getValue()));
-                    } catch (RuntimeException e) {
-                        LOGGER.error("Mastery level table {} is invalid - ignored: {}",
-                                entry.getKey(), e.getMessage());
-                    }
-                }
-                MasteryLevels.applyTables(tables);
+                install(map);
             }
         });
+    }
+
+    /**
+     * Whether a collected id is the documented table file: vanilla strips
+     * the folder and extension, so {@code data/<ns>/mastery/levels.json}
+     * keys as {@code <ns>:levels} - never as the file name.
+     *
+     * @param id a key as produced by vanilla's scanDirectory
+     * @return true when the id names the mastery level table
+     */
+    static boolean isLevelTable(ResourceLocation id) {
+        return id.getPath().equals(LEVELS_PATH);
+    }
+
+    /**
+     * The reload body: keep the collected files that name the table,
+     * parse each (an invalid one logs and is skipped), and hand the
+     * survivors to the exactly-one install rule - zero qualifying files
+     * fall back to the config formula.
+     *
+     * @param map vanilla-keyed files from scanDirectory with their JSON
+     */
+    static void install(Map<ResourceLocation, JsonElement> map) {
+        Map<ResourceLocation, double[]> tables = new LinkedHashMap<>();
+        for (Map.Entry<ResourceLocation, JsonElement> entry : map.entrySet()) {
+            if (!isLevelTable(entry.getKey())) {
+                continue;
+            }
+            try {
+                tables.put(entry.getKey(), MasteryLevels.parseLevels(entry.getValue()));
+            } catch (RuntimeException e) {
+                LOGGER.error("Mastery level table {} is invalid - ignored: {}",
+                        entry.getKey(), e.getMessage());
+            }
+        }
+        MasteryLevels.applyTables(tables);
     }
 }

@@ -591,6 +591,44 @@ public final class AbilityCoreGameTests {
     }
 
     /**
+     * The shipped level table loads end to end (REQ-CORE-12's datapack
+     * override): this pack ships data/ability_core/mastery/levels.json,
+     * and after the server's real reload the exactly-one rule installed
+     * it - thresholds [50, 125, 250, 425] answer level and progress
+     * where the config formula (base 100, growth 1.15) would not.
+     */
+    @GameTest(template = "empty")
+    public static void mastery_levels_table_loads_from_the_datapack(GameTestHelper helper)
+            throws GameTestAssertException {
+        if (!org.bitwisemadness.abilitycore.mastery.MasteryLevels.hasTable()) {
+            throw new GameTestAssertException(
+                    "the shipped data/ability_core/mastery/levels.json must install on reload");
+        }
+        var levelAt49 = org.bitwisemadness.abilitycore.mastery.MasteryLevels.level(49.0);
+        if (levelAt49 != 0) {
+            throw new GameTestAssertException(
+                    "49 XP must sit below the first threshold, got level " + levelAt49);
+        }
+        var levelAt50 = org.bitwisemadness.abilitycore.mastery.MasteryLevels.level(50.0);
+        if (levelAt50 != 1) {
+            throw new GameTestAssertException(
+                    "the table must make 50 XP level 1 (the formula wants 100), got "
+                            + levelAt50);
+        }
+        var capped = org.bitwisemadness.abilitycore.mastery.MasteryLevels.level(10_000.0);
+        if (capped != 4) {
+            throw new GameTestAssertException(
+                    "past the table the level must pin at its length 4, got " + capped);
+        }
+        var progress = org.bitwisemadness.abilitycore.mastery.MasteryLevels.progress(75.0);
+        if (Math.abs(progress - (25.0 / 75.0)) > 1.0e-9) {
+            throw new GameTestAssertException(
+                    "progress at 75 XP must be (75-50)/(125-50), got " + progress);
+        }
+        helper.succeed();
+    }
+
+    /**
      * A listener that refuses every call: the handler's contract needs only
      * player/enqueueWork/reply, so consulting the listener would be contract
      * drift this stub names loudly - and it satisfies the interface's
