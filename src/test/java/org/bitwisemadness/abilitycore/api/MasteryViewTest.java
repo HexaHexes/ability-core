@@ -80,5 +80,19 @@ class MasteryViewTest {
         var uncapped = MasteryView.build(spec, 10_000.0, target -> 0.0,
                 xp -> MasteryCurve.level(xp, 100.0, 1.15), Integer.MAX_VALUE);
         assertTrue(uncapped.ownLevel() > 3, "no ceiling, no clamp");
+
+        // a share feeds the aggregate too (the school-mastery shape): a
+        // HARD ceiling clamps the EFFECT INPUT - the caps brief's
+        // "view/effect input clamps" - while SOFT keeps the full sum
+        MasterySpec shared = spec.withShare(FIRE, 0.5);
+        var hardShared = MasteryView.build(shared, 10_000.0, target -> 1_000.0,
+                xp -> MasteryCurve.level(xp, 100.0, 1.15), 3);
+        assertEquals(3.0, hardShared.aggregateLevel(), 1e-9,
+                "a share can never push the aggregate past the ceiling, got "
+                        + hardShared.aggregateLevel());
+        var softShared = MasteryView.build(shared, 10_000.0, target -> 1_000.0,
+                xp -> MasteryCurve.level(xp, 100.0, 1.15), Integer.MAX_VALUE);
+        assertTrue(softShared.aggregateLevel() > 3.0,
+                "SOFT keeps the full aggregate, got " + softShared.aggregateLevel());
     }
 }
