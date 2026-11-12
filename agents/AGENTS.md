@@ -127,14 +127,16 @@ file into this repo verbatim as its own PR - never re-type or patch it by hand.
   titles; those live in the PR body. Internal and template-parity work
   carries the `template-parity` label so it is excluded from changelogs
   (see `.github/release.yml`); concise and imperative still apply.
-- **Version bump on finish:** every feature change or bugfix that lands in a
-  mod bumps `mod_version` in `gradle.properties` - the `-alpha.N` channel,
-  incremented, riding the work PR (alphas are the one channel allowed to
-  bundle; clean and beta bumps stay isolated as the `version-bump` check
-  enforces). **Template-parity pulls never bump:** a PR whose content is only
-  pulled from `neoforge-mod-template` (rulebook, workflows, build config,
-  pins, shared filters, doc sections) changes no mod behavior and must leave
-  `mod_version` untouched.
+- **Version bump on finish:** version bumps ride CI/CD - the post-merge
+  workflow raises the `-alpha.N` slot automatically when work lands
+  (ruling #81), and stable/beta cuts go through an isolated
+  `gradle.properties` PR that changes `mod_version` and nothing else.
+  A work PR never touches `mod_version`; pin and comment edits in
+  `gradle.properties` (CurseMaven `*_file_id` pins) ride with the work
+  (scoped by #89). **Template-parity pulls never bump:** a PR whose content
+  is only pulled from `neoforge-mod-template` (rulebook, workflows, build
+  config, pins, shared filters, doc sections) changes no mod behavior and
+  must leave `mod_version` untouched.
 - **One feature or bugfix per branch:** develop each on its own feature branch and
   merge it into the default branch through a pull request with a **squash merge**.
   The PR body must detail the work done, following `.github/pull_request_template.md`.
