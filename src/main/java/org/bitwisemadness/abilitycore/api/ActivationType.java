@@ -6,9 +6,11 @@ import com.mojang.serialization.Codec;
  * How an ability is activated, from the shared-contract perspective.
  *
  * <p>The vocabulary is deliberately small and provider-independent: providers
- * map their native activation shapes onto it. {@link #UNKNOWN} is the
- * fail-closed value - an ability whose activation type cannot be determined is
- * never treated as activatable (REQ-CORE-02/07 semantics).</p>
+ * map their native activation shapes onto it. {@link #NONE} is the deliberate
+ * passive - an ability that never activates (a mastery row): the menu omits
+ * the activation line entirely and lets it slot anywhere. {@link #UNKNOWN} is
+ * the fail-closed value - an ability whose activation type cannot be
+ * determined is never treated as activatable (REQ-CORE-02/07 semantics).</p>
  */
 public enum ActivationType {
 
@@ -20,6 +22,8 @@ public enum ActivationType {
     CHANNELLED,
     /** Toggled on/off; may tick while active. */
     TOGGLE,
+    /** Never activates - passive by design (the owner's mastery rows). */
+    NONE,
     /** Unrecognised or undetermined - refused at activation, never guessed. */
     UNKNOWN;
 
@@ -33,7 +37,7 @@ public enum ActivationType {
                 ActivationType type = fromWire(s);
                 if (type == UNKNOWN && !"unknown".equalsIgnoreCase(s)) {
                     throw new IllegalArgumentException("Unknown activation type: " + s
-                            + " (valid: instant, charged, channelled, toggle)");
+                            + " (valid: instant, charged, channelled, toggle, none)");
                 }
                 return type;
             },
@@ -53,6 +57,7 @@ public enum ActivationType {
             case "charged" -> CHARGED;
             case "channelled", "continuous" -> CHANNELLED;
             case "toggle" -> TOGGLE;
+            case "none" -> NONE;
             case "unknown" -> UNKNOWN;
             default -> UNKNOWN;
         };

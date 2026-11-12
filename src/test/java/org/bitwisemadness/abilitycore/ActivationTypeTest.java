@@ -17,6 +17,7 @@ class ActivationTypeTest {
         assertEquals(ActivationType.CHARGED, strict("charged"));
         assertEquals(ActivationType.CHANNELLED, strict("channelled"));
         assertEquals(ActivationType.TOGGLE, strict("toggle"));
+        assertEquals(ActivationType.NONE, strict("none"));
         assertEquals(ActivationType.UNKNOWN, strict("unknown"));
     }
 
