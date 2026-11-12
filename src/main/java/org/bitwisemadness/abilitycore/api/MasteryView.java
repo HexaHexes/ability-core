@@ -89,9 +89,10 @@ public record MasteryView(
      * The pure builder (fixtures read this directly): levels come from the
      * supplied function (the datapack table or the config formula in
      * production), the aggregate from the share list, self excluded (its
-     * own level is the base term) - clamped at {@code ceiling} when a
-     * HARD cap applies (the view feeds the effect curves, so a hard cap
-     * stops the power there too).
+     * own level is the base term). A HARD cap's {@code ceiling} clamps
+     * BOTH the own level and the aggregate - the view feeds the effect
+     * curves, so a share can never push the effect input past the cap
+     * (SOFT ceilings are {@link Integer#MAX_VALUE} and never bite).
      *
      * @param spec    the declared contract
      * @param ownXp   XP on the ability's own target
@@ -111,6 +112,10 @@ public record MasteryView(
             aggregate += share.share() * level;
             targets.add(new TargetLevel(share.target(), level, share.share()));
         }
+        // The caps brief: the EFFECT INPUT clamps too - a share can
+        // never carry a HARD stop past the ceiling (SOFT never bites);
+        // target levels stay raw: their own caps govern their display
+        aggregate = Math.min(aggregate, ceiling);
         return new MasteryView(ownXp, ownLevel, aggregate, targets);
     }
 }
