@@ -38,13 +38,17 @@ import org.jetbrains.annotations.Nullable;
  * @param shares     replaces the share list wholesale when present
  * @param effects    replaces the participating-axis map wholesale when
  *                   present - an empty array removes every effect
+ * @param maxLevel   replaces the ability's mastery cap when present
+ *                   ({@code 0} = uncapped; absent keeps the base's cap,
+ *                   {@code MasterySpec.DEFAULT_MAX_LEVEL} by default)
  */
 public record MasterySpecOverlay(
         @Nullable Double baseGain,
         @Nullable String gainHandler,
         @Nullable List<MasteryTrigger> triggers,
         @Nullable List<Share> shares,
-        @Nullable List<EffectEntry> effects) {
+        @Nullable List<EffectEntry> effects,
+        @Nullable Integer maxLevel) {
 
     /** One share in JSON shape: {@code {"kind": ..., "id": ..., "share": ...}}. */
     public record Share(MasteryTarget.Kind kind, ResourceLocation id, double share) {
@@ -146,7 +150,9 @@ public record MasterySpecOverlay(
                     SHARE_CODEC.listOf().optionalFieldOf("shares")
                             .forGetter(o -> Optional.ofNullable(o.shares())),
                     EFFECT_CODEC.listOf().optionalFieldOf("effects")
-                            .forGetter(o -> Optional.ofNullable(o.effects()))
+                            .forGetter(o -> Optional.ofNullable(o.effects())),
+                    Codec.INT.optionalFieldOf("max_level")
+                            .forGetter(o -> Optional.ofNullable(o.maxLevel()))
             ).apply(instance, MasterySpecOverlay::create));
 
     /** The overlay codec (REQ-CORE-12); see docs/datapack-overrides.md. */
@@ -156,6 +162,10 @@ public record MasterySpecOverlay(
         if (baseGain != null && (!Double.isFinite(baseGain) || baseGain < 0.0)) {
             throw new IllegalArgumentException(
                     "overlay base_gain must be finite and >= 0, got " + baseGain);
+        }
+        if (maxLevel != null && maxLevel < 0) {
+            throw new IllegalArgumentException(
+                    "overlay max_level must be >= 0 (0 = uncapped), got " + maxLevel);
         }
         if (gainHandler != null && gainHandler.isBlank()) {
             throw new IllegalArgumentException("overlay gain_handler must not be blank");
@@ -198,10 +208,11 @@ public record MasterySpecOverlay(
             Optional<String> gainHandler,
             Optional<List<MasteryTrigger>> triggers,
             Optional<List<Share>> shares,
-            Optional<List<EffectEntry>> effects) {
+            Optional<List<EffectEntry>> effects,
+            Optional<Integer> maxLevel) {
         return new MasterySpecOverlay(
                 baseGain.orElse(null), gainHandler.orElse(null), triggers.orElse(null),
-                shares.orElse(null), effects.orElse(null));
+                shares.orElse(null), effects.orElse(null), maxLevel.orElse(null));
     }
 
     /**
@@ -229,6 +240,7 @@ public record MasterySpecOverlay(
                         : base.shares(),
                 gainHandler != null ? gainHandler : base.gainHandler(),
                 effects != null ? java.util.Collections.unmodifiableMap(mergedEffects)
-                        : base.effects());
+                        : base.effects(),
+                maxLevel != null ? maxLevel : base.maxLevel());
     }
 }

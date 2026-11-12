@@ -138,4 +138,24 @@ class MasteryDeclarationsTest {
         assertEquals(0.0, MasteryAwards.resolveGain(negative, null, ABILITY,
                 MasteryTrigger.ACTIVATION));
     }
+
+    @Test
+    void maxLevelDefaultsToAHundredAndFluentCopiesCarryIt() {
+        assertEquals(MasterySpec.DEFAULT_MAX_LEVEL, MasterySpec.gained(1.0).maxLevel());
+        assertEquals(100, MasterySpec.gained(1.0).maxLevel(),
+                "the shipped default cap is level 100");
+        assertEquals(50, MasterySpec.gained(1.0).withMaxLevel(50).maxLevel());
+        assertEquals(0, MasterySpec.gained(1.0).withMaxLevel(0).maxLevel(),
+                "0 = uncapped");
+        assertEquals(50, MasterySpec.gained(1.0).withMaxLevel(50)
+                        .withGainHandler("test:carry").maxLevel(),
+                "every fluent copy carries the cap");
+        // the pre-cap constructor shape still compiles and applies the default
+        assertEquals(MasterySpec.DEFAULT_MAX_LEVEL,
+                new MasterySpec(1.0, Set.of(MasteryTrigger.ACTIVATION), List.of(),
+                        null, Map.of()).maxLevel());
+        assertThrows(IllegalArgumentException.class,
+                () -> MasterySpec.gained(1.0).withMaxLevel(-1),
+                "a negative cap is rejected loudly");
+    }
 }

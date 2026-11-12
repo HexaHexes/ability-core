@@ -16,6 +16,7 @@ import org.bitwisemadness.abilitycore.api.MasteryAxis;
 import org.bitwisemadness.abilitycore.api.MasteryEffects;
 import org.bitwisemadness.abilitycore.api.MasterySpec;
 import org.bitwisemadness.abilitycore.api.MasteryTarget;
+import org.bitwisemadness.abilitycore.config.CoreConfig;
 import org.bitwisemadness.abilitycore.mastery.MasteryAttachments;
 import org.bitwisemadness.abilitycore.mastery.MasteryLevels;
 import org.bitwisemadness.abilitycore.mastery.MasteryOverlays;
@@ -152,8 +153,23 @@ public record MasteryQueryResponse(String targetPlayer, List<Entry> entries)
             MasteryTarget parsed = MasteryTarget.parseKey(key);
             if (parsed != null) {
                 boolean ability = parsed.kind() == MasteryTarget.Kind.ABILITY;
+                int level = MasteryLevels.level(xp);
+                double progress = MasteryLevels.progress(xp);
+                if (ability) {
+                    // HARD cap: the display's level stops and the bar pins
+                    // full at the ability's cap (SOFT keeps both raw - its
+                    // cap is the reduced XP, not the number)
+                    MasterySpec spec = MasteryOverlays.specFor(parsed.id());
+                    if (spec != null && spec.maxLevel() > 0
+                            && level >= spec.maxLevel()
+                            && CoreConfig.masteryCapMode(parsed.id())
+                                    == CoreConfig.CapMode.HARD) {
+                        level = spec.maxLevel();
+                        progress = 1.0;
+                    }
+                }
                 entries.add(new Entry(parsed.kind().name(), parsed.id().toString(), xp,
-                        MasteryLevels.level(xp), MasteryLevels.progress(xp),
+                        level, progress,
                         ability ? bonusesFor(target, parsed.id()) : List.of()));
             }
         });

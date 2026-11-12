@@ -139,4 +139,18 @@ class MasterySpecOverlayTest {
         assertEquals(1, merged.shares().size());
         assertEquals(1.0, merged.shares().get(0).share(), 1e-9);
     }
+
+    @Test
+    void maxLevelDecodesAndMerges() {
+        var overlay = decode("{ \"max_level\": 60 }");
+        assertEquals(60, overlay.maxLevel());
+        assertEquals(60, overlay.mergeInto(base()).maxLevel(),
+                "a present cap replaces the base cap");
+        assertEquals(0, decode("{ \"max_level\": 0 }").mergeInto(base()).maxLevel(),
+                "0 = uncapped through the overlay too");
+        assertEquals(base().maxLevel(), decode("{}").mergeInto(base()).maxLevel(),
+                "an absent cap keeps the base's cap");
+        assertTrue(rejects("{ \"max_level\": -1 }"),
+                "a negative cap fails at decode, never half-applies");
+    }
 }

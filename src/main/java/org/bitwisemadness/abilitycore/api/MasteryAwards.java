@@ -6,6 +6,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import org.bitwisemadness.abilitycore.config.CoreConfig;
 import org.bitwisemadness.abilitycore.mastery.MasteryAttachments;
+import org.bitwisemadness.abilitycore.mastery.MasteryLevels;
 import org.bitwisemadness.abilitycore.mastery.MasteryOverlays;
 import org.bitwisemadness.abilitycore.mastery.MasteryRouting;
 import org.jetbrains.annotations.Nullable;
@@ -95,6 +96,7 @@ public final class MasteryAwards {
             return;
         }
         amount *= CoreConfig.masteryGlobalGainMultiplier();
+        amount *= softCapFactor(player, source, spec);
         if (!Double.isFinite(amount) || amount <= 0.0) {
             return;
         }
@@ -103,6 +105,27 @@ public final class MasteryAwards {
                 : MasteryRouting.split(source, spec.shares(), amount).entrySet()) {
             data.addXp(entry.getKey().key(), entry.getValue());
         }
+    }
+
+    /**
+     * The SOFT-cap factor for one grant (the owner's switch): 1.0 unless
+     * the ability sits at or above its cap under a SOFT mode - then the
+     * configured fraction applies (reduced XP beyond the cap; a HARD
+     * mode's cap is the level itself and never reduces the gain). A cap
+     * of 0 means uncapped. Literal {@link #awardTo} grants bypass this:
+     * quest credit is not progression through use.
+     */
+    private static double softCapFactor(ServerPlayer player, ResourceLocation source,
+            MasterySpec spec) {
+        if (spec.maxLevel() <= 0
+                || CoreConfig.masteryCapMode(source) != CoreConfig.CapMode.SOFT) {
+            return 1.0;
+        }
+        double ownXp = MasteryAttachments.data(player)
+                .xp(MasteryTarget.ability(source).key());
+        return MasteryLevels.level(ownXp) >= spec.maxLevel()
+                ? CoreConfig.masterySoftCapXpFactor()
+                : 1.0;
     }
 
     /**

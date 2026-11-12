@@ -6,6 +6,7 @@ import java.util.function.Function;
 import java.util.function.ToIntFunction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import org.bitwisemadness.abilitycore.config.CoreConfig;
 import org.bitwisemadness.abilitycore.mastery.MasteryAttachments;
 import org.bitwisemadness.abilitycore.mastery.MasteryLevels;
 import org.bitwisemadness.abilitycore.mastery.MasteryOverlays;
@@ -67,24 +68,42 @@ public record MasteryView(
         }
         var data = MasteryAttachments.data(player);
         return build(spec, data.xp(MasteryTarget.ability(abilityId).key()),
-                target -> data.xp(target.key()), MasteryLevels::level);
+                target -> data.xp(target.key()), MasteryLevels::level,
+                hardCapCeiling(abilityId, spec));
+    }
+
+    /**
+     * The ceiling a HARD cap puts on this ability's own level: the spec's
+     * {@code maxLevel} under a HARD mode, otherwise unbounded - SOFT
+     * modes let the level grow (their cap is the reduced XP, not the
+     * number) and an uncapped spec (0) never clamps.
+     */
+    private static int hardCapCeiling(ResourceLocation abilityId, MasterySpec spec) {
+        return spec.maxLevel() > 0
+                && CoreConfig.masteryCapMode(abilityId) == CoreConfig.CapMode.HARD
+                ? spec.maxLevel()
+                : Integer.MAX_VALUE;
     }
 
     /**
      * The pure builder (fixtures read this directly): levels come from the
      * supplied function (the datapack table or the config formula in
      * production), the aggregate from the share list, self excluded (its
-     * own level is the base term).
+     * own level is the base term) - clamped at {@code ceiling} when a
+     * HARD cap applies (the view feeds the effect curves, so a hard cap
+     * stops the power there too).
      *
      * @param spec    the declared contract
      * @param ownXp   XP on the ability's own target
      * @param xpOf    XP lookup for an arbitrary target
      * @param levelFn the level function the curve resolves through
+     * @param ceiling the HARD-cap ceiling (or {@link Integer#MAX_VALUE})
      * @return the assembled view
      */
     static MasteryView build(MasterySpec spec, double ownXp,
-            Function<MasteryTarget, Double> xpOf, ToIntFunction<Double> levelFn) {
-        int ownLevel = levelFn.applyAsInt(ownXp);
+            Function<MasteryTarget, Double> xpOf, ToIntFunction<Double> levelFn,
+            int ceiling) {
+        int ownLevel = Math.min(levelFn.applyAsInt(ownXp), ceiling);
         double aggregate = ownLevel;
         List<TargetLevel> targets = new ArrayList<>(spec.shares().size());
         for (MasterySpec.Share share : spec.shares()) {

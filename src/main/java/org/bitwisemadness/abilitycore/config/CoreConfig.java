@@ -1,6 +1,7 @@
 package org.bitwisemadness.abilitycore.config;
 
 import java.util.List;
+import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 /**
@@ -101,6 +102,24 @@ public final class CoreConfig {
 
     /** Server key: the duration-bonus asymptote (A). */
     public static final String MASTERY_MAX_DURATION_KEY = "mastery.maxDurationIncrease";
+
+    /** Server key: per-integration cap modes ({@code ns=soft|hard}, {@code *} default). */
+    public static final String MASTERY_CAP_MODES_KEY = "mastery.capModes";
+
+    /** Server key: XP factor for gains at/above a cap under SOFT mode. */
+    public static final String MASTERY_SOFT_CAP_XP_FACTOR_KEY = "mastery.softCapXpFactor";
+
+    /**
+     * How an ability's cap behaves (the owner's switch, per integration):
+     * HARD stops the level at the ability's {@code maxLevel}; SOFT keeps
+     * levels growing past it with reduced XP.
+     */
+    public enum CapMode {
+        /** Levels grow past the cap; gains beyond it are reduced. */
+        SOFT,
+        /** The level stops at the cap (the classic hard ceiling). */
+        HARD
+    }
 
     /** Eligibility refusal debug-log modes (read live, see class javadoc). */
     public enum RefusalLogMode {
@@ -283,6 +302,23 @@ public final class CoreConfig {
                             + "reaches it (0.5 = at most +50%, approached forever).")
                     .defineInRange(MASTERY_MAX_DURATION_KEY, 0.5, 0.0, 1000.0);
 
+    /** Per-integration cap modes: {@code namespace=soft|hard} entries, {@code *} the default. */
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> MASTERY_CAP_MODES =
+            SERVER.comment("Per-integration mastery cap modes: entries of "
+                            + "'namespace=soft' or 'namespace=hard' (the namespace of the "
+                            + "ability's id, e.g. irons_spellbooks=hard); '*' sets the "
+                            + "default. HARD stops the level at the ability's cap, SOFT "
+                            + "keeps levels growing past it with reduced XP.")
+                    .defineListAllowEmpty(MASTERY_CAP_MODES_KEY, List.of("*=soft"),
+                            value -> value instanceof String entry
+                                    && (entry.endsWith("=soft") || entry.endsWith("=hard")));
+
+    /** The XP factor for SOFT-mode gains at/above the cap (0.5 = half). */
+    public static final ModConfigSpec.DoubleValue MASTERY_SOFT_CAP_XP_FACTOR =
+            SERVER.comment("XP factor applied to gains while an ability sits at or above "
+                            + "its cap under SOFT mode (0.5 = half rate beyond the cap).")
+                    .defineInRange(MASTERY_SOFT_CAP_XP_FACTOR_KEY, 0.5, 0.0, 1.0);
+
     /** Core's SERVER spec - reference registration for the shared contract. */
     public static final ModConfigSpec SERVER_SPEC = SERVER.build();
 
@@ -373,6 +409,52 @@ public final class CoreConfig {
     public static double masteryGlobalGainMultiplier() {
         return ConfigDiagnostics.readOrDefault(MASTERY_GAIN_MULTIPLIER_KEY,
                 () -> MASTERY_GAIN_MULTIPLIER.get(), 1.0);
+    }
+
+    /** The SOFT-cap XP factor: read live, default 0.5. */
+    public static double masterySoftCapXpFactor() {
+        return ConfigDiagnostics.readOrDefault(MASTERY_SOFT_CAP_XP_FACTOR_KEY,
+                () -> MASTERY_SOFT_CAP_XP_FACTOR.get(), 0.5);
+    }
+
+    /**
+     * The cap mode for one ability id: an exact {@code namespace=mode}
+     * entry wins, else the {@code *} default, else SOFT (the shipped
+     * default). Read live so a config reload applies to the next award
+     * and the next query.
+     */
+    public static CapMode masteryCapMode(ResourceLocation id) {
+        List<? extends String> entries = ConfigDiagnostics.readOrDefault(
+                MASTERY_CAP_MODES_KEY, () -> MASTERY_CAP_MODES.get(), List.of("*=soft"));
+        return capModeFrom(entries, id == null ? "" : id.getNamespace());
+    }
+
+    /**
+     * The pure mode lookup (fixtures pin this without a config): exact
+     * namespace match, then the wildcard, then SOFT.
+     *
+     * @param entries validated {@code ns=mode} entries (may be empty)
+     * @param namespace the ability id's namespace
+     * @return the mode that applies
+     */
+    static CapMode capModeFrom(List<? extends String> entries, String namespace) {
+        CapMode wildcard = CapMode.SOFT;
+        for (String entry : entries) {
+            int split = entry.lastIndexOf('=');
+            if (split <= 0) {
+                continue; // the validator's shape; never crash on a bad file
+            }
+            String scope = entry.substring(0, split);
+            CapMode mode = "hard".equals(entry.substring(split + 1))
+                    ? CapMode.HARD : CapMode.SOFT;
+            if (namespace.equals(scope)) {
+                return mode;
+            }
+            if ("*".equals(scope)) {
+                wildcard = mode;
+            }
+        }
+        return wildcard;
     }
 
     /** The curve's first-step XP: read live, default 100. */

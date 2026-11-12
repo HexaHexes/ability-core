@@ -27,7 +27,7 @@ class MasteryViewTest {
     private static MasteryView view(MasterySpec spec, double ownXp,
             Map<MasteryTarget, Double> stored) {
         return MasteryView.build(spec, ownXp, target -> stored.getOrDefault(target, 0.0),
-                xp -> MasteryCurve.level(xp, 100.0, 1.0));
+                xp -> MasteryCurve.level(xp, 100.0, 1.0), Integer.MAX_VALUE);
     }
 
     @Test
@@ -67,5 +67,18 @@ class MasteryViewTest {
         MasteryView built = view(MasterySpec.gained(1.0).withShare(FIRE, 1.0), 0.0, Map.of());
         org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
                 () -> built.targets().add(null), "view records never leak mutable lists");
+    }
+
+    @Test
+    void hardCeilingClampsTheOwnLevelAndAggregate() {
+        MasterySpec spec = MasterySpec.gained(10.0);
+        var capped = MasteryView.build(spec, 10_000.0, target -> 0.0,
+                xp -> MasteryCurve.level(xp, 100.0, 1.15), 3);
+        assertEquals(3, capped.ownLevel(), "a HARD ceiling stops the own level");
+        assertEquals(3.0, capped.aggregateLevel(), 1e-9,
+                "and the aggregate carries the clamped term (no shares)");
+        var uncapped = MasteryView.build(spec, 10_000.0, target -> 0.0,
+                xp -> MasteryCurve.level(xp, 100.0, 1.15), Integer.MAX_VALUE);
+        assertTrue(uncapped.ownLevel() > 3, "no ceiling, no clamp");
     }
 }

@@ -479,6 +479,118 @@ public final class AbilityCoreGameTests {
     }
 
     /**
+     * The cap switch (REQ-CORE-12): an ability capped at level 2 under
+     * the shipped SOFT default keeps its level climbing while gains
+     * beyond the cap arrive at the reduced factor; flipping the
+     * per-integration config to HARD stops the DISPLAYED level at 2 and
+     * pins the bar full instead. XP itself is never destroyed either
+     * way - the cap shapes the number and the gain rate, not the pool.
+     */
+    @GameTest(template = "empty")
+    public static void masteryCapsSoftenAndClamp(GameTestHelper helper)
+            throws GameTestAssertException {
+        var abilityId = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                AbilityCore.MOD_ID, "gametest_cap");
+
+        // fixture registry + a capped declaration (the round-trip pattern)
+        var previous = AbilityRegistries.registry();
+        var fixture = new MappedRegistry<org.bitwisemadness.abilitycore.api.AbilityDefinition>(
+                AbilityRegistries.ABILITY_REGISTRY_KEY, com.mojang.serialization.Lifecycle.stable(), false);
+        Registry.register(fixture, abilityId, new org.bitwisemadness.abilitycore.api.AbilityDefinition(
+                "tensura.skill.gametest_cap", null,
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("tensura", "skill"),
+                org.bitwisemadness.abilitycore.api.ActivationType.INSTANT,
+                List.of(), org.bitwisemadness.abilitycore.api.ConsumptionStrategies.ALL,
+                org.bitwisemadness.abilitycore.api.AmountResolvers.STATIC, Set.of(), Map.of()));
+        AbilityRegistries.installRegistryForTests(fixture);
+        org.bitwisemadness.abilitycore.api.MasteryDeclarations.declare(abilityId,
+                org.bitwisemadness.abilitycore.api.MasterySpec.gained(10.0).withMaxLevel(2));
+
+        var server = helper.getLevel().getServer();
+        var profile = new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(),
+                "CapProbe");
+        var player = new net.minecraft.server.level.ServerPlayer(server, helper.getLevel(),
+                profile, net.minecraft.server.level.ClientInformation.createDefault());
+        String uuid = player.getUUID().toString();
+        List<String> originalModes =
+                List.copyOf(org.bitwisemadness.abilitycore.config.CoreConfig
+                        .MASTERY_CAP_MODES.get());
+        try {
+            // below the cap: the full gain (no shares - self keeps it all)
+            org.bitwisemadness.abilitycore.api.MasteryAwards.award(player, abilityId,
+                    org.bitwisemadness.abilitycore.api.MasteryTrigger.ACTIVATION, 10.0);
+            double own = org.bitwisemadness.abilitycore.mastery.MasteryAttachments
+                    .data(player)
+                    .xp(org.bitwisemadness.abilitycore.api.MasteryTarget
+                            .ability(abilityId).key());
+            if (Math.abs(own - 10.0) > 1.0e-9) {
+                throw new GameTestAssertException(
+                        "below the cap the gain must land whole, got " + own);
+            }
+
+            // push past the cap, then probe the reduced rate
+            org.bitwisemadness.abilitycore.api.MasteryAwards.award(player, abilityId,
+                    org.bitwisemadness.abilitycore.api.MasteryTrigger.ACTIVATION, 10_000.0);
+            org.bitwisemadness.abilitycore.api.MasteryAwards.award(player, abilityId,
+                    org.bitwisemadness.abilitycore.api.MasteryTrigger.ACTIVATION, 10.0);
+            own = org.bitwisemadness.abilitycore.mastery.MasteryAttachments
+                    .data(player)
+                    .xp(org.bitwisemadness.abilitycore.api.MasteryTarget
+                            .ability(abilityId).key());
+            if (Math.abs(own - 10_015.0) > 1.0e-9) {
+                throw new GameTestAssertException(
+                        "SOFT mode must reduce the beyond-cap gain to half (10 -> 5), "
+                                + "XP itself never lost: expected 10015, got " + own);
+            }
+
+            // SOFT display: the level keeps climbing past the cap
+            int rawLevel = org.bitwisemadness.abilitycore.mastery.MasteryLevels.level(own);
+            if (rawLevel <= 2) {
+                throw new GameTestAssertException(
+                        "SOFT mode must keep the level climbing, got " + rawLevel);
+            }
+            var soft = org.bitwisemadness.abilitycore.sync.MasteryQueryResponse
+                    .of(uuid, player);
+            var softEntry = soft.entries().stream()
+                    .filter(e -> "ABILITY".equals(e.kind()) && abilityId.toString().equals(e.id()))
+                    .findFirst().orElse(null);
+            if (softEntry == null || softEntry.level() != rawLevel) {
+                throw new GameTestAssertException(
+                        "SOFT display must show the raw level " + rawLevel + ", got "
+                                + (softEntry == null ? "no entry" : softEntry.level()));
+            }
+
+            // HARD display: the level stops at the cap and the bar pins full
+            org.bitwisemadness.abilitycore.config.CoreConfig.MASTERY_CAP_MODES
+                    .set(List.of("*=hard"));
+            try {
+                var hard = org.bitwisemadness.abilitycore.sync.MasteryQueryResponse
+                        .of(uuid, player);
+                var hardEntry = hard.entries().stream()
+                        .filter(e -> "ABILITY".equals(e.kind())
+                                && abilityId.toString().equals(e.id()))
+                        .findFirst().orElse(null);
+                if (hardEntry == null || hardEntry.level() != 2) {
+                    throw new GameTestAssertException(
+                            "HARD display must stop at the cap (2), got "
+                                    + (hardEntry == null ? "no entry" : hardEntry.level()));
+                }
+                if (Math.abs(hardEntry.progress() - 1.0) > 1.0e-9) {
+                    throw new GameTestAssertException(
+                            "HARD display must pin the bar full, got " + hardEntry.progress());
+                }
+            } finally {
+                org.bitwisemadness.abilitycore.config.CoreConfig.MASTERY_CAP_MODES
+                        .set(originalModes);
+            }
+        } finally {
+            org.bitwisemadness.abilitycore.api.MasteryDeclarations.remove(abilityId);
+            AbilityRegistries.installRegistryForTests(previous);
+        }
+        helper.succeed();
+    }
+
+    /**
      * A listener that refuses every call: the handler's contract needs only
      * player/enqueueWork/reply, so consulting the listener would be contract
      * drift this stub names loudly - and it satisfies the interface's
