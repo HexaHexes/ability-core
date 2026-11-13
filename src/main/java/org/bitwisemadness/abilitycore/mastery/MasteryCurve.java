@@ -86,39 +86,4 @@ public final class MasteryCurve {
         double fraction = remaining / step;
         return Double.isFinite(fraction) ? Math.max(0.0, Math.min(1.0, fraction)) : 0.0;
     }
-
-    /**
-     * The inverse of {@link #level}: the minimum XP that reaches the
-     * given level - the admin command's set/add conversion (the same
-     * step accounting, so a command's "5" is the level the pane shows).
-     * The log/pow chain compounds rounding and can land a hair under
-     * the level's threshold at large magnitudes, so a level-proportional
-     * margin clears it and a verify loop steps until the level reads
-     * back exactly (the overshoot stays far under the display's two
-     * decimals for any sane level). Saturates at {@link Double#MAX_VALUE}
-     * instead of overflowing; degenerate inputs answer 0.
-     *
-     * @param level   the level to price (0 or below yields 0)
-     * @param base    XP for the level 0 -> 1 step (> 0)
-     * @param growth  per-step growth factor (> 0)
-     * @return an XP pool whose level read is exactly {@code level}
-     */
-    public static double xpForLevel(int level, double base, double growth) {
-        if (level <= 0 || !(base > 0.0) || !(growth > 0.0)) {
-            return 0.0;
-        }
-        if (growth == 1.0) {
-            return base * level;
-        }
-        double xp = base * Math.expm1(level * Math.log(growth)) / (growth - 1.0);
-        if (!Double.isFinite(xp) || xp <= 0.0) {
-            return Double.MAX_VALUE;
-        }
-        xp *= 1.0 + level * 1.0e-14;
-        int guard = 0;
-        while (level(xp, base, growth) < level && guard++ < 32) {
-            xp *= 1.0 + Math.max(1.0e-12, level * 1.0e-14);
-        }
-        return xp;
-    }
 }
