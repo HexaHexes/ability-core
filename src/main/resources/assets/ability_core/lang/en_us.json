@@ -1,0 +1,6 @@
+{
+  "ability_core.command.mastery_not_declared": "%s does not participate in mastery",
+  "ability_core.command.mastery_get": "%s: %s is mastery level %s (%s XP, %s into the next)",
+  "ability_core.command.mastery_set": "Set %s's %s mastery to level %s (%s XP)",
+  "ability_core.command.mastery_add": "%s's %s mastery changed by %s level(s) -> level %s (%s XP)"
+}
