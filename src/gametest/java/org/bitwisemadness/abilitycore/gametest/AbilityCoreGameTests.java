@@ -420,7 +420,9 @@ public final class AbilityCoreGameTests {
                     "axes ride in declaration order, got " + abilityEntry.bonuses());
         }
         double ownLevel = abilityEntry.level();
-        double aggregate = ownLevel + 0.5 * categoryEntry.level();
+        // Full contributions: the 0.5 share routes XP only - the
+        // aggregate sums the category's whole level (MasteryView)
+        double aggregate = ownLevel + categoryEntry.level();
         // the default curve's own shape, read through the same config
         // readers the curve uses (never a second literal copy)
         double expectedTotal = 1.0 + org.bitwisemadness.abilitycore.config.CoreConfig

@@ -14,11 +14,14 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * One caster's mastery position for one ability (REQ-CORE-12): the
- * ability's own XP and level, plus the share-weighted aggregate level
+ * ability's own XP and level, plus the aggregate level
  * effect handlers scale on -
- * {@code ownLevel + Σ(share × targetLevel)} over the spec's share list,
- * so routing half a grant to a fire category empowers the caster by half
- * of that category's level.
+ * {@code ownLevel + Σ(targetLevel)} over the spec's share list:
+ * every share target contributes its FULL level, so routing half a
+ * grant to a fire category still empowers the caster by that
+ * category's whole level. Shares route XP only - they never weight
+ * the effect input (the full-contributions rule: an ability drawing
+ * on a target receives that target's whole mastery bonus).
  *
  * @param ownXp         raw XP stored on the ability's own target
  * @param ownLevel      the level {@code ownXp} reaches on the curve
@@ -36,7 +39,8 @@ public record MasteryView(
      *
      * @param target the contribution target
      * @param level  the level its stored XP reaches on the curve
-     * @param share  the spec's share for this target
+     * @param share  the spec's share for this target (its XP-routing
+     *               share - never weights the aggregate)
      */
     public record TargetLevel(MasteryTarget target, int level, double share) {
     }
@@ -99,11 +103,14 @@ public record MasteryView(
     /**
      * The pure builder (fixtures read this directly): levels come from the
      * supplied function (the datapack table or the config formula in
-     * production), the aggregate from the share list, self excluded (its
-     * own level is the base term). A HARD cap's {@code ceiling} clamps
+     * production), the aggregate from the share list at FULL strength -
+     * own level plus every share target's level, self excluded (its
+     * own level is the base term); shares route XP (MasteryRouting) and
+     * never weight this input. A HARD cap's {@code ceiling} clamps
      * BOTH the own level and the aggregate - the view feeds the effect
-     * curves, so a share can never push the effect input past the cap
-     * (SOFT ceilings are {@link Integer#MAX_VALUE} and never bite).
+     * curves, so a full contribution can never push the effect input
+     * past the cap (SOFT ceilings are {@link Integer#MAX_VALUE} and
+     * never bite).
      *
      * @param spec    the declared contract
      * @param ownXp   XP on the ability's own target
@@ -120,12 +127,15 @@ public record MasteryView(
         List<TargetLevel> targets = new ArrayList<>(spec.shares().size());
         for (MasterySpec.Share share : spec.shares()) {
             int level = levelFn.applyAsInt(xpOf.apply(share.target()));
-            aggregate += share.share() * level;
+            // Full contributions: the share routes XP (MasteryRouting)
+            // but never weights this input - every target counts at
+            // its own level: a spell gets its element's whole bonus.
+            aggregate += level;
             targets.add(new TargetLevel(share.target(), level, share.share()));
         }
-        // The caps brief: the EFFECT INPUT clamps too - a share can
-        // never carry a HARD stop past the ceiling (SOFT never bites);
-        // target levels stay raw: their own caps govern their display
+        // The caps brief: the EFFECT INPUT clamps too - a full
+        // contribution can never carry a HARD stop past the ceiling
+        // (SOFT never bites); target levels stay raw under their caps
         aggregate = Math.min(aggregate, ceiling);
         return new MasteryView(ownXp, ownLevel, aggregate, targets);
     }

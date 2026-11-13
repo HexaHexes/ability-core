@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Test;
 /**
  * The mastery view aggregation (REQ-CORE-12): levels derive from the
  * curve, and the aggregate that effect handlers scale on is
- * ownLevel + share-weighted target levels - the same list that routes XP
- * out empowers the caster back.
+ * ownLevel + full target levels - the same list that routes XP out
+ * empowers the caster back at full strength (shares never weight it).
  */
 class MasteryViewTest {
 
@@ -31,7 +31,7 @@ class MasteryViewTest {
     }
 
     @Test
-    void aggregateIsOwnLevelPlusShareWeightedTargetLevels() {
+    void aggregateIsOwnLevelPlusFullTargetLevels() {
         MasterySpec spec = MasterySpec.gained(10.0)
                 .withShare(FIRE, 0.5)
                 .withShare(BLAZE, 0.25);
@@ -40,8 +40,11 @@ class MasteryViewTest {
         assertEquals(3, built.ownLevel(), "300 XP on a 100-step curve");
         assertEquals(1, built.targets().get(0).level(), "fire at 100 XP = level 1");
         assertEquals(2, built.targets().get(1).level(), "blaze at 200 XP = level 2");
-        // 3 + 0.5*1 + 0.25*2 = 4.0
-        assertEquals(4.0, built.aggregateLevel(), 1e-9);
+        // Full contributions: 3 + 1 + 2 = 6.0 - the 0.5/0.25 shares
+        // route XP only and never weight the effect input
+        assertEquals(6.0, built.aggregateLevel(), 1e-9);
+        assertEquals(0.5, built.targets().get(0).share(), 1e-9,
+                "the XP share stays recorded on the target row");
         assertEquals(300.0, built.ownXp());
     }
 
@@ -81,14 +84,14 @@ class MasteryViewTest {
                 xp -> MasteryCurve.level(xp, 100.0, 1.15), Integer.MAX_VALUE);
         assertTrue(uncapped.ownLevel() > 3, "no ceiling, no clamp");
 
-        // a share feeds the aggregate too (the school-mastery shape): a
-        // HARD ceiling clamps the EFFECT INPUT - the caps brief's
-        // "view/effect input clamps" - while SOFT keeps the full sum
+        // a shared target feeds the aggregate too (the school-mastery
+        // shape): a HARD ceiling clamps the EFFECT INPUT while SOFT
+        // keeps the full sum
         MasterySpec shared = spec.withShare(FIRE, 0.5);
         var hardShared = MasteryView.build(shared, 10_000.0, target -> 1_000.0,
                 xp -> MasteryCurve.level(xp, 100.0, 1.15), 3);
         assertEquals(3.0, hardShared.aggregateLevel(), 1e-9,
-                "a share can never push the aggregate past the ceiling, got "
+                "a full contribution can never push the aggregate past the ceiling, got "
                         + hardShared.aggregateLevel());
         var softShared = MasteryView.build(shared, 10_000.0, target -> 1_000.0,
                 xp -> MasteryCurve.level(xp, 100.0, 1.15), Integer.MAX_VALUE);
@@ -97,9 +100,9 @@ class MasteryViewTest {
     }
 
     @Test
-    void ownLevelOnlyDropsTheShareTermsButKeepsTheTargets() {
+    void ownLevelOnlyDropsTheTargetTermsButKeepsTheTargets() {
         // channel v6's "no mastery ability feeds this" read: the pane's
-        // parenthetical subtracts it from the full read, so the share
+        // parenthetical subtracts it from the full read, so the target
         // terms must go while the target list stays for handlers
         MasterySpec spec = MasterySpec.gained(10.0)
                 .withShare(FIRE, 0.5)
@@ -112,6 +115,6 @@ class MasteryViewTest {
         assertEquals(3, own.ownLevel(), "the own level is untouched");
         assertEquals(300.0, own.ownXp(), "the own XP is untouched");
         assertEquals(built.targets(), own.targets(),
-                "the share list stays - a view-reading handler answers alike");
+                "the target list stays - a view-reading handler answers alike");
     }
 }
