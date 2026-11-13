@@ -100,6 +100,30 @@ public final class MasteryLevels {
     }
 
     /**
+     * The inverse of {@link #level}: the minimum XP that reaches the
+     * given level through the SAME source of truth - the datapack table
+     * when one is installed (its last threshold caps the answer, matching
+     * the level read that pins at the table's data), else the config
+     * formula. The admin command's set/add conversion, so an admin's
+     * level is the level the pane shows.
+     *
+     * @param level the level to price (0 or below yields 0)
+     * @return the XP pool that first reaches {@code level}
+     */
+    public static double xpForLevel(int level) {
+        if (level <= 0) {
+            return 0.0;
+        }
+        double[] table = thresholds;
+        if (table != null) {
+            int clamped = Math.min(level, table.length);
+            return clamped == 0 ? 0.0 : table[clamped - 1];
+        }
+        return MasteryCurve.xpForLevel(level, CoreConfig.masteryLevelCurveBase(),
+                CoreConfig.masteryLevelCurveGrowth());
+    }
+
+    /**
      * Parses one datapack table ({@code {"levels": [100, 250, ...]}}):
      * non-empty, finite, non-negative and strictly ascending, else an
      * {@link IllegalArgumentException} naming the problem (the listener

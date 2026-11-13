@@ -42,6 +42,25 @@ public final class MasteryData {
         xp.merge(key, amount, Double::sum);
     }
 
+    /**
+     * Sets one target's XP (the admin command's write): validated like
+     * {@link #addXp} - non-finite or negative never corrupts the store -
+     * and 0 clears the key (an absent key reads 0 anyway).
+     *
+     * @param key    the {@code KIND|id} target key
+     * @param amount the XP to hold
+     */
+    public void setXp(String key, double amount) {
+        if (key == null || key.isBlank() || !Double.isFinite(amount) || amount < 0.0) {
+            return;
+        }
+        if (amount == 0.0) {
+            xp.remove(key);
+            return;
+        }
+        xp.put(key, amount);
+    }
+
     /** @return the XP stored on one target key (0 when absent) */
     public double xp(String key) {
         if (key == null) {
