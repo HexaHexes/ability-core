@@ -54,6 +54,17 @@ public record MasteryView(
     }
 
     /**
+     * The same view with the aggregate reset to the ability's OWN level -
+     * the "no mastery ability feeds this" read the pane's parenthetical
+     * (channel v6) subtracts. Targets stay: a named handler that reads
+     * them directly answers the same value twice, so its slice reads 0 -
+     * the handler's design, honestly reported.
+     */
+    public MasteryView ownLevelOnly() {
+        return new MasteryView(ownXp, ownLevel, ownLevel, targets);
+    }
+
+    /**
      * The view for one player and ability, read live from the player's
      * stored mastery and the spec's share list.
      *

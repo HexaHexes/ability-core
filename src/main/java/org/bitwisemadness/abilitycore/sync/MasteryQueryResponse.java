@@ -62,11 +62,18 @@ public record MasteryQueryResponse(String targetPlayer, List<Entry> entries)
     /**
      * One declared effect axis's current multiplier.
      *
-     * @param axis       {@code COST} / {@code CAST_TIME} / {@code POWER} /
-     *                   {@code DURATION} / {@code RANGE}
-     * @param multiplier the value the domain would apply right now
+     * @param axis          {@code COST} / {@code CAST_TIME} / {@code POWER} /
+     *                      {@code DURATION} / {@code RANGE}
+     * @param multiplier    the value the domain would apply right now
+     * @param masteryBonus  the slice owed to share-linked mastery abilities
+     *                      (channel v6): the full multiplier minus the same
+     *                      read at the ability's own level alone, so the
+     *                      pane can show what a school (or any share
+     *                      target) contributes - 0 when nothing shares in,
+     *                      a HARD cap pins both reads equal, or a named
+     *                      handler answers both reads alike
      */
-    public record Bonus(String axis, double multiplier) {
+    public record Bonus(String axis, double multiplier, double masteryBonus) {
     }
 
     public static final Type<MasteryQueryResponse> TYPE = new Type<>(
@@ -94,6 +101,7 @@ public record MasteryQueryResponse(String targetPlayer, List<Entry> entries)
                         for (Bonus bonus : entry.bonuses()) {
                             ByteBufCodecs.STRING_UTF8.encode(buf, bonus.axis());
                             ByteBufCodecs.DOUBLE.encode(buf, bonus.multiplier());
+                            ByteBufCodecs.DOUBLE.encode(buf, bonus.masteryBonus());
                         }
                     }
                 }
@@ -123,7 +131,8 @@ public record MasteryQueryResponse(String targetPlayer, List<Entry> entries)
                         for (int j = 0; j < bonusCount; j++) {
                             String axis = ByteBufCodecs.STRING_UTF8.decode(buf);
                             double multiplier = ByteBufCodecs.DOUBLE.decode(buf);
-                            bonuses.add(new Bonus(axis, multiplier));
+                            double masteryBonus = ByteBufCodecs.DOUBLE.decode(buf);
+                            bonuses.add(new Bonus(axis, multiplier, masteryBonus));
                         }
                         entries.add(new Entry(kind, id, xp, level, progress,
                                 List.copyOf(bonuses)));
@@ -193,7 +202,8 @@ public record MasteryQueryResponse(String targetPlayer, List<Entry> entries)
         for (MasteryAxis axis : MasteryAxis.values()) {
             if (spec.effects().containsKey(axis)) {
                 bonuses.add(new Bonus(axis.name(),
-                        MasteryEffects.multiplier(player, id, axis)));
+                        MasteryEffects.multiplier(player, id, axis),
+                        MasteryEffects.masteryContributionMultiplier(player, id, axis)));
             }
         }
         return List.copyOf(bonuses);

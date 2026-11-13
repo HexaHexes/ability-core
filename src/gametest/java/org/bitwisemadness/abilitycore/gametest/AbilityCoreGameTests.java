@@ -331,7 +331,10 @@ public final class AbilityCoreGameTests {
                 org.bitwisemadness.abilitycore.api.MasterySpec.gained(10.0)
                         .withShare(org.bitwisemadness.abilitycore.api.MasteryTarget.category(tree), 0.5)
                         .withEffect(org.bitwisemadness.abilitycore.api.MasteryAxis.COST,
-                                "query:quarter"));
+                                "query:quarter")
+                        // the default-curve axis the v6 slice asserts run
+                        // against (the constant COST handler reads 0)
+                        .withEffect(org.bitwisemadness.abilitycore.api.MasteryAxis.POWER));
         // a distinct handler name: the award gametest declares its own
         // concurrently in the same batch (duplicate names would collide)
         org.bitwisemadness.abilitycore.api.MasteryEffectHandlers.declare(
@@ -343,8 +346,13 @@ public final class AbilityCoreGameTests {
                 "QueryProbe");
         var player = new net.minecraft.server.level.ServerPlayer(server, helper.getLevel(),
                 profile, net.minecraft.server.level.ClientInformation.createDefault());
-        org.bitwisemadness.abilitycore.api.MasteryAwards.award(player, abilityId,
-                org.bitwisemadness.abilitycore.api.MasteryTrigger.ACTIVATION);
+        // twenty awards: baseGain 10 each, half routed to the share, so
+        // BOTH pools clear the curve's 100 XP first step and the v6
+        // slice has two distinct reads to subtract
+        for (int i = 0; i < 20; i++) {
+            org.bitwisemadness.abilitycore.api.MasteryAwards.award(player, abilityId,
+                    org.bitwisemadness.abilitycore.api.MasteryTrigger.ACTIVATION);
+        }
 
         // the online answer: echo + one entry per stored target, server level
         String uuid = player.getUUID().toString();
@@ -367,10 +375,10 @@ public final class AbilityCoreGameTests {
             throw new GameTestAssertException(
                     "the wire kind vocabulary must name both entries: " + online.entries());
         }
-        double expectedHalf = 5.0;
+        double expectedHalf = 100.0; // 20 awards x baseGain 10, split 50/50
         if (Math.abs(abilityEntry.xp() - expectedHalf) > 1.0e-9
                 || Math.abs(categoryEntry.xp() - expectedHalf) > 1.0e-9) {
-            throw new GameTestAssertException("expected the 5/5 split in the snapshot, got "
+            throw new GameTestAssertException("expected the 100/100 split in the snapshot, got "
                     + abilityEntry.xp() + "/" + categoryEntry.xp());
         }
         int expectedLevel = org.bitwisemadness.abilitycore.mastery.MasteryLevels
@@ -388,16 +396,56 @@ public final class AbilityCoreGameTests {
                             + abilityEntry.progress() + " expected " + expectedProgress);
         }
         // the ability entry carries its CURRENT effect bonuses (the pane's
-        // mastery-bonuses section): one declared axis, server-evaluated
-        if (abilityEntry.bonuses().size() != 1) {
+        // mastery-bonuses section): the declared axes, server-evaluated,
+        // each with its v6 mastery-ability slice
+        if (abilityEntry.bonuses().size() != 2) {
             throw new GameTestAssertException(
-                    "expected exactly the declared COST bonus, got "
+                    "expected the COST and POWER bonuses, got "
                             + abilityEntry.bonuses());
         }
         var bonus = abilityEntry.bonuses().get(0);
         if (!"COST".equals(bonus.axis()) || Math.abs(bonus.multiplier() - 0.25) > 1.0e-9) {
             throw new GameTestAssertException(
                     "the bonus must be the handler's live answer, got " + bonus);
+        }
+        if (bonus.masteryBonus() != 0.0) {
+            throw new GameTestAssertException(
+                    "a view-ignoring handler's slice must be 0, got " + bonus);
+        }
+        // POWER rides the default curve, so own and aggregate reads part:
+        // the slice is exactly full minus own-level (channel v6)
+        var power = abilityEntry.bonuses().get(1);
+        if (!"POWER".equals(power.axis())) {
+            throw new GameTestAssertException(
+                    "axes ride in declaration order, got " + abilityEntry.bonuses());
+        }
+        double ownLevel = abilityEntry.level();
+        double aggregate = ownLevel + 0.5 * categoryEntry.level();
+        // the default curve's own shape, read through the same config
+        // readers the curve uses (never a second literal copy)
+        double expectedTotal = 1.0 + org.bitwisemadness.abilitycore.config.CoreConfig
+                .masteryMaxPowerIncrease() * (1.0 - Math.exp(
+                        -org.bitwisemadness.abilitycore.config.CoreConfig
+                                .masteryPowerIncreasePerLevel() * aggregate));
+        double expectedOwn = 1.0 + org.bitwisemadness.abilitycore.config.CoreConfig
+                .masteryMaxPowerIncrease() * (1.0 - Math.exp(
+                        -org.bitwisemadness.abilitycore.config.CoreConfig
+                                .masteryPowerIncreasePerLevel() * ownLevel));
+        if (Math.abs(power.multiplier() - expectedTotal) > 1.0e-9) {
+            throw new GameTestAssertException(
+                    "POWER must be the curve at the aggregate, got " + power.multiplier()
+                            + " expected " + expectedTotal);
+        }
+        if (Math.abs(power.masteryBonus() - (expectedTotal - expectedOwn)) > 1.0e-9) {
+            throw new GameTestAssertException(
+                    "the mastery slice must be full minus own-level, got "
+                            + power.masteryBonus() + " expected "
+                            + (expectedTotal - expectedOwn));
+        }
+        if (power.masteryBonus() <= 0.0) {
+            throw new GameTestAssertException(
+                    "a fed share must contribute a positive POWER slice, got "
+                            + power.masteryBonus());
         }
         if (!categoryEntry.bonuses().isEmpty()) {
             throw new GameTestAssertException(

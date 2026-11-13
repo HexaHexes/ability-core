@@ -36,9 +36,9 @@ public final class NetworkRegistration {
     public static void onRegisterPayloads(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar(AbilityCore.MOD_ID)
                 // Version history (docs/sync.md): 2 target hint (core#69),
-                // 3 mode context (#113), 4 progress + 5 effect bonuses.
-                // Additive payload types do not bump N.
-                .versioned("5")
+                // 3 mode context (#113), 4 progress, 5 effect bonuses,
+                // 6 mastery slice per bonus; additive types do not bump N.
+                .versioned("6")
                 .optional();
 
         registrar.playToServer(
