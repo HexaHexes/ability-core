@@ -95,4 +95,23 @@ class MasteryViewTest {
         assertTrue(softShared.aggregateLevel() > 3.0,
                 "SOFT keeps the full aggregate, got " + softShared.aggregateLevel());
     }
+
+    @Test
+    void ownLevelOnlyDropsTheShareTermsButKeepsTheTargets() {
+        // channel v6's "no mastery ability feeds this" read: the pane's
+        // parenthetical subtracts it from the full read, so the share
+        // terms must go while the target list stays for handlers
+        MasterySpec spec = MasterySpec.gained(10.0)
+                .withShare(FIRE, 0.5)
+                .withShare(BLAZE, 0.25);
+        MasteryView built = view(spec, 300.0, Map.of(FIRE, 100.0, BLAZE, 200.0));
+        MasteryView own = built.ownLevelOnly();
+
+        assertEquals(3.0, own.aggregateLevel(), 1e-9,
+                "the aggregate collapses to the own level alone");
+        assertEquals(3, own.ownLevel(), "the own level is untouched");
+        assertEquals(300.0, own.ownXp(), "the own XP is untouched");
+        assertEquals(built.targets(), own.targets(),
+                "the share list stays - a view-reading handler answers alike");
+    }
 }

@@ -84,11 +84,43 @@ public final class MasteryEffects {
         if (spec == null) {
             return 1.0; // opted out
         }
-        MasterySpec.EffectRule rule = spec.effects().get(axis);
-        if (rule == null) {
+        if (!spec.effects().containsKey(axis)) {
             return 1.0; // this axis does not participate
         }
+        return read(player, abilityId, spec, axis, MasteryView.of(player, abilityId));
+    }
+
+    /**
+     * The slice of an axis's multiplier owed to share-linked mastery
+     * abilities (the pane's parenthetical, REQ-CORE-12): the full read
+     * minus the same read at the ability's OWN level alone, so a school
+     * (or any share target) reports exactly what it adds. 0 when the
+     * system is off, the axis does not participate, nothing shares in,
+     * or a HARD cap pins both reads equal; a named handler answers
+     * whatever its two reads differ by - one that ignores the view reads
+     * 0, its design honestly reported.
+     */
+    public static double masteryContributionMultiplier(@Nullable ServerPlayer player,
+            ResourceLocation abilityId, MasteryAxis axis) {
+        if (!CoreConfig.masteryEnabled() || player == null || abilityId == null) {
+            return 0.0;
+        }
+        MasterySpec spec = MasteryOverlays.specFor(abilityId);
+        if (spec == null || !spec.effects().containsKey(axis)) {
+            return 0.0;
+        }
         MasteryView view = MasteryView.of(player, abilityId);
+        if (view.targets().isEmpty()) {
+            return 0.0; // no mastery ability feeds this one
+        }
+        return read(player, abilityId, spec, axis, view)
+                - read(player, abilityId, spec, axis, view.ownLevelOnly());
+    }
+
+    /** One read at one view: the named handler's answer, else the default curve. */
+    private static double read(ServerPlayer player, ResourceLocation abilityId,
+            MasterySpec spec, MasteryAxis axis, MasteryView view) {
+        MasterySpec.EffectRule rule = spec.effects().get(axis);
         if (rule.handler() != null) {
             MasteryEffectHandlers.EffectHandler handler =
                     MasteryEffectHandlers.get(axis, rule.handler()).orElse(null);
