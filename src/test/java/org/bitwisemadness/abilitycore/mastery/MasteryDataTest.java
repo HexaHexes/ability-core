@@ -71,4 +71,23 @@ class MasteryDataTest {
         assertEquals(7.0, loaded.xp("CATEGORY|tensura:fire"), 1e-9, "valid keys survive");
         assertTrue(loaded.entries().containsKey("CATEGORY|tensura:fire"));
     }
+
+    @Test
+    void setXpOverwritesAndClears() {
+        // the admin command's write (owner's brief): set replaces the
+        // pool outright, zero clears the key, invalid writes never corrupt
+        MasteryData data = new MasteryData();
+        data.addXp(KEY, 10.0);
+        data.setXp(KEY, 99.5);
+        assertEquals(99.5, data.xp(KEY), 1e-9, "set overwrites the pool");
+        data.setXp(KEY, 0.0);
+        assertEquals(0.0, data.xp(KEY), 1e-9, "zero clears the key");
+        assertTrue(data.entries().isEmpty(), "a cleared key leaves the store");
+
+        data.setXp(KEY, -5.0);
+        data.setXp(KEY, Double.NaN);
+        data.setXp(null, 7.0);
+        data.setXp("  ", 7.0);
+        assertEquals(0.0, data.xp(KEY), 1e-9, "invalid writes never corrupt");
+    }
 }

@@ -93,4 +93,29 @@ class MasteryCurveTest {
             }
         }
     }
+
+    @Test
+    void xpForLevelInvertsTheCurveExactly() {
+        // the admin command's conversion (owner's brief): the level read
+        // must land back on the asked level, flat and geometric alike -
+        // the closed form compounds rounding, so the helper verifies
+        assertEquals(0.0, MasteryCurve.xpForLevel(0, 100.0, 1.15), 1e-9,
+                "level 0 prices at 0");
+        assertEquals(0.0, MasteryCurve.xpForLevel(-3, 100.0, 1.15), 1e-9,
+                "degenerate levels price at 0");
+        assertEquals(100.0, MasteryCurve.xpForLevel(1, 100.0, 1.0), 1e-9,
+                "flat steps price exactly");
+        assertEquals(300.0, MasteryCurve.xpForLevel(3, 100.0, 1.0), 1e-9);
+        assertEquals(700.0, MasteryCurve.xpForLevel(3, 100.0, 2.0), 1e-9,
+                "geometric steps price exactly (100 + 200 + 400)");
+        for (int asked = 1; asked <= 200; asked++) {
+            for (double growth : new double[] {1.0, 1.15, 1.5}) {
+                double xp = MasteryCurve.xpForLevel(asked, 100.0, growth);
+                assertEquals(asked, MasteryCurve.level(xp, 100.0, growth),
+                        "round trip at level " + asked + " growth " + growth);
+            }
+        }
+        assertEquals(Double.MAX_VALUE, MasteryCurve.xpForLevel(100_000, 100.0, 1.15),
+                "absurd levels saturate, never NaN or Infinity");
+    }
 }

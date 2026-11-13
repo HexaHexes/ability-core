@@ -131,4 +131,28 @@ class MasteryLevelsTest {
         assertTrue(vast >= 0.0 && vast < 1.0,
                 "the unbounded formula fill never pins at 1.0, got " + vast);
     }
+
+    @Test
+    void xpForLevelPricesFromTheTableThenTheFormula() {
+        // the admin command's conversion (owner's brief): the table owns
+        // the price while installed, the last threshold caps it past the
+        // data (matching the level read), and the formula answers after
+        assertEquals(0.0, MasteryLevels.xpForLevel(0), 1e-9,
+                "level 0 prices at 0");
+        MasteryLevels.installForTests(new double[] {100.0, 250.0, 450.0});
+        assertEquals(100.0, MasteryLevels.xpForLevel(1), 1e-9,
+                "the table's first threshold");
+        assertEquals(250.0, MasteryLevels.xpForLevel(2), 1e-9);
+        assertEquals(450.0, MasteryLevels.xpForLevel(3), 1e-9);
+        assertEquals(450.0, MasteryLevels.xpForLevel(99),
+                "past the data the last threshold caps it, like the level read");
+        assertEquals(3, MasteryLevels.level(MasteryLevels.xpForLevel(3)),
+                "table round trip");
+
+        MasteryLevels.installForTests(null);
+        double xp = MasteryLevels.xpForLevel(5);
+        assertEquals(5, MasteryLevels.level(xp), "formula round trip");
+        assertEquals(0.0, MasteryLevels.xpForLevel(-1), 1e-9,
+                "degenerate levels price at 0");
+    }
 }
