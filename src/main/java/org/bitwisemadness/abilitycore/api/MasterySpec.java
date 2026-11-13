@@ -29,7 +29,9 @@ import org.jetbrains.annotations.Nullable;
  * @param baseGain      XP per trigger when no gain handler is named
  * @param triggers      the triggers that grant (default {@code ACTIVATION})
  * @param shares        external targets and their share of each grant
- *                      (sum {@code <= 1}; self keeps the remainder)
+ *                      (sum {@code <= 1}; self keeps the remainder).
+ *                      Shares route XP only: the effect input sums
+ *                      every target's FULL level ({@link MasteryView})
  * @param gainHandler   named {@link MasteryGainHandlers} entry replacing
  *                      {@code baseGain} when present
  * @param effects       participating axes to their rule; an absent axis
