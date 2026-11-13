@@ -851,4 +851,90 @@ public final class AbilityCoreGameTests {
         AbilityRegistries.installRegistryForTests(previous);
         helper.succeed();
     }
+
+    /**
+     * The mastery blacklist (owner's brief): a listed id behaves as
+     * never declared - no new XP through either award entry, inert
+     * effect multipliers, no query entry - while the same id earns
+     * normally BEFORE the listing. The config reads live, so the
+     * fixture sets and restores it.
+     */
+    @GameTest(template = "empty")
+    public static void masteryBlacklistExcludesTheSystem(GameTestHelper helper)
+            throws GameTestAssertException {
+        var abilityId = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                AbilityCore.MOD_ID, "gametest_blacklist");
+        var previous = AbilityRegistries.registry();
+        var fixture = new MappedRegistry<org.bitwisemadness.abilitycore.api.AbilityDefinition>(
+                AbilityRegistries.ABILITY_REGISTRY_KEY, com.mojang.serialization.Lifecycle.stable(),
+                false);
+        Registry.register(fixture, abilityId,
+                new org.bitwisemadness.abilitycore.api.AbilityDefinition(
+                        "tensura.skill.gametest_blacklist", null,
+                        net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                                "tensura", "skill"),
+                        org.bitwisemadness.abilitycore.api.ActivationType.INSTANT,
+                        List.of(), org.bitwisemadness.abilitycore.api.ConsumptionStrategies.ALL,
+                        org.bitwisemadness.abilitycore.api.AmountResolvers.STATIC,
+                        Set.of(), Map.of()));
+        AbilityRegistries.installRegistryForTests(fixture);
+        org.bitwisemadness.abilitycore.api.MasteryDeclarations.declare(abilityId,
+                org.bitwisemadness.abilitycore.api.MasterySpec.gained(10.0)
+                        .withEffect(org.bitwisemadness.abilitycore.api.MasteryAxis.COST));
+
+        var server = helper.getLevel().getServer();
+        var profile = new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(),
+                "BlacklistProbe");
+        var player = new net.minecraft.server.level.ServerPlayer(server, helper.getLevel(),
+                profile, net.minecraft.server.level.ClientInformation.createDefault());
+        var key = org.bitwisemadness.abilitycore.api.MasteryTarget.ability(abilityId).key();
+        var store = org.bitwisemadness.abilitycore.mastery.MasteryAttachments.data(player);
+
+        // the path works while allowed: one activation grants the base gain
+        org.bitwisemadness.abilitycore.api.MasteryAwards.award(player, abilityId,
+                org.bitwisemadness.abilitycore.api.MasteryTrigger.ACTIVATION);
+        double seeded = store.xp(key);
+        if (seeded <= 0.0) {
+            throw new GameTestAssertException(
+                    "the fixture must earn XP while un-blacklisted, got " + seeded);
+        }
+
+        org.bitwisemadness.abilitycore.config.CoreConfig.MASTERY_BLACKLIST.set(
+                java.util.List.of(abilityId.toString()));
+        try {
+            org.bitwisemadness.abilitycore.api.MasteryAwards.award(player, abilityId,
+                    org.bitwisemadness.abilitycore.api.MasteryTrigger.ACTIVATION);
+            if (store.xp(key) != seeded) {
+                throw new GameTestAssertException(
+                        "a blacklisted id must earn nothing, xp moved to " + store.xp(key));
+            }
+            org.bitwisemadness.abilitycore.api.MasteryAwards.awardTo(player,
+                    org.bitwisemadness.abilitycore.api.MasteryTarget.ability(abilityId), 999.0);
+            if (store.xp(key) != seeded) {
+                throw new GameTestAssertException(
+                        "awardTo must not bypass the blacklist, got " + store.xp(key));
+            }
+            double multiplier = org.bitwisemadness.abilitycore.api.MasteryEffects
+                    .multiplier(player, abilityId,
+                            org.bitwisemadness.abilitycore.api.MasteryAxis.COST);
+            if (multiplier != 1.0) {
+                throw new GameTestAssertException(
+                        "effect multipliers stay inert, got " + multiplier);
+            }
+            String uuid = player.getUUID().toString();
+            var answer = org.bitwisemadness.abilitycore.sync.MasteryQueryResponse
+                    .of(uuid, player);
+            boolean listed = answer.entries().stream()
+                    .anyMatch(entry -> abilityId.toString().equals(entry.id()));
+            if (listed) {
+                throw new GameTestAssertException(
+                        "the query answer must carry no entry for a blacklisted id");
+            }
+        } finally {
+            org.bitwisemadness.abilitycore.config.CoreConfig.MASTERY_BLACKLIST.set(
+                    java.util.List.of());
+            AbilityRegistries.installRegistryForTests(previous);
+        }
+        helper.succeed();
+    }
 }
