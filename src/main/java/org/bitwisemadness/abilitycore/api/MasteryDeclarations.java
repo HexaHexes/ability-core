@@ -59,16 +59,6 @@ public final class MasteryDeclarations {
         return abilityId != null && SPECS.containsKey(abilityId);
     }
 
-    /**
-     * Every declared id, read-only (command suggestions and diagnostics;
-     * a snapshot copy, so callers can never mutate the registry).
-     *
-     * @return the declared ability ids
-     */
-    public static java.util.Set<ResourceLocation> ids() {
-        return java.util.Set.copyOf(SPECS.keySet());
-    }
-
     /** Test isolation: removes a declaration (returns whether one existed). */
     public static boolean remove(ResourceLocation abilityId) {
         return abilityId != null && SPECS.remove(abilityId) != null;
