@@ -1,3 +1,6 @@
+# Delegates to the shared workflow suite hosted in ability-core
+# (one copy for the whole org). Triggers, permissions and concurrency
+
 name: Publish
 
 # Publishes this repo's artifact to the org's GitHub Packages Maven registry, so
@@ -30,20 +33,5 @@ concurrency:
 
 jobs:
   publish:
-    name: publish
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: gradle
-
-      - name: Publish to GitHub Packages
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_ACTOR: ${{ github.actor }}
-        run: ./gradlew publish --no-daemon --stacktrace
+    uses: HexaHexes/ability-core/.github/workflows/reusable-publish.yml@main
+    secrets: inherit

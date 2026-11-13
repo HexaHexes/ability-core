@@ -1,3 +1,6 @@
+# Delegates to the shared workflow suite hosted in ability-core
+# (one copy for the whole org). Triggers, permissions and concurrency
+
 name: Publish to CurseForge
 
 # Deliberately separate from release.yml. A CurseForge outage fails only this
@@ -32,117 +35,5 @@ concurrency:
 
 jobs:
   publish:
-    name: publish
-    runs-on: ubuntu-latest
-
-    # Edit these two lines when promoting this file into a repo. Loader names
-    # are CurseForge's loader names ("Forge", "NeoForge", "Fabric"...).
-    env:
-      MINECRAFT_VERSION: '1.21.1'
-      MOD_LOADERS: '["neoforge"]'
-      GH_TOKEN: ${{ github.token }}
-      # Either the release event or the dispatch input, never both.
-      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
-
-    steps:
-      - name: Resolve channel from the tag
-        id: channel
-        run: |
-          set -euo pipefail
-
-          if [ -z "$RELEASE_TAG" ]; then
-            echo "::error::No release tag supplied. Expected one from the release event or the dispatch input."
-            exit 1
-          fi
-          echo "tag: $RELEASE_TAG"
-
-          # CurseForge gets all three channels, alphas included (the Modrinth
-          # flow still keeps them GitHub-only - owner ruling).
-          case "$RELEASE_TAG" in
-            *+g*|*-alpha*)
-              echo "channel=alpha" >> "$GITHUB_OUTPUT"
-              echo "publish=false" >> "$GITHUB_OUTPUT"
-              echo "reason=alphas are published to GitHub only, not CurseForge" >> "$GITHUB_OUTPUT"
-              echo "version_type=alpha" >> "$GITHUB_OUTPUT"
-              ;;
-            *-*)
-              echo "channel=beta" >> "$GITHUB_OUTPUT"
-              echo "publish=true" >> "$GITHUB_OUTPUT"
-              echo "reason=tag carries a pre-release suffix" >> "$GITHUB_OUTPUT"
-              echo "version_type=beta" >> "$GITHUB_OUTPUT"
-              ;;
-            *)
-              echo "channel=stable" >> "$GITHUB_OUTPUT"
-              echo "publish=true" >> "$GITHUB_OUTPUT"
-              echo "reason=clean version tag" >> "$GITHUB_OUTPUT"
-              echo "version_type=release" >> "$GITHUB_OUTPUT"
-              ;;
-          esac
-
-      - name: Skip
-        if: steps.channel.outputs.publish != 'true'
-        run: |
-          echo "Skipping CurseForge upload for $RELEASE_TAG."
-          echo "${{ steps.channel.outputs.reason }}."
-
-      - name: Check CurseForge configuration
-        id: config
-        if: steps.channel.outputs.publish == 'true'
-        env:
-          CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
-          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "$CURSEFORGE_PROJECT_ID" ] && [ -z "$CURSEFORGE_API_KEY" ]; then
-            echo "::notice::This repo has no CurseForge configuration - skipping the upload."
-            echo "::notice::Add CURSEFORGE_PROJECT_ID and CURSEFORGE_API_KEY under Settings > Secrets and variables > Actions when the project is listed."
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          MISSING=""
-          [ -z "$CURSEFORGE_PROJECT_ID" ] && MISSING="$MISSING CURSEFORGE_PROJECT_ID"
-          [ -z "$CURSEFORGE_API_KEY" ] && MISSING="$MISSING CURSEFORGE_API_KEY"
-
-          if [ -n "$MISSING" ]; then
-            echo "::error::Cannot publish a ${{ steps.channel.outputs.channel }} release to CurseForge."
-            echo "::error::Missing required secret(s):$MISSING"
-            echo "::error::Add them under Settings > Secrets and variables > Actions."
-            exit 1
-          fi
-
-          echo "Secrets present."
-          echo "configured=true" >> "$GITHUB_OUTPUT"
-
-      - name: Download release asset and notes
-        if: steps.channel.outputs.publish == 'true' && steps.config.outputs.configured == 'true'
-        run: |
-          set -euo pipefail
-          mkdir -p staged
-          gh release download "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" \
-            --pattern '*.jar' \
-            --dir staged
-          ls -la staged
-          echo "ASSET=$(ls staged/*.jar | head -1)" >> "$GITHUB_ENV"
-
-          gh release view "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --json body --jq '.body' > notes.md
-          echo "Release notes ($(wc -c < notes.md) bytes):"
-          cat notes.md
-
-      # mc-publish owns the multipart metadata and the platform API shape
-      # (ruling: neoforge-mod-template #82). version-type alpha maps onto
-      # CurseForge's alpha release type automatically.
-      - name: Upload to CurseForge
-        if: steps.channel.outputs.publish == 'true' && steps.config.outputs.configured == 'true'
-        uses: Kir-Antipov/mc-publish@v3.3
-        with:
-          curseforge-id: ${{ secrets.CURSEFORGE_PROJECT_ID }}
-          curseforge-token: ${{ secrets.CURSEFORGE_API_KEY }}
-          files: staged/*.jar
-          version: ${{ env.RELEASE_TAG }}
-          version-type: ${{ steps.channel.outputs.version_type }}
-          name: ${{ env.RELEASE_TAG }}
-          changelog-file: notes.md
-          game-versions: ${{ env.MINECRAFT_VERSION }}
-          loaders: ${{ env.MOD_LOADERS }}
+    uses: HexaHexes/ability-core/.github/workflows/reusable-curseforge.yml@main
+    secrets: inherit

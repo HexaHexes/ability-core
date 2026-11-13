@@ -1,3 +1,6 @@
+# Delegates to the shared workflow suite hosted in ability-core
+# (one copy for the whole org). Triggers, permissions and concurrency
+
 name: Version bump (post-merge)
 
 # The alpha slot is owned by CI/CD, not by PRs (neoforge-mod-template #81).
@@ -54,101 +57,5 @@ concurrency:
 
 jobs:
   bump:
-    name: version-bump
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # The bump's own push cascades back into this workflow (PAT pushes trigger
-    # workflows); without this guard the slot would climb forever.
-    if: ${{ github.event_name != 'push' || (!contains(github.event.head_commit.message || '', 'post-merge auto-bump)') && !startsWith(github.event.head_commit.message || '', 'Bump mod_version to')) }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          # The semver floor below reads the last stable tag - checkout's
-          # default single-commit fetch carries no tags.
-          fetch-depth: 0
-          token: ${{ secrets.BUMP_TOKEN || github.token }}
-
-      - name: Bump the alpha slot
-        env:
-          BUMP_TOKEN: ${{ secrets.BUMP_TOKEN }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "$BUMP_TOKEN" ]; then
-            echo "::error::BUMP_TOKEN secret is not set. A GITHUB_TOKEN push cannot land on this repository (branch ruleset: changes must be made through a pull request)."
-            echo "::error::Add a fine-grained PAT with Contents: Read and write, owned by a bypass actor, as the BUMP_TOKEN repository or organization secret, then re-run this workflow."
-            exit 1
-          fi
-
-          VERSION=$(grep '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
-          echo "current mod_version: $VERSION"
-
-          case "$VERSION" in
-            *-alpha.[0-9]*)
-              # Owner ruling (issue #98): the counter is always two digits, and
-              # 10# stops a padded value (08/09) from being read as octal.
-              BASE="${VERSION%-alpha.*}"
-              N="${VERSION##*-alpha.}"
-              NEXT=$(printf '%s-alpha.%02d' "$BASE" "$((10#$N + 1))")
-              ;;
-            *-beta.[0-9]*)
-              # Owner rulings: beta trains advance automatically (#96), padded to
-              # two digits with octal-safe parsing (#98).
-              BASE="${VERSION%-beta.*}"
-              N="${VERSION##*-beta.}"
-              NEXT=$(printf '%s-beta.%02d' "$BASE" "$((10#$N + 1))")
-              ;;
-            *)
-              # Owner rulings (#96/#98/#100): a clean stable starts a train on the NEXT
-              # patch line - semver's floor for unpublished work after a release
-              # (2.2.0 -> 2.2.1-alpha.01), never a stable itself; unknown
-              # suffixes (e.g. -rc.1) stay a no-op.
-              if printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-                NEXT=$(printf '%s.%d-alpha.01' "${VERSION%.*}" "$((10#${VERSION##*.} + 1))")
-              else
-                echo "No alpha/beta train on '$VERSION' and not a clean X.Y.Z - nothing to auto-bump."
-                exit 0
-              fi
-              ;;
-          esac
-
-          # Semver floor (owner ruling, issue #104): while breaking PRs have
-          # landed since the last stable tag, the train base may never sit
-          # below the minor raise - ci's affirmed rule ("raise major or
-          # minor") forbids the patch line the case above would otherwise
-          # open, whose stable cut could then never pass. Same query as
-          # ci.yml's magnitude rule, so train and check read one thing. The
-          # raised base starts a fresh counter (current channel kept for
-          # beta trains).
-          BASELINE=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
-          BREAKING=""
-          FLOOR=""
-          if [ -n "$BASELINE" ]; then
-            BREAKING=$(gh pr list --state merged --label breaking --search "merged:>=$(git log -1 --format=%cI "$BASELINE")" --json number --jq '.[].number' || true)
-          fi
-          if [ -n "$BREAKING" ]; then
-            echo "breaking PRs since $BASELINE: $BREAKING"
-            OLD_BASE="${BASELINE#v}"
-            MAJOR_OLD=$(echo "$OLD_BASE" | cut -d. -f1)
-            MINOR_OLD=$(echo "$OLD_BASE" | cut -d. -f2)
-            FLOOR="$MAJOR_OLD.$((MINOR_OLD + 1)).0"
-            echo "semver floor (minor raise of $OLD_BASE): $FLOOR"
-            CURRENT_BASE="${VERSION%%-*}"
-            if [ "$CURRENT_BASE" != "$FLOOR" ] && [ "$(printf '%s\n%s\n' "$CURRENT_BASE" "$FLOOR" | sort -V | tail -1)" = "$FLOOR" ]; then
-              SLOT_CHANNEL=alpha
-              case "$VERSION" in *-beta.*) SLOT_CHANNEL=beta ;; esac
-              NEXT="$FLOOR-$SLOT_CHANNEL.01"
-              echo "breaking outstanding: raising base $CURRENT_BASE -> $FLOOR (new train $NEXT)"
-            fi
-          fi
-          echo "next slot: $NEXT"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          sed -i "s/^mod_version=.*/mod_version=$NEXT/" gradle.properties
-          git add gradle.properties
-          git commit -m "Version slot $NEXT (post-merge auto-bump)"
-          git push origin HEAD:main
-
-          echo "pushed $NEXT - the push cascade triggers Release"
+    uses: HexaHexes/ability-core/.github/workflows/reusable-version-bump-post-merge.yml@main
+    secrets: inherit
