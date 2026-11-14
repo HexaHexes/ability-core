@@ -226,8 +226,10 @@ public record ActivateAbilityPayload(
      * and never touches the map. Rejected attempts still count, so spam
      * cannot buy its way past the window, and stale windows are swept
      * once the map grows past its bound (departed players never pile up).
+     * Shared with {@link ReleaseAbilityPayload}: releases are 1:1 with
+     * presses, so both directions count against the same budget.
      */
-    private static boolean allowActivation(ServerPlayer player) {
+    static boolean allowActivation(ServerPlayer player) {
         int perSecond = CoreConfig.activationRatePerSecond();
         if (perSecond <= 0) {
             return true;
