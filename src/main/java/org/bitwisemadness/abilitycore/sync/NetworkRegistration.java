@@ -19,6 +19,8 @@ import org.bitwisemadness.abilitycore.AbilityCore;
  * <ul>
  *   <li>{@link ActivateAbilityPayload} - playToServer (client intent, server
  *       resolves through the pipeline)</li>
+ *   <li>{@link ReleaseAbilityPayload} - playToServer (client key-up, routes
+ *       to the pipeline's release half)</li>
  * </ul>
  *
  * <p>Consumers add their own payloads (bar snapshots, deltas, assignment
@@ -45,6 +47,13 @@ public final class NetworkRegistration {
                 ActivateAbilityPayload.TYPE,
                 ActivateAbilityPayload.STREAM_CODEC,
                 ActivateAbilityPayload::handle
+        );
+        // The key-up half of activation (native-parity release channel):
+        // additive type on the same versioned channel - no N bump
+        registrar.playToServer(
+                ReleaseAbilityPayload.TYPE,
+                ReleaseAbilityPayload.STREAM_CODEC,
+                ReleaseAbilityPayload::handle
         );
         // REQ-CORE-12: the explicit mastery query - one serverbound request,
         // one solicited clientbound answer, never a state push (docs/sync.md)

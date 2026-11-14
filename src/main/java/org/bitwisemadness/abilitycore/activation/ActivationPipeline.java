@@ -175,6 +175,41 @@ public final class ActivationPipeline {
                 && request.slotContext() == ActivationRequest.NO_SLOT;
     }
 
+    /**
+     * Runs the release half of one activation (key-up) - the native-parity
+     * channel the press-only pipeline never carried: without it, a hold
+     * starts on press and can only end via the provider's own timeout
+     * (ARR's slotted ceiling is an hour) or the payer dying, and an art
+     * whose payoff lives in its release callback never fires at all.
+     *
+     * <p>Deliberately <b>not</b> the press pipeline minus ACTIVATION: it
+     * resolves only the handler (ADAPTER) and invokes
+     * {@link ActivationHandler#release}, skipping RESOLVE, ELIGIBILITY,
+     * COOLDOWN, RESOURCE, CHARGE, the cooldown start and the mastery
+     * award. A stop must never be refused - an ability that sits on
+     * cooldown or fails eligibility still has an ongoing hold to end, and
+     * a refused stop is exactly the stranded-hold bug this route exists
+     * to fix. Release is idempotent by the handler contract (nothing held
+     * answers ACTED), releases grant no mastery (the press is the award),
+     * and a null handler result is the same contract violation as on
+     * press: logged, reported as an error, never as a success.</p>
+     */
+    public ActivationResult release(ActivationRequest request, ServerPlayer player) {
+        java.util.Objects.requireNonNull(request, "request");
+        // ADAPTER - built-in: without a handler there is nothing to stop
+        Optional<ActivationHandlerRegistry.Declaration> declarationOpt =
+                handlers.declaration(request.abilityId());
+        if (declarationOpt.isEmpty()) {
+            return ActivationResult.refused(ActivationOutcome.REFUSED_NO_ADAPTER);
+        }
+        ActivationResult result = declarationOpt.get().handler().release(request, player);
+        if (result == null) {
+            LOGGER.error("Release handler for {} returned null", request.abilityId());
+            return ActivationResult.refused(ActivationOutcome.REFUSED_UNAVAILABLE, "ability.error");
+        }
+        return result;
+    }
+
     private void chargeExternally(ActivationRequest request, ServerPlayer player,
             ActivationContext context) {
         // snapshots come from ResourceChargeStep's overlay-merged lookup: one

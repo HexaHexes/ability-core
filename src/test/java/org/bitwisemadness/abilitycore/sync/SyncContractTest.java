@@ -166,7 +166,8 @@ class SyncContractTest {
                 "org/bitwisemadness/abilitycore/sync/ActivateAbilityPayload.class",
                 "org/bitwisemadness/abilitycore/sync/MasteryQueryRequest.class",
                 "org/bitwisemadness/abilitycore/sync/MasteryQueryResponse.class",
-                "org/bitwisemadness/abilitycore/sync/NetworkRegistration.class"), referencing);
+                "org/bitwisemadness/abilitycore/sync/NetworkRegistration.class",
+                "org/bitwisemadness/abilitycore/sync/ReleaseAbilityPayload.class"), referencing);
         // Core's channel carries intent serverbound plus one solicited
         // clientbound answer (the mastery query response, REQ-CORE-12) -
         // never a state push: native cooldowns stay the provider's (core#16).
@@ -178,6 +179,53 @@ class SyncContractTest {
                 "the one clientbound core payload is the mastery query response");
         assertFalse(containsAscii(registrar, "BarStateSnapshot"),
                 "core never pushes game state - snapshots stay consumer-owned");
+    }
+
+    @Test
+    void releasePayloadCodecRoundTrips() {
+        // the native-parity key-up half: five fields, no target hint by
+        // design (a stop must never fail on a moved crosshair)
+        var original = new ReleaseAbilityPayload(
+                "tensura:fireball", "direct_slot", 3, 12345L, "burst");
+        var buf = io.netty.buffer.Unpooled.buffer();
+        try {
+            ReleaseAbilityPayload.STREAM_CODEC.encode(buf, original);
+            var decoded = ReleaseAbilityPayload.STREAM_CODEC.decode(buf);
+            assertEquals(original, decoded);
+            assertEquals("burst", decoded.mode());
+        } finally {
+            buf.release();
+        }
+    }
+
+    @Test
+    void releasePayloadBuildsATargetlessRequestAndFailsClosed() {
+        var expected = org.bitwisemadness.abilitycore.api.ActivationRequest.fromWire(
+                "tensura:fireball", "direct_slot", 3, 12345L);
+        assertEquals(expected, ReleaseAbilityPayload.toRequest(
+                new ReleaseAbilityPayload("tensura:fireball", "direct_slot", 3, 12345L, "")));
+        // the advisory mode rides like the press half (issue #113)
+        assertEquals(expected.withMode("burst"), ReleaseAbilityPayload.toRequest(
+                new ReleaseAbilityPayload("tensura:fireball", "direct_slot", 3, 12345L, "burst")));
+        // fail-closed: unknown id syntax or source builds no request
+        assertNull(ReleaseAbilityPayload.toRequest(
+                new ReleaseAbilityPayload("not a id!!", "direct_slot", 3, 12345L, "")));
+        assertNull(ReleaseAbilityPayload.toRequest(
+                new ReleaseAbilityPayload("tensura:fireball", "sideways", 3, 12345L, "")));
+    }
+
+    @Test
+    void releasePayloadStaysWithinTheServerboundBudget() {
+        var payload = new ReleaseAbilityPayload(
+                "tensura:" + "x".repeat(4000), "selected_slot", 18, Long.MAX_VALUE, "");
+        var buf = io.netty.buffer.Unpooled.buffer();
+        try {
+            ReleaseAbilityPayload.STREAM_CODEC.encode(buf, payload);
+            assertTrue(buf.readableBytes() < 32768,
+                    "encoded " + buf.readableBytes() + " bytes - over the 32 KiB budget");
+        } finally {
+            buf.release();
+        }
     }
 
     @Test

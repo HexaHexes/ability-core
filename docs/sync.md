@@ -53,6 +53,7 @@ When a registered codec changes:
 | `SwitchBarPayload` | playToServer | Alt+wheel / Alt+digit bar intent | `tensura-ability-hotbar` | one resource location |
 | `AssignAbilityPayload` | playToServer | menu assign / replace / clear | `tensura-ability-hotbar` | slot + ability id + bar id |
 | `ActivateAbilityPayload` | playToServer | slot activation (Ctrl+digit / G), carrying the optional target hint and the slot's mode | **core** | id + source + slot + stamp + hint + mode; ~60-100 B typical |
+| `ReleaseAbilityPayload` | playToServer | key-up of a held activation (the press's release half) - routes to `PIPELINE.release`, never refused by policy, no target hint by design | **core** | id + source + slot + stamp + mode; same fail-closed parse as the press, shares its rate ceiling |
 | `MasteryQueryRequest` | playToServer | an explicit UI request for one player's mastery snapshot (REQ-CORE-12) | **core** | one UUID string; the answer below is its only response |
 | `MasteryQueryResponse` | playToClient | the answer to `MasteryQueryRequest` - solicited only, never a push | **core** | echoed UUID + one entry per stored target (kind, id, xp, level, progress; ability entries also carry their current effect bonuses, each with its mastery-ability slice), sorted; distinct targets only, far under the wire bound |
 | delta payloads | - | **deferred** | - | see amendment below |
@@ -62,7 +63,8 @@ When a registered codec changes:
 Serverbound requests are intent-only and must encode **under 32 KiB**.
 `SyncContractTest.activatePayloadStaysWithinTheServerboundBudget` enforces
 this for core's payload with a generous worst case (a 4 000-character id -
-far past any real `ResourceLocation`); the transport layer's frame limits
+far past any real `ResourceLocation`); `releasePayloadStaysWithinTheServerboundBudget`
+covers the release half the same way; the transport layer's frame limits
 bound anything beyond. Requests carry no game state: an id, an enum name, an
 int, a long, and an optional target hint.
 

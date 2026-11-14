@@ -277,6 +277,72 @@ class ActivationPipelineTest {
     }
 
     @Test
+    void releaseSkipsPolicyPhasesAndRunsOnlyTheHandler() {
+        handlers.register(KNOWN, new ActivationHandler() {
+            @Override
+            public ActivationResult activate(ActivationRequest request, ServerPlayer player) {
+                trace.add("activate");
+                return ActivationResult.ACTED;
+            }
+
+            @Override
+            public ActivationResult release(ActivationRequest request, ServerPlayer player) {
+                trace.add("release");
+                return ActivationResult.ACTED;
+            }
+        });
+        // every pre-activation policy phase would refuse or record - none may run:
+        // a stop is never refused (a refused stop re-strands the hold it exists to end)
+        pipeline.registerStep(ActivationPipeline.PipelinePhase.ELIGIBILITY,
+                (req, player, context) -> Optional.of(
+                        ActivationResult.refused(ActivationOutcome.REFUSED_RESTRICTED)));
+        pipeline.registerStep(ActivationPipeline.PipelinePhase.COOLDOWN, tracing("cooldown"));
+        pipeline.registerStep(ActivationPipeline.PipelinePhase.RESOURCE, tracing("resource"));
+
+        var result = pipeline.release(request(KNOWN), null);
+        assertEquals(ActivationOutcome.ACTED, result.outcome());
+        assertEquals(List.of("release"), trace,
+                "a stop runs only the handler - never policy, never activate, never a charge");
+    }
+
+    @Test
+    void releaseWithoutHandlerIsNoAdapter() {
+        // release skips RESOLVE (stop-first: any handler can end its own hold
+        // even if the definition registry drifts) but still needs the adapter
+        var result = pipeline.release(request(UNKNOWN), null);
+        assertEquals(ActivationOutcome.REFUSED_NO_ADAPTER, result.outcome());
+    }
+
+    @Test
+    void defaultReleaseIsActedForHandlersWithoutReleaseSemantics() {
+        handlers.register(KNOWN, (req, player) -> {
+            trace.add("activate");
+            return ActivationResult.ACTED;
+        });
+        var result = pipeline.release(request(KNOWN), null);
+        assertEquals(ActivationOutcome.ACTED, result.outcome());
+        assertTrue(trace.isEmpty(), "the default release must never run activate");
+    }
+
+    @Test
+    void releaseReturningNullIsAnErrorNotASuccess() {
+        handlers.register(KNOWN, new ActivationHandler() {
+            @Override
+            public ActivationResult activate(ActivationRequest request, ServerPlayer player) {
+                return ActivationResult.ACTED;
+            }
+
+            @Override
+            public ActivationResult release(ActivationRequest request, ServerPlayer player) {
+                return null;
+            }
+        });
+        var result = pipeline.release(request(KNOWN), null);
+        assertEquals(ActivationOutcome.REFUSED_UNAVAILABLE, result.outcome());
+        assertEquals("ability.error", result.effectiveMessageKey());
+    }
+
+    @Test
     void declarationsCarryTheirChargingModel() {
         handlers.register(KNOWN, (req, player) -> ActivationResult.ACTED);
         handlers.register(EXTERNAL_KNOWN, (req, player) -> ActivationResult.ACTED, ChargingModel.EXTERNAL);

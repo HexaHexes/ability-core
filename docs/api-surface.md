@@ -11,8 +11,8 @@ for the four consumer repositories.
 | `org.bitwisemadness.abilitycore.api` | **Stable** - public API | Data types: `AbilityDefinition`, `ActivationRequest`/`Result`/`Outcome`/`Source`, `ActivationRequests` (slot gate), `TargetContext`, `ActivationType`, `ChargingModel`, `Affordability`, `ResourceCost`, `ResourceConsumer`, `RefundableConsumer`, overlay contract: `AbilityAvailability`, `Metric`, `AvailabilityState`, `AvailabilityProvider`, `AvailabilityProviders`, cooldown contract: `CooldownContract`, `CooldownOwners`, `CooldownHandler`, `CooldownTracker`, icon projection: `IconProvider`, `IconProviders`, resource pairs: `ResourceProvider`, `ResourceProviders`, `ResourceConsumers`, strategies: `ConsumptionStrategies`, pricing: `AmountResolvers`, modes contract: `AbilityModes`, `ModeOwners`, `ModeContract`, `ModeChangeRequest`, `ModeChangeHandler`, `ModeChangeHandlers`, unlock contract: `AbilityUnlocks`, `AbilityUnlocks.UnlockProvider`, presentation contract: `PresentationProviders`, `PresentationProvider`, `AbilityPresentation`, `PresentationField`, `Toggle`, menu visibility: `VisibilityHandlers`, `VisibilityHandlers.VisibilityHandler`, mastery contract: `MasteryDeclarations`, `MasterySpec`, `MasteryTarget`, `MasteryTrigger`, `MasteryAxis`, `MasteryView`, `MasteryAwards`, `MasteryEffects`, `MasteryGainHandlers`, `MasteryEffectHandlers` |
 | `org.bitwisemadness.abilitycore.registry` | **Stable** — public API | `AbilityRegistries` (registry key + `registry()` + `isReady()`) |
 | `org.bitwisemadness.abilitycore.discovery` | **Stable** — public API | `AbilityDiscovery` (presence, enumeration, filtering) |
-| `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler`, `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
-| `org.bitwisemadness.abilitycore.sync` | **Stable** — public API | `ActivateAbilityPayload`, `NetworkRegistration`, `AbilitySyncNeededEvent`, `SyncEventWiring` |
+| `org.bitwisemadness.abilitycore.activation` | **Stable** — public API | `ActivationPipeline`, `ActivationHandler` (incl. the default `release` key-up hook), `ActivationHandlerRegistry`, `EligibilityChain`, `EligibilityRule`, `ExternalCooldownStep`, `ResourceChargeStep`, `TargetResolver`, `TargetValidationStep` |
+| `org.bitwisemadness.abilitycore.sync` | **Stable** — public API | `ActivateAbilityPayload`, `ReleaseAbilityPayload`, `NetworkRegistration`, `AbilitySyncNeededEvent`, `SyncEventWiring` |
 | `org.bitwisemadness.abilitycore.interop` | **Supported (optional integration)** | `leylines.LeyLinesResources` — declare one adopter-chosen Sky's Ley Lines currency as a resource pair (core#96); the only package allowed to reference an optional upstream mod, exclusively behind the `ModList` gate, and no public signature names an upstream type (both gates green) |
 | `org.bitwisemadness.abilitycore.config` | **Stable** — public API | `CoreConfig` (reference SERVER/CLIENT specs, `RefusalLogMode`), `ConfigDiagnostics` (loud-but-safe reads, notice hook) |
 
@@ -26,7 +26,10 @@ Consumers extend core through exactly fifteen mechanisms:
    on their own mod bus via `RegisterEvent` for `AbilityRegistries.ABILITY_REGISTRY_KEY`.
 2. **Handler declaration** — providers register `ActivationHandler` +
    `ChargingModel` (+ optional `ChargeAction`) via
-   `ActivationHandlerRegistry.register(...)`.
+   `ActivationHandlerRegistry.register(...)`. Handlers that keep a hold
+   (held/channelled/charged abilities) also override the default
+   `release(...)` so the hotbar's key-up ends it; instant providers keep
+   the single-method shape.
 3. **Eligibility rules** — policy providers register `EligibilityRule`
    instances (source-scoped) via `EligibilityChain.register(...)` on
    `AbilityCore.ELIGIBILITY` or a composed child chain.
