@@ -18,6 +18,11 @@ import net.minecraft.resources.ResourceLocation;
  * {@link MasteryGainHandlers} and this registry irrelevant. An unknown
  * name logs an error at use and falls back loudly (base gain / default
  * curve) instead of failing an activation.</p>
+ *
+ * <p><b>No valid axis, blacklisted by default</b> (owner's brief): a
+ * spec that declares zero effect axes behaves exactly as a
+ * {@code mastery.blacklist} entry - awards skip it and the query answer
+ * carries no entry. Declaring an axis restores full participation.</p>
  */
 public final class MasteryDeclarations {
 
