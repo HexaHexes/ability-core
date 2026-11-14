@@ -115,6 +115,9 @@ public final class CoreConfig {
     /** Server key: XP factor for gains at/above a cap under SOFT mode. */
     public static final String MASTERY_SOFT_CAP_XP_FACTOR_KEY = "mastery.softCapXpFactor";
 
+    /** Server key: ability ids excluded from the mastery system. */
+    public static final String MASTERY_BLACKLIST_KEY = "mastery.blacklist";
+
     /**
      * How an ability's cap behaves (the owner's switch, per integration):
      * HARD stops the level at the ability's {@code maxLevel}; SOFT keeps
@@ -339,6 +342,16 @@ public final class CoreConfig {
                             + "its cap under SOFT mode (0.5 = half rate beyond the cap).")
                     .defineInRange(MASTERY_SOFT_CAP_XP_FACTOR_KEY, 0.5, 0.0, 1.0);
 
+    /** Ability ids excluded from the mastery system (the owner's blacklist). */
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> MASTERY_BLACKLIST =
+            SERVER.comment("Ability ids excluded from the mastery system "
+                            + "(namespace:path, e.g. tensura:flight): a listed id behaves "
+                            + "as if never declared - no XP is awarded, effect multipliers "
+                            + "stay inert, and the mastery query answer carries no entry. "
+                            + "Read live, so a reload applies to the next read.")
+                    .defineListAllowEmpty(MASTERY_BLACKLIST_KEY, List.of(),
+                            value -> value instanceof String entry && !entry.isBlank());
+
     /** Core's SERVER spec - reference registration for the shared contract. */
     public static final ModConfigSpec SERVER_SPEC = SERVER.build();
 
@@ -435,6 +448,29 @@ public final class CoreConfig {
     public static double masterySoftCapXpFactor() {
         return ConfigDiagnostics.readOrDefault(MASTERY_SOFT_CAP_XP_FACTOR_KEY,
                 () -> MASTERY_SOFT_CAP_XP_FACTOR.get(), 0.5);
+    }
+
+    /**
+     * Whether an ability is blacklisted from the mastery system (the
+     * owner's switch): read live, default empty - a listed id behaves
+     * as if never declared at every award, effect and query read.
+     *
+     * @param id the ability id to test (null never matches)
+     * @return true when the id is listed
+     */
+    public static boolean masteryBlacklisted(ResourceLocation id) {
+        if (id == null) {
+            return false;
+        }
+        List<? extends String> entries = ConfigDiagnostics.readOrDefault(
+                MASTERY_BLACKLIST_KEY, () -> MASTERY_BLACKLIST.get(), List.of());
+        String key = id.toString();
+        for (String entry : entries) {
+            if (entry.equals(key)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

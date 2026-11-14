@@ -68,6 +68,10 @@ public final class MasteryAwards {
         if (player == null || target == null || !CoreConfig.masteryEnabled()) {
             return;
         }
+        if (target.kind() == MasteryTarget.Kind.ABILITY
+                && CoreConfig.masteryBlacklisted(target.id())) {
+            return; // excluded ids earn nothing (the owner's blacklist)
+        }
         if (!Double.isFinite(amount) || amount <= 0.0) {
             LOGGER.error("Mastery awardTo {} rejected: amount {}", target, amount);
             return;
@@ -79,7 +83,7 @@ public final class MasteryAwards {
     private static void awardResolved(@Nullable ServerPlayer player, ResourceLocation source,
             MasteryTrigger trigger, double rawAmount) {
         if (player == null || source == null || trigger == null
-                || !CoreConfig.masteryEnabled()) {
+                || !CoreConfig.masteryEnabled() || CoreConfig.masteryBlacklisted(source)) {
             return;
         }
         MasterySpec spec = MasteryOverlays.specFor(source);
@@ -103,7 +107,12 @@ public final class MasteryAwards {
         var data = MasteryAttachments.data(player);
         for (Map.Entry<MasteryTarget, Double> entry
                 : MasteryRouting.split(source, spec.shares(), amount).entrySet()) {
-            data.addXp(entry.getKey().key(), entry.getValue());
+            MasteryTarget target = entry.getKey();
+            if (target.kind() == MasteryTarget.Kind.ABILITY
+                    && CoreConfig.masteryBlacklisted(target.id())) {
+                continue; // a blacklisted vessel never receives a share
+            }
+            data.addXp(target.key(), entry.getValue());
         }
     }
 

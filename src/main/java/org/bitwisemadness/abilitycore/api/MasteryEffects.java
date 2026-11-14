@@ -77,7 +77,8 @@ public final class MasteryEffects {
      */
     public static double multiplier(@Nullable ServerPlayer player, ResourceLocation abilityId,
             MasteryAxis axis) {
-        if (!CoreConfig.masteryEnabled() || player == null || abilityId == null) {
+        if (!CoreConfig.masteryEnabled() || player == null || abilityId == null
+                || CoreConfig.masteryBlacklisted(abilityId)) {
             return 1.0;
         }
         MasterySpec spec = MasteryOverlays.specFor(abilityId);
@@ -102,7 +103,8 @@ public final class MasteryEffects {
      */
     public static double masteryContributionMultiplier(@Nullable ServerPlayer player,
             ResourceLocation abilityId, MasteryAxis axis) {
-        if (!CoreConfig.masteryEnabled() || player == null || abilityId == null) {
+        if (!CoreConfig.masteryEnabled() || player == null || abilityId == null
+                || CoreConfig.masteryBlacklisted(abilityId)) {
             return 0.0;
         }
         MasterySpec spec = MasteryOverlays.specFor(abilityId);
