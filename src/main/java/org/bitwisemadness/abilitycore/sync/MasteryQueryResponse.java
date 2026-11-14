@@ -163,8 +163,9 @@ public record MasteryQueryResponse(String targetPlayer, List<Entry> entries)
             MasteryTarget parsed = MasteryTarget.parseKey(key);
             if (parsed != null) {
                 boolean ability = parsed.kind() == MasteryTarget.Kind.ABILITY;
-                if (ability && CoreConfig.masteryBlacklisted(parsed.id())) {
-                    return; // excluded ids never reach a pane (blacklist)
+                if (ability && (CoreConfig.masteryBlacklisted(parsed.id())
+                        || !MasteryOverlays.hasValidAxis(parsed.id()))) {
+                    return; // excluded ids never reach a pane (blacklist / no axis)
                 }
                 int level = MasteryLevels.level(xp);
                 double progress = MasteryLevels.progress(xp);

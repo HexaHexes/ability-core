@@ -615,7 +615,11 @@ ability-tensura declares its own unlocked-gated handler.
 
 An opt-in, per-player XP/mastery layer over the ability registry. **No
 declaration, no system**: an ability without a `MasterySpec` gets no
-storage writes, no awards, and inert (`1.0`) effect reads.
+storage writes, no awards, and inert (`1.0`) effect reads. **No valid
+axis, blacklisted by default**: a spec that declares zero effect axes
+behaves exactly like a `mastery.blacklist` entry - no awards, no share
+landing, no query entry (the axis is the switch; declaring one restores
+full participation).
 
 - **Declaration**: `MasteryDeclarations.declare(abilityId, spec)` at mod
   construction (the standard timing contract - handler *names* resolve at

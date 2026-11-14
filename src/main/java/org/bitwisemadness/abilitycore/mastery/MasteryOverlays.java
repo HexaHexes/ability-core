@@ -95,6 +95,21 @@ public final class MasteryOverlays {
     }
 
     /**
+     * The default exclusion (owner's brief): an ability with no valid
+     * axis behaves exactly as blacklisted - no awards, no share landing,
+     * no query entry. Reads the overlay-merged spec, so an axis a
+     * datapack overlay adds counts; an undeclared id answers false (it
+     * never declared one either).
+     *
+     * @param abilityId the ability to test
+     * @return true when the merged spec declares at least one effect axis
+     */
+    public static boolean hasValidAxis(ResourceLocation abilityId) {
+        MasterySpec spec = specFor(abilityId);
+        return spec != null && !spec.effects().isEmpty();
+    }
+
+    /**
      * Test-support: swaps the overlay source wholesale (mirrors
      * {@link AbilityRegistries#installRegistryForTests}); always reset in
      * teardown.

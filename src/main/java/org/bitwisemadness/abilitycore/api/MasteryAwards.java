@@ -35,8 +35,8 @@ public final class MasteryAwards {
      * Grants one use of {@code source} under {@code trigger}, using the
      * spec's gain handler (or base gain), the global gain multiplier, and
      * the spec's share routing. A no-op for: a null player, the system
-     * disabled, an undeclared ability, an undeclared trigger, or a
-     * non-positive/non-finite gain.
+     * disabled, an undeclared or axis-less ability (the default
+     * exclusion), an undeclared trigger, or a non-positive/non-finite gain.
      */
     public static void award(@Nullable ServerPlayer player, ResourceLocation source,
             MasteryTrigger trigger) {
@@ -61,7 +61,8 @@ public final class MasteryAwards {
     /**
      * Writes {@code amount} to one target directly: no trigger filter, no
      * share split, no global multiplier - a literal grant. Inert when the
-     * system is disabled or the amount is not finite and positive.
+     * system is disabled, the target is blacklisted or axis-less (the
+     * default exclusion), or the amount is not finite and positive.
      */
     public static void awardTo(@Nullable ServerPlayer player, MasteryTarget target,
             double amount) {
@@ -69,8 +70,9 @@ public final class MasteryAwards {
             return;
         }
         if (target.kind() == MasteryTarget.Kind.ABILITY
-                && CoreConfig.masteryBlacklisted(target.id())) {
-            return; // excluded ids earn nothing (the owner's blacklist)
+                && (CoreConfig.masteryBlacklisted(target.id())
+                        || !MasteryOverlays.hasValidAxis(target.id()))) {
+            return; // excluded ids earn nothing (blacklist / no valid axis)
         }
         if (!Double.isFinite(amount) || amount <= 0.0) {
             LOGGER.error("Mastery awardTo {} rejected: amount {}", target, amount);
@@ -87,8 +89,8 @@ public final class MasteryAwards {
             return;
         }
         MasterySpec spec = MasteryOverlays.specFor(source);
-        if (spec == null) {
-            return; // opted out: the system is invisible for this ability
+        if (spec == null || spec.effects().isEmpty()) {
+            return; // undeclared, or no valid axis: the default exclusion
         }
         if (!spec.triggers().contains(trigger)) {
             return; // declared intent: only the named triggers grant
@@ -109,8 +111,9 @@ public final class MasteryAwards {
                 : MasteryRouting.split(source, spec.shares(), amount).entrySet()) {
             MasteryTarget target = entry.getKey();
             if (target.kind() == MasteryTarget.Kind.ABILITY
-                    && CoreConfig.masteryBlacklisted(target.id())) {
-                continue; // a blacklisted vessel never receives a share
+                    && (CoreConfig.masteryBlacklisted(target.id())
+                            || !MasteryOverlays.hasValidAxis(target.id()))) {
+                continue; // a blacklisted or axis-less vessel never receives a share
             }
             data.addXp(target.key(), entry.getValue());
         }

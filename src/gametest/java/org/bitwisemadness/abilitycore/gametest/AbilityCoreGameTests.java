@@ -553,8 +553,10 @@ public final class AbilityCoreGameTests {
                 List.of(), org.bitwisemadness.abilitycore.api.ConsumptionStrategies.ALL,
                 org.bitwisemadness.abilitycore.api.AmountResolvers.STATIC, Set.of(), Map.of()));
         AbilityRegistries.installRegistryForTests(fixture);
+        // withEffect: the default exclusion keeps axis-less ids inert
         org.bitwisemadness.abilitycore.api.MasteryDeclarations.declare(abilityId,
-                org.bitwisemadness.abilitycore.api.MasterySpec.gained(10.0).withMaxLevel(2));
+                org.bitwisemadness.abilitycore.api.MasterySpec.gained(10.0).withMaxLevel(2)
+                        .withEffect(org.bitwisemadness.abilitycore.api.MasteryAxis.COST));
 
         var server = helper.getLevel().getServer();
         var profile = new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(),
@@ -933,6 +935,125 @@ public final class AbilityCoreGameTests {
         } finally {
             org.bitwisemadness.abilitycore.config.CoreConfig.MASTERY_BLACKLIST.set(
                     java.util.List.of());
+            AbilityRegistries.installRegistryForTests(previous);
+        }
+        helper.succeed();
+    }
+
+    /**
+     * The default exclusion (owner's brief): a spec with zero effect axes
+     * behaves exactly as a {@code mastery.blacklist} entry - direct
+     * awards, {@code awardTo}, a share routed at it, and the query answer
+     * all skip it, and declaring an axis restores full participation.
+     */
+    @GameTest(template = "empty")
+    public static void axislessAbilityIsBlacklistedByDefault(GameTestHelper helper)
+            throws GameTestAssertException {
+        var abilityId = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                AbilityCore.MOD_ID, "gametest_axisless");
+        var donorId = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                AbilityCore.MOD_ID, "gametest_axisless_donor");
+        var previous = AbilityRegistries.registry();
+        var fixture = new MappedRegistry<org.bitwisemadness.abilitycore.api.AbilityDefinition>(
+                AbilityRegistries.ABILITY_REGISTRY_KEY, com.mojang.serialization.Lifecycle.stable(),
+                false);
+        Registry.register(fixture, abilityId,
+                new org.bitwisemadness.abilitycore.api.AbilityDefinition(
+                        "tensura.skill.gametest_axisless", null,
+                        net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                                "tensura", "skill"),
+                        org.bitwisemadness.abilitycore.api.ActivationType.INSTANT,
+                        List.of(), org.bitwisemadness.abilitycore.api.ConsumptionStrategies.ALL,
+                        org.bitwisemadness.abilitycore.api.AmountResolvers.STATIC,
+                        Set.of(), Map.of()));
+        Registry.register(fixture, donorId,
+                new org.bitwisemadness.abilitycore.api.AbilityDefinition(
+                        "tensura.skill.gametest_axisless_donor", null,
+                        net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                                "tensura", "skill"),
+                        org.bitwisemadness.abilitycore.api.ActivationType.INSTANT,
+                        List.of(), org.bitwisemadness.abilitycore.api.ConsumptionStrategies.ALL,
+                        org.bitwisemadness.abilitycore.api.AmountResolvers.STATIC,
+                        Set.of(), Map.of()));
+        AbilityRegistries.installRegistryForTests(fixture);
+        // the brief: zero effect axes means the default exclusion
+        org.bitwisemadness.abilitycore.api.MasteryDeclarations.declare(abilityId,
+                org.bitwisemadness.abilitycore.api.MasterySpec.gained(10.0));
+        // a healthy donor shares half its grant at the axis-less vessel
+        org.bitwisemadness.abilitycore.api.MasteryDeclarations.declare(donorId,
+                org.bitwisemadness.abilitycore.api.MasterySpec.gained(10.0)
+                        .withEffect(org.bitwisemadness.abilitycore.api.MasteryAxis.COST)
+                        .withShare(org.bitwisemadness.abilitycore.api.MasteryTarget
+                                .ability(abilityId), 0.5));
+
+        var server = helper.getLevel().getServer();
+        var profile = new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(),
+                "AxisProbe");
+        var player = new net.minecraft.server.level.ServerPlayer(server, helper.getLevel(),
+                profile, net.minecraft.server.level.ClientInformation.createDefault());
+        var key = org.bitwisemadness.abilitycore.api.MasteryTarget.ability(abilityId).key();
+        var donorKey = org.bitwisemadness.abilitycore.api.MasteryTarget.ability(donorId).key();
+        var store = org.bitwisemadness.abilitycore.mastery.MasteryAttachments.data(player);
+        try {
+            org.bitwisemadness.abilitycore.api.MasteryAwards.award(player, abilityId,
+                    org.bitwisemadness.abilitycore.api.MasteryTrigger.ACTIVATION);
+            org.bitwisemadness.abilitycore.api.MasteryAwards.awardTo(player,
+                    org.bitwisemadness.abilitycore.api.MasteryTarget.ability(abilityId), 999.0);
+            if (store.xp(key) != 0.0) {
+                throw new GameTestAssertException(
+                        "an axis-less id must earn nothing, xp moved to " + store.xp(key));
+            }
+
+            org.bitwisemadness.abilitycore.api.MasteryAwards.award(player, donorId,
+                    org.bitwisemadness.abilitycore.api.MasteryTrigger.ACTIVATION);
+            if (store.xp(donorKey) <= 0.0) {
+                throw new GameTestAssertException(
+                        "the healthy donor must earn while the vessel is skipped, got "
+                                + store.xp(donorKey));
+            }
+            if (store.xp(key) != 0.0) {
+                throw new GameTestAssertException(
+                        "a share must not land on an axis-less vessel, xp moved to "
+                                + store.xp(key));
+            }
+
+            String uuid = player.getUUID().toString();
+            // seed XP the way a lost axis would leave it: held, but with
+            // no valid axis - the pane must still carry no entry
+            store.addXp(key, 42.0);
+            var answer = org.bitwisemadness.abilitycore.sync.MasteryQueryResponse
+                    .of(uuid, player);
+            boolean listed = answer.entries().stream()
+                    .anyMatch(entry -> abilityId.toString().equals(entry.id()));
+            if (listed) {
+                throw new GameTestAssertException(
+                        "the query answer must carry no entry for an axis-less id");
+            }
+
+            // declaring an axis restores full participation
+            org.bitwisemadness.abilitycore.api.MasteryDeclarations.remove(abilityId);
+            org.bitwisemadness.abilitycore.api.MasteryDeclarations.declare(abilityId,
+                    org.bitwisemadness.abilitycore.api.MasterySpec.gained(10.0)
+                            .withEffect(org.bitwisemadness.abilitycore.api.MasteryAxis.COST));
+            double before = store.xp(key);
+            org.bitwisemadness.abilitycore.api.MasteryAwards.award(player, abilityId,
+                    org.bitwisemadness.abilitycore.api.MasteryTrigger.ACTIVATION);
+            if (store.xp(key) <= before) {
+                throw new GameTestAssertException(
+                        "declaring an axis must restore awards, xp stayed at "
+                                + store.xp(key));
+            }
+            var restored = org.bitwisemadness.abilitycore.sync.MasteryQueryResponse
+                    .of(uuid, player);
+            boolean nowListed = restored.entries().stream()
+                    .anyMatch(entry -> abilityId.toString().equals(entry.id()));
+            if (!nowListed) {
+                throw new GameTestAssertException(
+                        "the restored id must reach the query answer");
+            }
+        } finally {
+            org.bitwisemadness.abilitycore.api.MasteryDeclarations.remove(abilityId);
+            org.bitwisemadness.abilitycore.api.MasteryDeclarations.remove(donorId);
             AbilityRegistries.installRegistryForTests(previous);
         }
         helper.succeed();
