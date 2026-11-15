@@ -3,6 +3,7 @@ package org.bitwisemadness.abilitycore.config;
 import java.util.List;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.common.ModConfigSpec;
+import org.bitwisemadness.abilitycore.api.MasteryExclusions;
 
 /**
  * Core's reference configuration (REQ-CFG-01/02, issue #9) - the small but
@@ -453,14 +454,20 @@ public final class CoreConfig {
     /**
      * Whether an ability is blacklisted from the mastery system (the
      * owner's switch): read live, default empty - a listed id behaves
-     * as if never declared at every award, effect and query read.
+     * as if never declared at every award, effect and query read. The
+     * answer is the union of the config entries and the domain defaults
+     * {@link MasteryExclusions} carries (core's config default can never
+     * name another mod's ids).
      *
      * @param id the ability id to test (null never matches)
-     * @return true when the id is listed
+     * @return true when the id is listed or domain-excluded
      */
     public static boolean masteryBlacklisted(ResourceLocation id) {
         if (id == null) {
             return false;
+        }
+        if (MasteryExclusions.excluded(id)) {
+            return true;
         }
         List<? extends String> entries = ConfigDiagnostics.readOrDefault(
                 MASTERY_BLACKLIST_KEY, () -> MASTERY_BLACKLIST.get(), List.of());
