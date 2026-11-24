@@ -4,5 +4,6 @@ pluginManagement {
     }
 }
 
-// Keep in sync with mod_id in gradle.properties and archivesName in build.gradle.
+// Keep in sync with mod_id in gradle.properties. archivesName in build.gradle
+// extends mod_id with the loader line; rootProject.name stays the plain mod id.
 rootProject.name = 'ability_core'

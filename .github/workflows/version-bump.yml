@@ -58,5 +58,5 @@ concurrency:
 
 jobs:
   bump:
-    uses: HexaHexes/ability-core/.github/workflows/reusable-version-bump.yml@main
+    uses: HexaHexes/ability-core/.github/workflows/reusable-version-bump.yml@neoforge-1.21.1
     secrets: inherit
