@@ -1,24 +1,9 @@
 name: CI
 
-# Three checks back the branch protection rulesets (junit, gametest,
-# version-bump): PRs cannot merge without them. The version-bump job also runs
-# on workflow_dispatch because GitHub deliberately runs no workflows for a pull
-# request raised by the default GITHUB_TOKEN - a PR it opens would otherwise sit
-# with no checks at all, and with required status checks, no way to merge but
-# admin. Its guard falls back to the default branch when there is no
-# pull_request context, so a dispatch validates exactly what the pull_request
-# run would have.
-#
-# This template is self-contained, so both build checks run from a clean
-# checkout. Mod repos derived from it resolve their dependencies through
-# CurseMaven coordinates (never gitignored libs/ or testmods/ folders) - keep
-# it that way or CI cannot run.
-#
-# The junit job also carries a datapack drift gate: where a repo commits
-# generated output at src/generated/resources, runData must reproduce it
-# byte-identically and the jar must ship every file. It activates on that
-# directory's presence, so this template and non-datagen derivatives skip
-# with a notice (see issue #20).
+# junit, gametest and version-bump back the branch protection rulesets.
+# version-bump also runs on workflow_dispatch: GitHub starts no workflow for a PR
+# its own GITHUB_TOKEN opened, so the PR it raises would carry no checks.
+# Runs from a clean checkout - never from a gitignored libs/ folder.
 
 on:
   pull_request:
@@ -47,11 +32,13 @@ jobs:
           cache: gradle
 
       - name: Build and run JUnit suite
+        env:
+          PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN || github.token }}
         run: ./gradlew build --no-daemon --stacktrace
 
-      # gradlew build reports SUCCESS when there are no test sources at all -
-      # the :test task is simply NO-SOURCE. Assert a non-zero count so the check
-      # cannot pass by running nothing.
+      # With no test sources :test is NO-SOURCE and build still reports SUCCESS,
+      # so assert a non-zero count rather than trusting the exit code.
       - name: Assert the JUnit suite actually ran
         run: |
           if [ ! -d build/test-results/test ]; then
@@ -78,14 +65,13 @@ jobs:
           fi
           echo "JUnit suite ran $TOTAL tests, all passing."
 
-      # Datapack drift gate (issue #20). Self-adapting on the org convention:
-      # repos that ship generated output commit it at src/generated/resources,
-      # and only they have a runData task - so the directory's presence is the
-      # activation signal and this template (and every non-datagen derivative)
-      # skips with a notice instead of failing on a task that does not exist.
-      # The checks themselves are the ones proven green on
-      # tensura-iaf-growth's build job and tensura-iss-growth#18.
+      # Datapack drift gate (issue #20): only repos committing generated output
+      # at src/generated/resources have a runData task, so that directory is the
+      # activation signal and every other repo skips with a notice.
       - name: Regenerate the datapack and fail on drift
+        env:
+          PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN || github.token }}
         run: |
           set -euo pipefail
 
@@ -112,9 +98,8 @@ jobs:
 
           echo "Committed datapack is byte-identical to the datagen output."
 
-      # The datapack lives inside the jar, not beside it. Missing it would
-      # ship a mod that loads and then does nothing; path sets are asserted by
-      # count so a template-derived repo needs no edits here.
+      # The datapack lives inside the jar. Subset compare, not count equality,
+      # so hand-authored data files beside the generated ones stay legal.
       - name: Assert the jar ships the datapack
         run: |
           set -euo pipefail
@@ -167,11 +152,13 @@ jobs:
           java-version: '21'
           cache: gradle
 
-      # The exit code of this task is NOT a reliable pass signal. A run that
-      # printed "Failed to start the minecraft server" and executed zero tests
-      # still returned BUILD SUCCESSFUL. The success line in the log is the
-      # only trustworthy signal, so this step never decides the job outcome.
+      # This task's exit code is not a pass signal - a run that executed zero
+      # tests still returned BUILD SUCCESSFUL - so this step never sets the
+      # outcome. The log line is authoritative (see below).
       - name: Run GameTest server
+        env:
+          PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN || github.token }}
         run: |
           set +e
           ./gradlew runGameTestServer --no-daemon 2>&1 | tee gametest.log
@@ -179,9 +166,8 @@ jobs:
 
       - name: Assert GameTests ran and passed
         run: |
-          # The server prints "All 0 required tests passed :)" when the tree
-          # carries no GameTests at all, so matching the phrase alone lets this
-          # check pass while verifying nothing. The count is what makes it real.
+          # The server prints "All 0 required tests passed :)" for a tree with
+          # no GameTests, so the count - not the phrase - makes this real.
           LINE=$(grep -E "All [0-9]+ required tests passed" gametest.log || true)
 
           if [ -z "$LINE" ]; then
@@ -191,9 +177,8 @@ jobs:
             exit 1
           fi
 
-          # Anchor on "All N" rather than grabbing the first number on the line:
-          # the line begins with a timestamp, so a bare [0-9]+ match returns the
-          # hour and the guard would never trip.
+          # Anchor on "All N": the line starts with a timestamp, so a bare
+          # [0-9]+ match would return the hour and the guard would never trip.
           COUNT=$(echo "$LINE" | sed -E 's/.*All ([0-9]+) required tests passed.*/\1/')
 
           if [ "$COUNT" -le 0 ]; then
@@ -226,18 +211,13 @@ jobs:
           java-version: '21'
           cache: gradle
 
-      # Enforced since #52: findings fail this step (ignoreFailures dropped
-      # from build.gradle). The report still uploads below via if: always().
+      # Enforced since #52: findings fail the step. The report uploads below.
       - name: SpotBugs
         env:
           PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN || github.token }}
         run: ./gradlew spotbugsMain --no-daemon --stacktrace
 
-      # Enforced since #52: violations fail this step and so the static
-      # check. Spotless stays out of Gradle `check` (enforceCheck false),
-      # so junit's `./gradlew build` remains style-agnostic - this job is
-      # the style gate.
       # Structural rules, not formatting: comment-block length, star/redundant/
       # unused imports, cyclomatic complexity. Ruleset: config/checkstyle.
       - name: Checkstyle
@@ -248,6 +228,8 @@ jobs:
           ./gradlew checkstyleMain checkstyleTest checkstyleGametest
           --no-daemon --stacktrace
 
+      # Enforced since #52. Spotless stays out of Gradle `check`
+      # (enforceCheck false), so this job is the formatting gate.
       - name: Spotless check
         env:
           PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
@@ -261,6 +243,7 @@ jobs:
           name: spotbugs-report
           path: build/reports/spotbugs/
           if-no-files-found: ignore
+
       - name: Upload the Checkstyle report
         if: always()
         uses: actions/upload-artifact@v7
@@ -327,7 +310,7 @@ jobs:
           # `gh workflow run ci.yml --ref <branch>`) there is no pull_request
           # event, so BASE falls back to the default branch NAME - and that
           # checkout only materializes the dispatched ref. Git's revision DWIM
-          # does not walk to refs/remotes/origin/<name>, so `git diff main ...`
+          # does not walk to refs/remotes/origin/<name>, so `git diff neoforge-1.21.1 ...`
           # dies with "ambiguous argument" (exit 128). Compare against the
           # remote-tracking ref instead; fetch it if even that is missing.
           if ! printf '%s' "$BASE" | grep -Eq '^[0-9a-f]{40}$'; then
@@ -346,16 +329,28 @@ jobs:
             exit 0
           fi
 
+          # The doctrine keys off the mod_version LINE, not the filename:
+          # dependency pins and comments in gradle.properties (the org keeps
+          # its CurseMaven *_file_id pins there) ride with work freely, while
+          # a mod_version change is a version bump and must stay isolated
+          # (neoforge-mod-template#81, scoped by #89).
+          OLD_VERSION=$(git show "$BASE:gradle.properties" 2>/dev/null | grep '^mod_version=' | cut -d= -f2 | tr -d '[:space:]' || true)
+          NEW_VERSION=$(grep '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+
+          if [ "$NEW_VERSION" = "$OLD_VERSION" ]; then
+            echo "gradle.properties changed without touching mod_version (pins or comments). It rides with the work. OK."
+            exit 0
+          fi
+
           EXTRA=$(echo "$CHANGED" | grep -v '^gradle\.properties$' | grep -v '^$' || true)
           if [ -n "$EXTRA" ]; then
             echo "::error::Version bumps ride CI/CD after merge (neoforge-mod-template#81)."
-            echo "::error::A PR must not bundle gradle.properties with other changes. These files must not accompany it:"
+            echo "::error::A mod_version change must not be bundled with other changes. These files must not accompany it:"
             echo "$EXTRA"
-            echo "::error::Revert the gradle.properties change from this PR, or split the bump into its own isolated PR."
+            echo "::error::Revert the mod_version change from this PR, or split the bump into its own isolated PR."
             exit 1
           fi
 
-          NEW_VERSION=$(grep '^mod_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
           echo "Isolated version bump to $NEW_VERSION. OK (the stable/beta path)."
 
       - name: Enforce breaking changes require a major or minor bump
@@ -393,7 +388,12 @@ jobs:
             exit 0
           fi
 
-          BASELINE=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+          # Both stable-tag shapes through one script (issue #109): the tag
+          # feeds git log, the bare version the semver math below - #v would
+          # not strip a loader-line tag.
+          BASELINE=""
+          BASELINE_VERSION=""
+          read -r BASELINE BASELINE_VERSION < <(bash .github/scripts/stable-baseline.sh) || true
 
           if [ -z "$BASELINE" ]; then
             echo "No stable tag exists yet. Nothing to be compatible with. OK."
@@ -411,7 +411,7 @@ jobs:
 
           echo "breaking PRs since $BASELINE: $BREAKING"
 
-          OLD_BASE="${BASELINE#v}"
+          OLD_BASE="$BASELINE_VERSION"
           MAJOR_OLD=$(echo "$OLD_BASE" | cut -d. -f1)
           MINOR_OLD=$(echo "$OLD_BASE" | cut -d. -f2)
           MAJOR_NEW=$(echo "$NEW_VERSION" | cut -d. -f1)

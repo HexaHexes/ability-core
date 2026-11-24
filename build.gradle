@@ -11,9 +11,10 @@ version = mod_version
 group = mod_group_id
 
 base {
-    // Keep in sync with rootProject.name in settings.gradle and mod_id in
-    // gradle.properties. The shipped jar is <archivesName>-<version>.jar.
-    archivesName = mod_id
+    // The loader-line jar name (agents/AGENTS.md): the jar is
+    // <mod_id>-neoforge-<mc_version>-<version>.jar, and release.yml derives
+    // the same line from gradle.properties for the release tag.
+    archivesName = mod_id + '-neoforge-' + minecraft_version
 }
 
 java {

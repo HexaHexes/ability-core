@@ -3,17 +3,20 @@
 
 name: Release
 
-# Runs on pushes to the default branch: when gradle.properties carries a version
-# that has no matching v-published release yet, build the jar and publish it as a
-# GitHub release for that tag. Everything the mod ships rides inside that jar, so
-# there is no separate archive to assemble.
+# Runs on pushes to loader-line branches (neoforge-<mc version> - one branch per
+# supported loader and Minecraft version, the org rule in agents/AGENTS.md):
+# when gradle.properties carries a version that has no matching
+# <loader line>-<version> release yet, build the jar and publish it as a GitHub
+# release for that tag. Everything the mod ships rides inside that jar, so there
+# is no separate archive to assemble.
 #
 # Promoted from tensura-iaf-growth, the org's reference implementation (tracked by
 # neoforge-mod-template #4). Two deliberate differences from a mod repo's copy:
 #
-#   - the jar name is derived from mod_id instead of written out, because this file
-#     is copied into repos whose archivesName follows their own mod_id, so a rename
-#     needs no edit here;
+#   - the loader line, jar name and tag are derived from gradle.properties
+#     (mod_id + minecraft_version) instead of written out, because this file is
+#     copied into repos whose archivesName follows their own identity block, so
+#     a rename needs no edit here;
 #   - release bodies are GitHub-native auto-generated changelogs (see
 #     .github/release.yml and the changelog ruling in agents/AGENTS.md) - there
 #     is no per-repo promo body to edit.
@@ -28,11 +31,13 @@ name: Release
 on:
   push:
     branches:
-      - main
+      # One branch per supported loader/version (org rule): every loader line
+      # releases itself, tagged with its own line. There is no main.
+      - 'neoforge-*'
   # Retry entry for the post-merge version bump: the bump pushes with a PAT
   # whose push cascades into this workflow, so Release normally fires from the
   # bump itself - dispatch here to re-run a Release that failed (e.g. an auth
-  # outage) without another push to main.
+  # outage) without another push to the loader branch.
   workflow_dispatch:
 
 permissions:
@@ -52,5 +57,5 @@ concurrency:
 
 jobs:
   release:
-    uses: HexaHexes/ability-core/.github/workflows/reusable-release.yml@main
+    uses: HexaHexes/ability-core/.github/workflows/reusable-release.yml@neoforge-1.21.1
     secrets: inherit

@@ -22,8 +22,8 @@ is written from, never the reverse.
 
 Architecture decision records: `docs/adr/` (index in `docs/adr/README.md`; new decisions get an ADR in the same PR that records them).
 
-**Repo:** `HexaHexes/ability-core` - **Mod ID:** `ability_core` - **Branch:** `main`
-**Platform:** Minecraft 1.21.1 / NeoForge 21.1.259 / JDK 21 - **Jar:** `build/libs/ability_core-<version>.jar`
+**Repo:** `HexaHexes/ability-core` · **Mod ID:** `ability_core` · **Branch:** `neoforge-1.21.1` (the loader line; this is the default branch - no `main`)
+**Platform:** Minecraft 1.21.1 / NeoForge 21.1.259 / JDK 21 · **Jar:** `build/libs/ability_core-neoforge-1.21.1-<version>.jar`
 
 Shared, provider-independent ability infrastructure for the Tensura RPG pack:
 ability registration and metadata, activation request/result contracts, resource,

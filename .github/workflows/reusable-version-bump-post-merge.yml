@@ -77,7 +77,12 @@ jobs:
           # ci.yml's magnitude rule, so train and check read one thing. The
           # raised base starts a fresh counter (current channel kept for
           # beta trains).
-          BASELINE=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+          # Both stable-tag shapes through one script (issue #109): the tag
+          # feeds git log, the bare version the semver math below - #v would
+          # not strip a loader-line tag.
+          BASELINE=""
+          BASELINE_VERSION=""
+          read -r BASELINE BASELINE_VERSION < <(bash .github/scripts/stable-baseline.sh) || true
           BREAKING=""
           FLOOR=""
           if [ -n "$BASELINE" ]; then
@@ -85,7 +90,7 @@ jobs:
           fi
           if [ -n "$BREAKING" ]; then
             echo "breaking PRs since $BASELINE: $BREAKING"
-            OLD_BASE="${BASELINE#v}"
+            OLD_BASE="$BASELINE_VERSION"
             MAJOR_OLD=$(echo "$OLD_BASE" | cut -d. -f1)
             MINOR_OLD=$(echo "$OLD_BASE" | cut -d. -f2)
             FLOOR="$MAJOR_OLD.$((MINOR_OLD + 1)).0"
@@ -105,6 +110,6 @@ jobs:
           sed -i "s/^mod_version=.*/mod_version=$NEXT/" gradle.properties
           git add gradle.properties
           git commit -m "Version slot $NEXT (post-merge auto-bump)"
-          git push origin HEAD:main
+          git push origin "HEAD:$GITHUB_REF_NAME"
 
           echo "pushed $NEXT - the push cascade triggers Release"

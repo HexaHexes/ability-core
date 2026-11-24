@@ -34,7 +34,9 @@ Before starting any new development in this repo:
    collide with local uncommitted work, **stop and ask** rather than merging, rebasing
    or stashing on your own.
 
-**Remote:** `github.com/HexaHexes/<name>` (default branch `main`). Direct pushes to
+**Remote:** `github.com/HexaHexes/<name>`. The default branch is a loader line -
+one branch per supported loader and Minecraft version, e.g. `neoforge-1.21.1`
+(see Git & release); there is no `main`. Direct pushes to
 the default branch are blocked by branch rulesets - land changes through a PR. Push
 anything only after checks are green and the user has given the go.
 
@@ -118,6 +120,17 @@ file into this repo verbatim as its own PR - never re-type or patch it by hand.
 ## Git & release
 
 - Remote is SSH: `git@github.com:HexaHexes/<name>.git`.
+- **Loader-line branches:** each supported loader/version pair gets its own
+  branch named `<loader>-<mc_version>` (e.g. `neoforge-1.21.1`), and the default
+  branch is one of them - a repo with one supported line has one branch; a
+  second version means a second branch cut from the first. A line's releases
+  carry it: the release tag is `<loader line>-<version>` (e.g.
+  `neoforge-1.21.1-1.0.0-alpha.02` - no mod id, no `v` prefix, and the same
+  string is the CurseForge/Modrinth version) and the jar is
+  `<mod_id>-<loader line>-<version>.jar`. `build.gradle` derives the line from
+  `mod_id` + `minecraft_version`, `release.yml` derives the same line, and
+  workflow push triggers match it with the `neoforge-*` pattern - adding
+  another loader means adding its pattern to those triggers.
 - Push only after checks are green **and** the user has given the go.
 - Never sweep the user's uncommitted work into a commit — commit only what is intended.
 - **Commit subjects are changelog lines.** Releases carry an auto-generated
@@ -324,9 +337,10 @@ The org's approved rewrite of record is `tensura-jade` PR #27
   analyze/static (gated after the post-transition observation, template issue
   #43); the only exclusions are data-only repos where the workflows do not
   exist (they must never require a check that can never run).- `version-bump.yml` opens an isolated version-bump PR (only the version file changes).
-- `release.yml` publishes a GitHub release for `v<mod_version>` on a push to the default
-  branch when that release does not exist yet, attaching the jar the build produced. The
-  jar name is read from `mod_id`, so a rename needs no edit here. Pre-releases are
+- `release.yml` publishes a GitHub release for `<loader line>-<mod_version>` on a push
+  to a loader-line branch when that release does not exist yet, attaching the jar the
+  build produced. Tag and jar name are derived from `gradle.properties` (`mod_id` +
+  `minecraft_version`), so a rename needs no edit here. Pre-releases are
   enabled by default: an `-alpha`/`-beta` version publishes on the first push
   that would create it (the default lives in release.yml as
   `${ALPHA_RELEASES:-true}` - repository variables cannot ship in template

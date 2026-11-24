@@ -12,7 +12,7 @@ name: Dependency submission
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ 'neoforge-*' ]   # loader-line branches (org rule); no main/master
   pull_request:
 
 permissions:
@@ -26,5 +26,5 @@ concurrency:
 
 jobs:
   dependency-submission:
-    uses: HexaHexes/ability-core/.github/workflows/reusable-dependency-submission.yml@main
+    uses: HexaHexes/ability-core/.github/workflows/reusable-dependency-submission.yml@neoforge-1.21.1
     secrets: inherit

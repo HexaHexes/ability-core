@@ -33,5 +33,5 @@ concurrency:
 
 jobs:
   publish:
-    uses: HexaHexes/ability-core/.github/workflows/reusable-publish.yml@main
+    uses: HexaHexes/ability-core/.github/workflows/reusable-publish.yml@neoforge-1.21.1
     secrets: inherit

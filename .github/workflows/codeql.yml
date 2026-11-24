@@ -1,27 +1,18 @@
 name: CodeQL
 
-# Free static analysis via CodeQL *advanced setup* - a committed workflow file,
-# deliberately not GitHub's paid "Code Quality" product: that one meters AI
-# credits for every finding's autofix (the in-PR AI cannot be switched off -
-# disabling the product entirely is the only stop), while this runs only the
-# deterministic CodeQL engine. On a public repository that is $0: no per-user
-# license, no AI credits, Actions minutes free.
+# CodeQL *advanced setup*: the deterministic engine only, $0 on a public repo.
+# Deliberately not GitHub's paid "Code Quality" product, which meters AI credits
+# per finding and cannot have its in-PR autofix turned off. It is the `analyze`
+# required check; findings live in the Security tab and as PR annotations.
 #
-# Job name `analyze`: after this proves green, the protect-main ruleset
-# requires it beside junit/gametest/version-bump (tracked in issue #29).
-# Findings themselves live in the Security tab and as PR annotations - they
-# inform, the check gates.
-#
-# build-mode is manual on purpose: moddev's autobuild detection is unreliable
-# on NeoForge projects, so the build is spelled out. `assemble` compiles the
-# shipped sources (the test run belongs to the junit job). The step carries
-# PACKAGE_READ_TOKEN so a derived repo that resolves cross-repo packages still
-# builds on a cold cache - same step-scoped pattern as release.yml.
+# build-mode is manual because moddev's autobuild detection is unreliable on
+# NeoForge projects. The step carries PACKAGE_READ_TOKEN so a derived repo
+# resolving cross-repo packages still builds on a cold cache.
 
 on:
   pull_request:
   push:
-    branches: [ main, master ]
+    branches: [ 'neoforge-*' ]   # loader-line branches (org rule); no main/master
   schedule:
     - cron: '27 4 * * 1'   # weekly; off-the-hour minute avoids the cron rush
   workflow_dispatch:
@@ -69,10 +60,8 @@ jobs:
           # repos where the PAT is not granted (pseudocore-curios junit model).
           PACKAGE_READ_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.PACKAGE_READ_TOKEN || github.token }}
-        # clean + --no-build-cache force javac to actually run: Gradle's build
-        # cache is restored by setup-java (org.gradle.caching=true), so a
-        # FROM-CACHE compileJava runs no compiler and CodeQL fails with
-        # "no source code seen during build". The dependency cache still applies.
+        # --no-build-cache forces javac to run: a FROM-CACHE compileJava runs no
+        # compiler and CodeQL fails with "no source code seen during build".
         run: ./gradlew clean assemble --no-build-cache --no-daemon --stacktrace
 
       - name: Perform CodeQL analysis
